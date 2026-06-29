@@ -855,7 +855,7 @@ body.hc #cp{border-left:3px solid var(--blue)}
 const ZWS = String.fromCharCode(0x200B); // zero-width space used as caret anchor after marker spans
 const SKEY = 'lcars_v1';
 
-const APP_VERSION = '1.0';
+const APP_VERSION = '1.1';
 const VERSIONS = [
   {
     version: '1.0',
@@ -877,6 +877,22 @@ const VERSIONS = [
       'Export (JSON backup) and Import (JSON restore + Markdown import)',
       'Dark / Light / LCARS theme switcher',
       'Resizable sidebar panels',
+    ]
+  }
+  {
+    version: '1.1',
+    date: '2026-06-29',
+    changes: [
+      'Fixed: italic/highlight formatting persisting past closing marker delimiter when inserted via toolbar buttons',
+      'Fixed: comms button cursor landing inside closing =/\\= delimiter',
+      'New Mission dialog: renamed "Sim Type" → "Mission Type" and "Stardate Year" → "OOC Year"',
+      'Nav hierarchy now shows IC year alongside OOC year (e.g. 2026 (2403 IC))',
+      'Migrated to GitHub repository and deployed on GitHub Pages',
+      'Added GitHub Gist auto-sync for cross-device personal data (auto-push 60s after save, auto-pull on load)',
+      'Added Settings → Cloud Sync section with PAT/Gist ID inputs and manual push/pull buttons',
+      'Added Settings → Version section with current version and expandable changelog',
+      'Added "Learn How to Use This Tool" button on Dashboard linking to the user guide',
+      'Added README.md and CHANGELOG.md to repository',
     ]
   }
   // Claude appends pending entries here after each session, format:
