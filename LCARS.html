@@ -900,6 +900,7 @@ const VERSIONS = [
     date: '2026-06-29',
     changes: [
       'Fixed: removing a character via the Manifest caused the panel to break — clicking another character required a full page refresh to recover',
+      'Added Google Fonts support — UI font and editor font can be set independently (or linked) via Settings → UI Preferences, with a searchable list of 56 popular Google Fonts',
     ]
   }
 ];
@@ -1040,6 +1041,9 @@ const PREF_DEFAULTS = {
   lineSpacing: 1.15,
   editorFontSize: 12,
   uiFontSize: 15,
+  uiFont: '',
+  editorFont: '',
+  editorFontSameAsUI: false,
   actionAccent: '#ff9999',
   commsAccent: '#66cc99',
   thoughtAccent: '#aabbff',
@@ -1052,6 +1056,28 @@ const PREF_DEFAULTS = {
   italicOOC: false,
 };
 
+const GOOGLE_FONTS = [
+  'Abril Fatface','Arvo','Barlow','Bebas Neue','Bitter','Cabin','Cantarell',
+  'Caveat','Cormorant Garamond','Courier Prime','Crimson Text','Dancing Script',
+  'DM Mono','DM Sans','Droid Sans','Droid Serif','EB Garamond','Exo 2',
+  'Fira Code','Fira Sans','IBM Plex Mono','Inconsolata','Inter','JetBrains Mono',
+  'Josefin Sans','Jost','Karla','Lato','Libre Baskerville','Lora','Merriweather',
+  'Montserrat','Mulish','Noto Sans','Noto Serif','Nunito','Open Sans','Oswald',
+  'Pacifico','Permanent Marker','Playfair Display','Poppins','PT Serif','Quicksand',
+  'Raleway','Roboto','Roboto Mono','Satisfy','Source Code Pro','Source Sans 3',
+  'Source Serif 4','Space Mono','Spectral','Titillium Web','Ubuntu','Work Sans',
+];
+
+function loadGoogleFont(fontName) {
+  if (!fontName) return;
+  const id = 'gf-' + fontName.replace(/\s+/g,'-').toLowerCase();
+  if (document.getElementById(id)) return;
+  const link = document.createElement('link');
+  link.id = id; link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName)}&display=swap`;
+  document.head.appendChild(link);
+}
+
 function getPrefs() { return Object.assign({}, PREF_DEFAULTS, S.settings.prefs); }
 
 function hexToRgba(hex, alpha) {
@@ -1063,9 +1089,14 @@ function applyPrefs() {
   const p = getPrefs();
   const u = p.uiFontSize;
   const style = document.getElementById('prefs-style');
+  const uiFontStack = p.uiFont ? `'${p.uiFont}', sans-serif` : 'inherit';
+  const editorFontName = p.editorFontSameAsUI ? p.uiFont : p.editorFont;
+  const editorFontStack = editorFontName ? `'${editorFontName}', sans-serif` : 'inherit';
+  if (p.uiFont) loadGoogleFont(p.uiFont);
+  if (editorFontName && editorFontName !== p.uiFont) loadGoogleFont(editorFontName);
   style.textContent = `
-    html { font-size: ${u}px; }
-    #editor { line-height: ${p.lineSpacing}; font-size: ${p.editorFontSize}pt; }
+    html { font-size: ${u}px; font-family: ${uiFontStack}; }
+    #editor { line-height: ${p.lineSpacing}; font-size: ${p.editorFontSize}pt; font-family: ${editorFontStack}; }
     .am { background:${hexToRgba(p.actionAccent,.30)}; }
     .cm { background:${hexToRgba(p.commsAccent,.30)}; }
     .tm { background:${hexToRgba(p.thoughtAccent,.30)}; font-style:${p.thoughtItalic?'italic':'normal'}; }
@@ -4366,6 +4397,24 @@ function openSettings() {
       </div>
     </div>
 
+    <datalist id="gf-list">${GOOGLE_FONTS.map(f=>`<option value="${f}">`).join('')}</datalist>
+    <div class="mrow" style="margin-top:8px">
+      <div class="mf" style="flex:2">
+        <label class="ml">UI FONT</label>
+        <input class="mi" id="pf-uifont" list="gf-list" placeholder="Default (system font)" value="${p.uiFont||''}">
+      </div>
+      <div class="mf" style="flex:2">
+        <label class="ml">EDITOR FONT</label>
+        <input class="mi" id="pf-editorfont" list="gf-list" placeholder="Default (system font)" value="${p.editorFontSameAsUI?'':p.editorFont||''}" ${p.editorFontSameAsUI?'disabled':''}>
+      </div>
+      <div class="mf" style="flex:1;display:flex;align-items:flex-end;padding-bottom:6px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.73rem;color:var(--dim);cursor:pointer;white-space:nowrap">
+          <input type="checkbox" id="pf-ef-same" style="width:auto" ${p.editorFontSameAsUI?'checked':''} onchange="const ef=document.getElementById('pf-editorfont');ef.disabled=this.checked;if(this.checked)ef.value='';">
+          Same as UI
+        </label>
+      </div>
+    </div>
+
     <div class="msec" style="margin-top:18px">SIM EDITOR PREFERENCES</div>
 
     <div class="msub">VISUAL AIDS</div>
@@ -4432,9 +4481,13 @@ function openSettings() {
     const to_ = document.getElementById('pf-to').checked;
     const abn = document.getElementById('pf-abn').checked;
     const ti = document.getElementById('pf-ti').checked;
+    const uiFont = document.getElementById('pf-uifont').value.trim();
+    const efSame = document.getElementById('pf-ef-same').checked;
+    const editorFont = efSame ? '' : document.getElementById('pf-editorfont').value.trim();
     if (isNaN(ls)||isNaN(efs)||isNaN(ufs)) { alert('Please enter valid numbers.'); return false; }
     S.settings.prefs = {
       lineSpacing:ls, editorFontSize:efs, uiFontSize:ufs,
+      uiFont, editorFont, editorFontSameAsUI:efSame,
       actionAccent:ac, commsAccent:cc, thoughtAccent:tc,
       actionOn:ao, commsOn:co, thoughtOn:to_,
       autoBoldNames:abn, thoughtItalic:ti
