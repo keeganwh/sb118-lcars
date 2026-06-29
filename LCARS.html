@@ -3598,12 +3598,18 @@ function renderMissionView(id) {
   const posted = allDocs.filter(d=>d.postedAt).length;
 
   let html = `
-    <div class="dv-close">
-      <div style="display:flex;gap:6px;margin-right:auto">
-        <button class="btn btn-s" onclick="showNewScene('${id}')">+ Scene</button>
-        <button class="btn btn-s" onclick="showNewDoc(null,'${id}')">+ Sim</button>
-      </div>
-      <button class="dv-close-btn" onclick="showDashboard()" title="Back to dashboard">✕</button>
+    <div class="dv-close"><button class="dv-close-btn" onclick="showDashboard()" title="Back to dashboard">✕</button></div>
+    <div class="dash-actions dv-action-btns" style="justify-content:flex-end;margin:-4px 0 14px">
+      <button class="dash-action" onclick="showNewScene('${id}')">
+        <div class="da-icon">▤</div>
+        <div class="da-label">Create a new Scene</div>
+        <div class="da-hint">Add a scene grouping to this mission</div>
+      </button>
+      <button class="dash-action" onclick="showNewDoc(null,'${id}')">
+        <div class="da-icon">✎</div>
+        <div class="da-label">Write a new Sim</div>
+        <div class="da-hint">Start a new sim in this mission</div>
+      </button>
     </div>
     <div class="dv-title">${esc(m.name)}</div>
     <div class="dv-meta">
@@ -3663,9 +3669,15 @@ function renderSceneView(id) {
 
   let html = `
     <div class="dv-close">
-      ${m ? `<span class="dv-back" style="margin-right:auto" onclick="openMission('${m.id}')">◀ ${esc(m.name)}</span>` : '<span style="margin-right:auto"></span>'}
-      <button class="btn btn-s" style="margin-right:6px" onclick="showNewDoc('${id}','${sc.missionId||''}')">+ Sim</button>
+      ${m ? `<span class="dv-back" style="margin-right:auto" onclick="openMission('${m.id}')">◀ ${esc(m.name)}</span>` : ''}
       <button class="dv-close-btn" onclick="showDashboard()" title="Back to dashboard">✕</button>
+    </div>
+    <div class="dash-actions dv-action-btns" style="justify-content:flex-end;margin:-4px 0 14px">
+      <button class="dash-action" onclick="showNewDoc('${id}','${sc.missionId||''}')">
+        <div class="da-icon">✎</div>
+        <div class="da-label">Write a new Sim</div>
+        <div class="da-hint">Start a new sim in this scene</div>
+      </button>
     </div>
     <div class="dv-title">${esc(sc.name)}</div>
     <div class="dv-meta">
