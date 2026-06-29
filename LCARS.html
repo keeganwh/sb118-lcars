@@ -903,6 +903,8 @@ const VERSIONS = [
       'Added Google Fonts support — UI font and editor font can be set independently (or linked) via Settings → UI Preferences, with a searchable list of 56 popular Google Fonts',
       'Added Scene Partner reporting to Mission and Scene detail views — shows which characters your characters appear alongside, with scene and sim counts; add buttons moved to top-right header',
       'Added Top Scene Partners panel to Character Manifest sidebar — shows top 5 co-occurring characters across all sims',
+      'Fixed: Create a new Scene / Write a new Sim cards wrapping to a second row on the Mission detail view — added flex-wrap:nowrap',
+      'Moved mission/scene action cards inline with title (right-aligned) instead of above it',
     ]
   }
 ];
@@ -3614,7 +3616,7 @@ function renderMissionView(id) {
           <div class="dv-stat-item"><div class="dv-stat-num">${posted}</div><div class="dv-stat-lbl">POSTED</div></div>
         </div>
       </div>
-      <div class="dash-actions dv-action-btns" style="flex-shrink:0;margin:0">
+      <div class="dash-actions dv-action-btns" style="flex-shrink:0;margin:0;flex-wrap:nowrap">
         <button class="dash-action" onclick="showNewScene('${id}')">
           <div class="da-icon">▤</div>
           <div class="da-label">Create a new Scene</div>
