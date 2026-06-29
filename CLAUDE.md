@@ -14,6 +14,7 @@ After **every code change** to `LCARS.html`, immediately append a pending entry 
 
 - Do this **as part of the same commit** as the code change — never defer it
 - If a pending entry already exists, **add to its `changes` array** rather than creating a duplicate
+- **Always put a trailing comma after every object in the VERSIONS array** — missing commas cause a fatal JS syntax error that breaks the entire app
 - When the user says "save new version X.Y", roll all pending entries into a clean versioned entry, update `APP_VERSION`, update `CHANGELOG.md`, then commit
 
 ## Version Workflow
