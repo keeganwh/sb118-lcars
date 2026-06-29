@@ -3599,29 +3599,33 @@ function renderMissionView(id) {
 
   let html = `
     <div class="dv-close"><button class="dv-close-btn" onclick="showDashboard()" title="Back to dashboard">✕</button></div>
-    <div class="dash-actions dv-action-btns" style="justify-content:flex-end;margin:-4px 0 14px">
-      <button class="dash-action" onclick="showNewScene('${id}')">
-        <div class="da-icon">▤</div>
-        <div class="da-label">Create a new Scene</div>
-        <div class="da-hint">Add a scene grouping to this mission</div>
-      </button>
-      <button class="dash-action" onclick="showNewDoc(null,'${id}')">
-        <div class="da-icon">✎</div>
-        <div class="da-label">Write a new Sim</div>
-        <div class="da-hint">Start a new sim in this mission</div>
-      </button>
-    </div>
-    <div class="dv-title">${esc(m.name)}</div>
-    <div class="dv-meta">
-      <span class="sdot ${m.status||'active'}"></span>
-      <span>${m.year||''}</span>
-      ${simTypeTag(m.simType)}
-      <span style="text-transform:capitalize">${m.status||'active'}</span>
-    </div>
-    <div class="dv-stat">
-      <div class="dv-stat-item"><div class="dv-stat-num">${scenes.length}</div><div class="dv-stat-lbl">SCENES</div></div>
-      <div class="dv-stat-item"><div class="dv-stat-num">${allDocs.length}</div><div class="dv-stat-lbl">SIMS</div></div>
-      <div class="dv-stat-item"><div class="dv-stat-num">${posted}</div><div class="dv-stat-lbl">POSTED</div></div>
+    <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:4px">
+      <div style="flex:1;min-width:0">
+        <div class="dv-title">${esc(m.name)}</div>
+        <div class="dv-meta">
+          <span class="sdot ${m.status||'active'}"></span>
+          <span>${m.year||''}</span>
+          ${simTypeTag(m.simType)}
+          <span style="text-transform:capitalize">${m.status||'active'}</span>
+        </div>
+        <div class="dv-stat">
+          <div class="dv-stat-item"><div class="dv-stat-num">${scenes.length}</div><div class="dv-stat-lbl">SCENES</div></div>
+          <div class="dv-stat-item"><div class="dv-stat-num">${allDocs.length}</div><div class="dv-stat-lbl">SIMS</div></div>
+          <div class="dv-stat-item"><div class="dv-stat-num">${posted}</div><div class="dv-stat-lbl">POSTED</div></div>
+        </div>
+      </div>
+      <div class="dash-actions dv-action-btns" style="flex-shrink:0;margin:0">
+        <button class="dash-action" onclick="showNewScene('${id}')">
+          <div class="da-icon">▤</div>
+          <div class="da-label">Create a new Scene</div>
+          <div class="da-hint">Add a scene grouping to this mission</div>
+        </button>
+        <button class="dash-action" onclick="showNewDoc(null,'${id}')">
+          <div class="da-icon">✎</div>
+          <div class="da-label">Write a new Sim</div>
+          <div class="da-hint">Start a new sim in this mission</div>
+        </button>
+      </div>
     </div>
   `;
 
@@ -3672,22 +3676,26 @@ function renderSceneView(id) {
       ${m ? `<span class="dv-back" style="margin-right:auto" onclick="openMission('${m.id}')">◀ ${esc(m.name)}</span>` : ''}
       <button class="dv-close-btn" onclick="showDashboard()" title="Back to dashboard">✕</button>
     </div>
-    <div class="dash-actions dv-action-btns" style="justify-content:flex-end;margin:-4px 0 14px">
-      <button class="dash-action" onclick="showNewDoc('${id}','${sc.missionId||''}')">
-        <div class="da-icon">✎</div>
-        <div class="da-label">Write a new Sim</div>
-        <div class="da-hint">Start a new sim in this scene</div>
-      </button>
-    </div>
-    <div class="dv-title">${esc(sc.name)}</div>
-    <div class="dv-meta">
-      <span class="sdot ${sc.status||'active'}"></span>
-      ${m ? `<span>Mission: <span class="dv-link" onclick="openMission('${m.id}')">${esc(m.name)}</span></span>` : ''}
-      <span style="text-transform:capitalize">${sc.status||'active'}</span>
-    </div>
-    <div class="dv-stat">
-      <div class="dv-stat-item"><div class="dv-stat-num">${docs.length}</div><div class="dv-stat-lbl">SIMS</div></div>
-      <div class="dv-stat-item"><div class="dv-stat-num">${docs.filter(d=>d.postedAt).length}</div><div class="dv-stat-lbl">POSTED</div></div>
+    <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:4px">
+      <div style="flex:1;min-width:0">
+        <div class="dv-title">${esc(sc.name)}</div>
+        <div class="dv-meta">
+          <span class="sdot ${sc.status||'active'}"></span>
+          ${m ? `<span>Mission: <span class="dv-link" onclick="openMission('${m.id}')">${esc(m.name)}</span></span>` : ''}
+          <span style="text-transform:capitalize">${sc.status||'active'}</span>
+        </div>
+        <div class="dv-stat">
+          <div class="dv-stat-item"><div class="dv-stat-num">${docs.length}</div><div class="dv-stat-lbl">SIMS</div></div>
+          <div class="dv-stat-item"><div class="dv-stat-num">${docs.filter(d=>d.postedAt).length}</div><div class="dv-stat-lbl">POSTED</div></div>
+        </div>
+      </div>
+      <div class="dash-actions dv-action-btns" style="flex-shrink:0;margin:0">
+        <button class="dash-action" onclick="showNewDoc('${id}','${sc.missionId||''}')">
+          <div class="da-icon">✎</div>
+          <div class="da-label">Write a new Sim</div>
+          <div class="da-hint">Start a new sim in this scene</div>
+        </button>
+      </div>
     </div>
   `;
 
