@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LCARS Writing System — User Guide v2.1</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Droid+Sans:wght@400;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Droid Sans', Verdana, Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.6;
+  color: #1a1a2e;
+  background: #f5f5f8;
+}
+
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  background: #fff;
+  padding: 52px 64px 64px;
+}
+
+/* ── COVER ── */
+.cover {
+  border-bottom: 4px solid #cc5500;
+  padding-bottom: 28px;
+  margin-bottom: 36px;
+}
+.cover-badge {
+  display: inline-block;
+  background: #cc5500;
+  color: #fff;
+  font-size: 28pt;
+  font-weight: bold;
+  letter-spacing: 8px;
+  padding: 8px 24px;
+  border-radius: 0 0 24px 0;
+  margin-bottom: 18px;
+}
+.cover-title {
+  font-size: 17pt;
+  font-weight: bold;
+  color: #1a1a2e;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+.cover-sub {
+  font-size: 10pt;
+  color: #556;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+/* ── TOC ── */
+.toc {
+  background: #f0f0f5;
+  border-left: 4px solid #cc5500;
+  padding: 16px 20px;
+  margin-bottom: 36px;
+  border-radius: 0 6px 6px 0;
+}
+.toc-title {
+  font-size: 9pt;
+  font-weight: bold;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #cc5500;
+  margin-bottom: 10px;
+}
+.toc ol {
+  padding-left: 18px;
+  columns: 2;
+  column-gap: 24px;
+}
+.toc li {
+  font-size: 10pt;
+  color: #334;
+  margin-bottom: 3px;
+  break-inside: avoid;
+}
+.toc a {
+  color: #334;
+  text-decoration: none;
+}
+.toc a:hover {
+  color: #cc5500;
+  text-decoration: underline;
+}
+.toc .new-badge {
+  font-size: 8pt;
+  background: #cc5500;
+  color: #fff;
+  border-radius: 3px;
+  padding: 0 4px;
+  letter-spacing: .3px;
+  font-weight: bold;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* ── SECTIONS ── */
+h2 {
+  font-size: 13pt;
+  font-weight: bold;
+  color: #cc5500;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  border-bottom: 2px solid #cc5500;
+  padding-bottom: 5px;
+  margin: 36px 0 14px;
+  scroll-margin-top: 24px;
+}
+h2 .new-badge {
+  font-size: 9pt;
+  background: #cc5500;
+  color: #fff;
+  border-radius: 4px;
+  padding: 1px 7px;
+  letter-spacing: .3px;
+  font-weight: bold;
+  margin-left: 8px;
+  vertical-align: middle;
+  text-transform: none;
+}
+h3 {
+  font-size: 11pt;
+  font-weight: bold;
+  color: #1a1a2e;
+  margin: 18px 0 8px;
+}
+p { margin-bottom: 10px; }
+ul, ol { padding-left: 20px; margin-bottom: 10px; }
+li { margin-bottom: 4px; }
+
+/* ── INLINE CODE / MARKERS ── */
+code {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10pt;
+  background: #f0f0f5;
+  border: 1px solid #d0d0dc;
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: #334;
+  white-space: nowrap;
+}
+.marker-action {
+  background: rgba(204,85,0,.07);
+  border: 1px solid rgba(204,85,0,.25);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10pt;
+  color: #8b3300;
+}
+.marker-comms {
+  background: rgba(17,85,204,.07);
+  border: 1px solid rgba(17,85,204,.22);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10pt;
+  color: #0033aa;
+}
+
+/* ── CALLOUT BOXES ── */
+.note {
+  background: #f0f0f5;
+  border-left: 3px solid #556688;
+  padding: 10px 14px;
+  margin: 12px 0;
+  font-size: 10pt;
+  color: #334;
+  border-radius: 0 4px 4px 0;
+}
+.tip {
+  background: rgba(204,85,0,.06);
+  border-left: 3px solid #cc5500;
+  padding: 10px 14px;
+  margin: 12px 0;
+  font-size: 10pt;
+  border-radius: 0 4px 4px 0;
+}
+.tip strong { color: #cc5500; }
+.new-feature {
+  background: rgba(26,122,68,.05);
+  border-left: 3px solid #1a7a44;
+  padding: 10px 14px;
+  margin: 12px 0;
+  font-size: 10pt;
+  color: #334;
+  border-radius: 0 4px 4px 0;
+}
+.new-feature strong { color: #1a7a44; }
+
+/* ── TABLES ── */
+.shortcuts {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 10pt;
+}
+.shortcuts th {
+  background: #1a1a2e;
+  color: #fff;
+  text-align: left;
+  padding: 7px 12px;
+  font-size: 9pt;
+  letter-spacing: 1px;
+}
+.shortcuts td {
+  padding: 6px 12px;
+  border-bottom: 1px solid #e0e0e8;
+  vertical-align: top;
+}
+.shortcuts tr:nth-child(even) td { background: #f8f8fb; }
+.shortcuts kbd {
+  display: inline-block;
+  background: #eee;
+  border: 1px solid #bbb;
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 9pt;
+  color: #333;
+}
+
+/* ── HIERARCHY DIAGRAM ── */
+.hier {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10pt;
+  background: #f0f0f5;
+  border: 1px solid #d0d0dc;
+  border-radius: 4px;
+  padding: 14px 18px;
+  margin: 12px 0;
+  line-height: 1.8;
+  color: #334;
+}
+.hier .yl { color: #886600; font-weight: bold; }
+.hier .ml { color: #cc5500; font-weight: bold; }
+.hier .sl { color: #1155cc; font-weight: bold; }
+.hier .dl { color: #444; }
+
+/* ── STATUS DOTS ── */
+.sdot {
+  display: inline-block;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+.sdot.active { background: #1a7a44; }
+.sdot.complete { background: #886600; }
+.sdot.archived { background: #999; border: 1px solid #777; }
+
+/* ── TAG PILLS ── */
+.pill {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 9pt;
+  font-weight: bold;
+  vertical-align: middle;
+}
+.pill-ml { background: rgba(204,85,0,.12); color: #cc5500; border: 1px solid rgba(204,85,0,.3); }
+.pill-sl { background: rgba(26,122,68,.1); color: #1a7a44; border: 1px solid rgba(26,122,68,.25); }
+.pill-ac { background: rgba(0,180,180,.1); color: #007777; border: 1px solid rgba(0,180,180,.25); }
+.pill-jp { background: rgba(17,85,204,.1); color: #1155cc; border: 1px solid rgba(17,85,204,.25); }
+.pill-solo { background: rgba(136,0,204,.08); color: #6600bb; border: 1px solid rgba(136,0,204,.2); }
+
+/* ── CHARACTER TYPE BADGES ── */
+.ctype {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 9pt;
+  font-weight: bold;
+  vertical-align: middle;
+}
+.ctype-primary  { background: rgba(204,85,0,.12); color: #cc5500; border: 1px solid rgba(204,85,0,.3); }
+.ctype-secondary{ background: rgba(17,85,204,.1); color: #1155cc; border: 1px solid rgba(17,85,204,.25); }
+.ctype-pnpc     { background: rgba(26,122,68,.1); color: #1a7a44; border: 1px solid rgba(26,122,68,.25); }
+.ctype-mspnpc   { background: rgba(136,0,204,.08); color: #6600bb; border: 1px solid rgba(136,0,204,.2); }
+.ctype-npc      { background: #f0f0f5; color: #667; border: 1px solid #ccc; }
+
+/* ── RANK PIP DEMO ── */
+.pip-demo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.pip-demo-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9pt;
+  color: #556;
+}
+.pd { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #1a1a2e; vertical-align: middle; }
+.pd.h { background: transparent; border: 1.5px solid #1a1a2e; }
+.pd-box { display: inline-flex; gap: 2px; border: 1.5px solid #1a1a2e; border-radius: 3px; padding: 2px 3px; align-items: center; }
+
+/* ── DIVISION COLOUR SAMPLES ── */
+.div-swatch {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+/* ── HEADER LAYOUT DIAGRAM ── */
+.header-diagram {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 9.5pt;
+  background: #f0f0f5;
+  border: 1px solid #d0d0dc;
+  border-radius: 4px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  line-height: 2;
+  color: #334;
+}
+.header-diagram .row-label {
+  display: inline-block;
+  font-size: 8pt;
+  background: #cc5500;
+  color: #fff;
+  border-radius: 3px;
+  padding: 0 5px;
+  margin-right: 6px;
+  font-family: 'Droid Sans', Verdana, Arial, sans-serif;
+  vertical-align: middle;
+  letter-spacing: .3px;
+}
+.hd-item {
+  display: inline-block;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin: 0 2px;
+  font-size: 9pt;
+  color: #334;
+  vertical-align: middle;
+}
+.hd-item.title { background: #eef3ff; border-color: #99aadd; color: #223; flex: 1; }
+.hd-item.action { background: #fff8f0; border-color: #cc8855; color: #883300; }
+
+/* ── FOOTER ── */
+.footer {
+  margin-top: 48px;
+  border-top: 2px solid #cc5500;
+  padding-top: 14px;
+  font-size: 9pt;
+  color: #888;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* ── BACK TO TOP BUTTON ── */
+#back-to-top {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  width: 40px;
+  height: 40px;
+  background: #cc5500;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  font-size: 18px;
+  line-height: 40px;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0,0,0,.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s, transform .25s;
+  transform: translateY(8px);
+  z-index: 999;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#back-to-top.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+#back-to-top:hover {
+  background: #aa3d00;
+}
+
+/* ── PRINT ── */
+@media print {
+  body { background: #fff; font-size: 10.5pt; }
+  .page { padding: 0; max-width: 100%; box-shadow: none; }
+  h2 { page-break-after: avoid; }
+  h3 { page-break-after: avoid; }
+  .note, .tip, .new-feature { page-break-inside: avoid; }
+  .shortcuts { page-break-inside: avoid; }
+  a { color: inherit; text-decoration: none; }
+  #back-to-top { display: none; }
+}
+@media screen {
+  .page {
+    margin: 32px auto;
+    box-shadow: 0 2px 24px rgba(0,0,0,.12);
+    border-radius: 4px;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- BACK TO TOP -->
+<button id="back-to-top" title="Back to top" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+
+<div class="page" id="top">
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-badge">LCARS</div>
+  <div class="cover-title">Starbase 118 Writing System</div>
+  <div class="cover-sub">User Guide &nbsp;·&nbsp; Version 2.1</div>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<div class="toc">
+  <div class="toc-title">Contents</div>
+  <ol>
+    <li><a href="#s1">Overview</a></li>
+    <li><a href="#s2">Getting Started</a></li>
+    <li><a href="#s3">The Interface</a></li>
+    <li><a href="#s4">Organizing Your Writing</a></li>
+    <li><a href="#s5">Writing in the Editor</a></li>
+    <li><a href="#s6">Script Markers</a></li>
+    <li><a href="#s7">Character Detection</a></li>
+    <li><a href="#s8">Posting &amp; Status</a></li>
+    <li><a href="#s9">Tags &amp; Mission Types</a></li>
+    <li><a href="#s10">Academy Mode</a></li>
+    <li><a href="#s11">Dashboard <span class="new-badge">v2</span></a></li>
+    <li><a href="#s12">Character Manifest <span class="new-badge">v2</span></a></li>
+    <li><a href="#s13">Full-text Search <span class="new-badge">v2</span></a></li>
+    <li><a href="#s14">Sim Templates <span class="new-badge">v2</span></a></li>
+    <li><a href="#s15">Revision Snapshots <span class="new-badge">v2</span></a></li>
+    <li><a href="#s16">Display &amp; Preferences</a></li>
+    <li><a href="#s17">Export &amp; Import</a></li>
+    <li><a href="#s18">Keyboard Shortcuts</a></li>
+  </ol>
+</div>
+
+<!-- 1 -->
+<h2 id="s1">1. Overview</h2>
+<p>LCARS is a local, offline writing tool purpose-built for Play By Email (PBEM) roleplay at Starbase 118. It provides a rich-text word processor with script-format support, organized document storage, a character roster, and a clean copy/paste workflow optimized for posting sims to the wiki and mailing list.</p>
+<p>Everything runs inside a single HTML file — no installation, no account, no internet connection required (except to load the Droid Sans font on first use). All your writing is saved privately to your own browser.</p>
+<p><strong>Version 2</strong> adds six major features: a Command Dashboard, full-text search, a Character Manifest with profiles and pictures, sim templates, revision snapshots, and a one-click Copy Post button.</p>
+
+<!-- 2 -->
+<h2 id="s2">2. Getting Started</h2>
+<p>Open <strong>LCARS.html</strong> in any modern browser (Chrome, Edge, Firefox, or Safari). You can open it directly from your file system — no web server is needed.</p>
+<div class="tip"><strong>Tip:</strong> Bookmark the file for quick access. Your data persists automatically via browser storage between sessions.</div>
+<p>To share LCARS with a friend, send them the single <strong>LCARS.html</strong> file. They need nothing else. Their data will be completely separate from yours.</p>
+<div class="tip"><strong>Tip:</strong> Export your data regularly as a backup (<strong>⬇ Export</strong> in the header). Browser storage can be wiped if you clear browsing data. The <code>.lcars</code> file is your permanent save.</div>
+
+<!-- 3 -->
+<h2 id="s3">3. The Interface</h2>
+
+<h3>Header Bar</h3>
+<p>The amber LCARS bar at the top contains:</p>
+<ul>
+  <li><strong>+ Sim, + Scene, + Mission</strong> — quick-create new items</li>
+  <li><strong>◉ Manifest</strong> — opens the Character Manifest overlay</li>
+  <li><strong>⬇ Export / ⬆ Import</strong> — save/restore your data file</li>
+  <li><strong>⚙</strong> — opens the Settings &amp; Preferences popover</li>
+</ul>
+
+<h3>Left Sidebar — SIMS</h3>
+<p>The sidebar displays your full content tree, organized by Year → Mission → Scene → Sim. Click any item to open it; click the <strong>▼</strong> caret to collapse a branch.</p>
+<p>The <strong>🔍</strong> button at the top of the sidebar activates full-text search (see <a href="#s13">Section 13</a>). The <strong>◀</strong> button collapses the sidebar to a sliver; drag its right edge to resize it freely.</p>
+<p>The <strong>📁 Archived</strong> button at the bottom toggles visibility of archived items, which are hidden by default.</p>
+<p>Right-click any item in the tree for its context menu — rename, change status, set tags, or delete.</p>
+
+<h3>Editor Panel (Centre)</h3>
+<p>When a sim is open, the centre shows the <strong>sim header</strong> (a two-row strip containing the title, controls, and the full writing toolbar) followed by the <strong>writing area</strong>. When no sim is open, the <strong>Dashboard</strong> is shown instead.</p>
+
+<h3>Right Panel — Characters</h3>
+<p>The Characters panel automatically lists every character name detected in the current sim. Click a name to mark it as one of <em>your</em> characters (shown in blue). Right-click a name for additional options — rename, fix spelling, or manage the "different characters" confirmation.</p>
+<p>The <strong>▶</strong> button collapses the Characters panel; drag its left edge to resize it.</p>
+
+<h3>Status Bar</h3>
+<p>The bar at the bottom shows the current sim's title, live word count, and zoom controls (− / +).</p>
+
+<!-- 4 -->
+<h2 id="s4">4. Organizing Your Writing — The Hierarchy</h2>
+<p>Content is organized in a four-level tree:</p>
+<div class="hier">
+  <span class="yl">▼ 2401</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em style="color:#999">(Year)</em><br>
+  &nbsp;&nbsp;<span class="ml">▼ The Wrath of Omega</span>&nbsp;&nbsp;&nbsp;<em style="color:#999">(Mission)</em><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;<span class="sl">▼ Briefing Room Alpha</span>&nbsp;<em style="color:#999">(Scene)</em><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="dl">JP: The Gathering Storm</span>&nbsp;<em style="color:#999">(Sim)</em><br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="dl">Solo: Into the Dark</span>
+</div>
+
+<ul>
+  <li><strong>Year</strong> — Groups missions by stardate year. Created automatically from the year you enter when making a mission. Right-click a year to add a mission or delete the entire year (double confirmation required).</li>
+  <li><strong>Mission</strong> — The top-level story arc. Created with <strong>+ Mission</strong>. Click the mission name in the sidebar to open a Mission Detail view showing all its scenes and sims.</li>
+  <li><strong>Scene</strong> — A subdivision of a mission (a location, thread, or subplot). Created with <strong>+ Scene</strong>. Click the scene name to open a Scene Detail view.</li>
+  <li><strong>Sim</strong> — An individual post or joint post. Created with <strong>+ Sim</strong>. Sims can belong directly to a mission or be placed inside a scene.</li>
+</ul>
+
+<h3>Creating Items</h3>
+<p>Use the header buttons or right-click any existing item to create a child item beneath it. When creating a new sim, you can optionally start it from a <strong>saved template</strong> (see <a href="#s14">Section 14</a>).</p>
+
+<h3>Renaming &amp; Deleting</h3>
+<p>Right-click any mission or scene to rename or delete it. Deleting cascades downward — a confirmation dialog lists exactly what will be removed. Right-clicking a <strong>Year</strong> header offers "Delete Year…" which requires two confirmations before permanently removing all content for that year.</p>
+
+<h3>Detail Views</h3>
+<p>Clicking a mission name or scene name in the sidebar opens a <strong>detail view</strong> showing stats, a list of child items, and status information. Click any sim title within the detail view to open it for editing.</p>
+
+<!-- 5 -->
+<h2 id="s5">5. Writing in the Editor</h2>
+
+<h3>Opening and Closing Sims</h3>
+<p>Click any sim in the sidebar (or a link in the Dashboard) to open it. The <strong>✕</strong> button in the sim header closes the current sim and returns to the Dashboard, automatically saving first.</p>
+
+<h3>The Sim Header</h3>
+<p>When a sim is open, the header shows two rows of controls directly above the writing area:</p>
+
+<div class="header-diagram">
+  <span class="row-label">Row 1</span>
+  <span class="hd-item title">Sim Title</span>
+  <span class="hd-item">Saved / Posted date</span>
+  <span class="hd-item action">📅 Post</span>
+  <span class="hd-item">Status ▾</span>
+  <span class="hd-item action">⟳</span>
+  <span class="hd-item action">✕</span>
+  <br>
+  <span class="row-label">Row 2</span>
+  <span class="hd-item">Sim type ▾</span>
+  <span class="hd-item action">📋 Copy</span>
+  <span class="hd-item">Names</span>
+  <span style="color:#999;margin:0 4px">│</span>
+  <span class="hd-item"><strong>B</strong></span>
+  <span class="hd-item"><em>I</em></span>
+  <span class="hd-item"><s>S</s></span>
+  <span class="hd-item">🔗</span>
+  <span style="color:#999;margin:0 4px">│</span>
+  <span class="hd-item">→|</span>
+  <span class="hd-item">|←</span>
+  <span style="color:#999;margin:0 4px">│</span>
+  <span class="hd-item">::</span>
+  <span class="hd-item">=/\=</span>
+  <span class="hd-item">oO</span>
+</div>
+
+<h3>Row 1 — Title &amp; Controls</h3>
+<table class="shortcuts" style="margin-bottom:14px">
+  <tr><th>Control</th><th>Function</th></tr>
+  <tr><td>Sim Title</td><td>Type the sim's title here. A <strong>⚠</strong> appears if the title closely matches an existing sim — click it for details.</td></tr>
+  <tr><td>Saved / Posted date</td><td>Shows <em>Saved [date]</em> normally. Once a sim is posted, switches to <em>Posted [date]</em> in green.</td></tr>
+  <tr><td>📅 Post / Repost</td><td>Opens a date picker to record when the sim was posted. Automatically marks the sim as Complete. Button changes to <em>Repost</em> once a date is set.</td></tr>
+  <tr><td>Status dropdown</td><td>Set the sim to Active, Complete, or Archived.</td></tr>
+  <tr><td>⟳</td><td>Open the revision history (see <a href="#s15">Section 15</a>).</td></tr>
+  <tr><td>✕</td><td>Close the sim and return to the Dashboard.</td></tr>
+</table>
+
+<h3>Row 2 — Writing Toolbar</h3>
+<table class="shortcuts" style="margin-bottom:14px">
+  <tr><th>Button</th><th>Function</th></tr>
+  <tr><td>Sim type</td><td>Tag the sim as JP or Solo (see <a href="#s9">Section 9</a>).</td></tr>
+  <tr><td>📋 Copy</td><td>Select all and copy the entire sim to the clipboard in one click, with clean formatting (bold, italic, and indentation only — no colours or decorations).</td></tr>
+  <tr><td>Names</td><td>Scan the sim and bold all detected character name tags (e.g. <strong>Hopper:</strong>). Useful for quickly formatting dialogue headings after a paste-in draft.</td></tr>
+  <tr><td><strong>B</strong> / <em>I</em> / <s>S</s></td><td>Bold, italicise, or strikethrough the selected text.</td></tr>
+  <tr><td>🔗</td><td>Insert or wrap the selection in a hyperlink.</td></tr>
+  <tr><td>→| and |←</td><td>Indent / outdent the current paragraph (up to four levels).</td></tr>
+  <tr><td>:: and =/\= and oO</td><td>Toggle visual highlighting for the three script markers (see <a href="#s6">Section 6</a>). Buttons glow blue when active.</td></tr>
+</table>
+
+<h3>Copy &amp; Paste</h3>
+<p>When you copy text from the editor — either by selecting manually or using the <strong>📋 Copy</strong> button — LCARS automatically strips all colours, backgrounds, and decorative class markers. Only <strong>bold</strong>, <em>italic</em>, links, and indentation are preserved. This produces clean output ready to paste into your email client or posting platform.</p>
+
+<h3>Auto-save</h3>
+<p>Changes are saved automatically approximately 1.2 seconds after you stop typing. The date in Row 1 of the header confirms the last save time.</p>
+
+<h3>Zoom</h3>
+<p>The − and + buttons in the status bar zoom the editor text without affecting the surrounding UI. Zoom level is saved between sessions.</p>
+
+<!-- 6 -->
+<h2 id="s6">6. Script Markers</h2>
+<p>LCARS recognises three special markup patterns used in SB118 sims and renders them with subtle visual highlights to aid readability while writing. The highlighting is <em>display only</em> — markers are stored and copied as plain text.</p>
+
+<table class="shortcuts">
+  <tr><th>Syntax</th><th>What it marks</th><th>Appearance</th></tr>
+  <tr>
+    <td><code>::text::</code></td>
+    <td>Action / narration beat</td>
+    <td><span class="marker-action">::tapping the console::</span></td>
+  </tr>
+  <tr>
+    <td><code>=/\=text=/\=</code></td>
+    <td>Comms / radio transmission</td>
+    <td><span class="marker-comms">=/\= Bridge to Hopper. =/\=</span></td>
+  </tr>
+  <tr>
+    <td><code>oO text Oo</code></td>
+    <td>Internal thought</td>
+    <td><em>oO What was that? Oo</em></td>
+  </tr>
+</table>
+
+<p>Markers are applied automatically as you type (with a short delay). The toolbar buttons in Row 2 toggle each marker type on or off — useful if you find certain highlights distracting for a particular session.</p>
+<div class="note">Marker highlighting does not affect the stored content or what gets copied to the clipboard.</div>
+
+<!-- 7 -->
+<h2 id="s7">7. Character Detection</h2>
+<p>LCARS automatically detects character names by looking for lines that begin with a capitalized name followed by a colon, matching the standard SB118 script format:</p>
+<p style="font-family:'Courier New',monospace;background:#f0f0f5;padding:10px 16px;border-radius:4px;font-size:10pt;margin:10px 0">
+  Hopper: All right people, let's go.<br>
+  Martin/Hopper: ::exchanging a glance::<br>
+  <em style="color:#888">oO I've got a bad feeling about this. Oo</em>
+</p>
+<p>All detected names appear in the <strong>Characters</strong> panel on the right. Click a name to toggle it as one of <em>your</em> characters (shown in blue). Your designations are saved per-sim and also carry forward — if you mark a character in one sim, they'll be recognised automatically in others.</p>
+
+<h3>Alias Detection</h3>
+<p>If a character in the <a href="#s12">Character Manifest</a> has aliases defined (see Section 12), LCARS will also detect those alias forms in the sim — including names with initials and periods that the standard rule can't match on its own. For example, if <em>Robin Hopper</em> has aliases <em>Hopper</em> and <em>R. Hopper</em>, then a line starting with <code>R. Hopper:</code> will be detected and automatically attributed to Robin Hopper's record.</p>
+
+<h3>Auto-tagging</h3>
+<p>When a sim is saved or opened, LCARS automatically adds any detected character name to the sim's "my characters" list if it — or any of that character's aliases — has been tagged as yours before. You do not need to manually tick every character in every sim; the system resolves alias chains silently in the background.</p>
+
+<h3>Similar Name Warning</h3>
+<p>If a character name in the current sim closely resembles a name used in another sim — suggesting a possible spelling inconsistency — a <strong>⚠</strong> warning appears next to the name. Click it to review the options:</p>
+<ul>
+  <li><strong>Use "[similar name]"</strong> — replace the spelling in this sim to match the other</li>
+  <li><strong>Keep spelling</strong> — dismiss the warning for now</li>
+  <li><strong>They're different</strong> — mark these as two distinct characters; the warning won't appear again for this pair</li>
+</ul>
+
+<h3>Character Context Menu</h3>
+<p>Right-click any character name in the Characters panel for additional options:</p>
+<ul>
+  <li><strong>✏ Rename</strong> — replace the character's name throughout the current sim</li>
+  <li><strong>⟳ Use "[other name]"</strong> — fix the spelling to match the similar name</li>
+  <li><strong>✓ They are different people</strong> — confirm the pair and suppress the warning</li>
+  <li><strong>↩ Un-mark "≠ …"</strong> — remove a previously confirmed "different characters" pair</li>
+  <li><strong>Mark as my character / Remove from my characters</strong> — toggle ownership</li>
+</ul>
+
+<!-- 8 -->
+<h2 id="s8">8. Posting &amp; Status</h2>
+
+<h3>Status</h3>
+<p>Every sim, scene, and mission has a status, shown as a coloured dot in the sidebar:</p>
+<ul>
+  <li><span class="sdot active"></span><strong>Active</strong> — work in progress</li>
+  <li><span class="sdot complete"></span><strong>Complete</strong> — finished and posted</li>
+  <li><span class="sdot archived"></span><strong>Archived</strong> — hidden from the main view</li>
+</ul>
+<p>Change a sim's status using the dropdown in the doc header. Right-click a mission or scene to change its status — this <strong>cascades</strong> down to all child scenes and sims automatically.</p>
+
+<h3>Posting Date</h3>
+<p>Click <strong>📅 Post</strong> in the sim header to record the date a sim was posted. A date picker opens. Selecting a date:</p>
+<ul>
+  <li>Records the date and displays it in the header as <strong>Posted [date]</strong> in green, replacing the "Saved" label</li>
+  <li>Automatically marks the sim as <strong>Complete</strong></li>
+</ul>
+<p>To update the date, click <strong>📅 Repost</strong>. Switching status back to <strong>Active</strong> clears the posted date.</p>
+
+<!-- 9 -->
+<h2 id="s9">9. Tags &amp; Mission Types</h2>
+<p>Two independent tagging systems categorize your content at a glance.</p>
+
+<h3>Mission Type (set on Mission)</h3>
+<p>Right-click a mission and choose a tag from the context menu:</p>
+<ul>
+  <li><span class="pill pill-ml">Mission</span> — active mission storyline</li>
+  <li><span class="pill pill-sl">Shore Leave</span> — off-duty or shore leave period</li>
+  <li><span class="pill pill-ac">Academy</span> — Academy training sim (enables Academy Mode — see <a href="#s10">Section 10</a>)</li>
+  <li>Untagged — general / regular (default)</li>
+</ul>
+
+<h3>Post Type (set on Sim)</h3>
+<p>Use the <strong>Sim type</strong> dropdown in the sim header (Row 2):</p>
+<ul>
+  <li><span class="pill pill-jp">JP</span> — Joint Post (written collaboratively)</li>
+  <li><span class="pill pill-solo">Solo</span> — Solo post (single author)</li>
+  <li>Untagged (default)</li>
+</ul>
+<p>Tags appear as coloured pills next to items in the sidebar and in detail views.</p>
+
+<!-- 10 -->
+<h2 id="s10">10. Academy Mode</h2>
+<p>When a mission is tagged <span class="pill pill-ac">Academy</span>, all sims within it operate in <strong>Academy Mode</strong>. This reflects the plain-text convention used in Academy training sims.</p>
+<p>In Academy Mode:</p>
+<ul>
+  <li>An amber banner appears at the top of the editor — <em>ACADEMY MODE — Plain text only. Rich formatting is disabled.</em></li>
+  <li>Bold, italic, strikethrough, indentation, and links are all disabled for that sim</li>
+  <li>Existing rich formatting is automatically stripped from any sim opened in an Academy mission</li>
+  <li>Script marker highlighting (<code>::</code>, <code>=/\=</code>, <code>oO</code>) still works</li>
+</ul>
+<div class="note">Academy Mode applies at the <em>mission level</em> — tagging a mission as Academy affects all its scenes and sims.</div>
+
+<!-- 11 -->
+<h2 id="s11">11. Dashboard <span class="new-badge">New in v2</span></h2>
+<p>When no sim is open, the <strong>Command Dashboard</strong> is displayed in the centre panel. It gives you an at-a-glance overview of your writing activity.</p>
+
+<h3>Stats Bar</h3>
+<p>The row of counters at the top shows your total missions, total sims, posted sims, and cumulative word count across all content.</p>
+
+<h3>In Progress</h3>
+<p>Lists up to 10 sims with <em>Active</em> status, sorted by the most recently edited. Each row shows the sim title (click to open), mission name, word count, and last edited date.</p>
+
+<h3>Recently Posted</h3>
+<p>Lists the 5 most recently posted sims, sorted by posted date. Click any title to open it.</p>
+
+<h3>Quick Actions</h3>
+<p>The <strong>+ New Sim</strong> and <strong>+ New Mission</strong> buttons provide the same functionality as the header buttons, without having to move your mouse to the top of the screen.</p>
+
+<div class="tip"><strong>Tip:</strong> Click <strong>✕</strong> in the sim header to close a sim and return to the Dashboard at any time.</div>
+
+<!-- 12 -->
+<h2 id="s12">12. Character Manifest <span class="new-badge">New in v2</span></h2>
+<p>The <strong>◉ Manifest</strong> button in the header opens the full-screen Character Manifest — a profile database for all your characters, with stats drawn automatically from your sims.</p>
+
+<h3>Character List (Left Pane)</h3>
+<p>The left pane shows all manifest characters. Each entry displays the character's avatar (photo or coloured initials), name, rank with pip visualization, division colour dot, and character type badge.</p>
+
+<h4 style="font-size:10.5pt;font-weight:bold;color:#334;margin:14px 0 6px">Filtering by Type</h4>
+<p>A row of filter chips at the top of the list narrows it to a specific character type:</p>
+<ul>
+  <li><span class="ctype ctype-primary">Primary</span> — your main player character(s)</li>
+  <li><span class="ctype ctype-secondary">Secondary</span> — secondary PCs you play regularly</li>
+  <li><span class="ctype ctype-pnpc">PNPC</span> — Personal NPCs under your permanent authorship</li>
+  <li><span class="ctype ctype-mspnpc">MSPNPC</span> — Mission-specific PNPCs (temporary)</li>
+  <li><span class="ctype ctype-npc">NPC</span> — General non-player characters</li>
+  <li><strong>All</strong> — show everyone (default)</li>
+</ul>
+
+<h4 style="font-size:10.5pt;font-weight:bold;color:#334;margin:14px 0 6px">Sorting</h4>
+<p>The <strong>Sort</strong> dropdown offers four options:</p>
+<ul>
+  <li><strong>Type &amp; Name</strong> (default) — sorted by type priority (Primary first, NPC last), then alphabetically within each type</li>
+  <li><strong>Name A–Z</strong> — pure alphabetical order</li>
+  <li><strong>Most Sims</strong> — characters with the most recorded sims appear first</li>
+  <li><strong>Most Recent</strong> — sorted by the date of the most recent sim</li>
+</ul>
+
+<p>The <strong>↺</strong> button in the manifest header forces a full re-scan of your sims and refreshes all statistics. Use this if you've been editing sims while the manifest was open. Statistics also update automatically as you write.</p>
+<p>Click <strong>+ Add</strong> to create a new character manually. LCARS also <strong>auto-seeds</strong> the Manifest when you open it — any character you've marked as yours across your sims will appear automatically.</p>
+
+<h3>Character Profile (Right Pane)</h3>
+<p>Clicking a character in the list opens their profile in a <strong>two-column layout</strong>: biography and stats on the left, sim history on the right.</p>
+
+<h4 style="font-size:10.5pt;font-weight:bold;color:#334;margin:14px 0 6px">View Mode</h4>
+<p>The default view shows a polished profile card:</p>
+<ul>
+  <li><strong>Avatar</strong> — photo or division-coloured initials. Click it to change the photo.</li>
+  <li><strong>Name, Rank &amp; Pips</strong> — displayed with the appropriate pip visualization (see below)</li>
+  <li><strong>Type badge</strong> — Primary, PNPC, etc.</li>
+  <li><strong>Division, Species, Aliases, Wiki link, Notes</strong></li>
+  <li><strong>Stats grid</strong> — My Sims / All Sims / Avg Words / Last Sim date</li>
+</ul>
+<p>The <strong>sims column</strong> lists every sim where this character appears as yours, with title (click to open), mission, posted date, and word count.</p>
+
+<h4 style="font-size:10.5pt;font-weight:bold;color:#334;margin:14px 0 6px">Edit Mode</h4>
+<p>Click <strong>✏ Edit Profile</strong> to switch to the edit form. Fields include:</p>
+<ul>
+  <li><strong>Photo</strong> — upload an image file, or paste a URL and click <em>Load</em>. Images are resized to 200×200 and stored in your save file.</li>
+  <li><strong>Primary Name</strong> — the character's full canonical name (e.g. <em>Robin Hopper</em>)</li>
+  <li><strong>Type</strong> — Primary / Secondary / PNPC / MSPNPC / NPC</li>
+  <li><strong>Rank</strong> — choose from the preset list. Pips are shown automatically:</li>
+</ul>
+
+<div class="pip-demo">
+  <div class="pip-demo-item"><span class="pd"></span> Ensign</div>
+  <div class="pip-demo-item"><span class="pd h"></span><span class="pd"></span> Lt. JG</div>
+  <div class="pip-demo-item"><span class="pd"></span><span class="pd"></span> Lieutenant</div>
+  <div class="pip-demo-item"><span class="pd h"></span><span class="pd"></span><span class="pd"></span> Lt. Cmdr</div>
+  <div class="pip-demo-item"><span class="pd"></span><span class="pd"></span><span class="pd"></span> Commander</div>
+  <div class="pip-demo-item"><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span> Captain</div>
+  <div class="pip-demo-item"><span class="pd-box"><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span></span> Admiral</div>
+</div>
+
+<ul>
+  <li><strong>Division</strong> — choose to apply a division colour badge:</li>
+</ul>
+
+<table class="shortcuts" style="margin-bottom:10px">
+  <tr><th>Division</th><th>Colour</th><th>Division</th><th>Colour</th></tr>
+  <tr><td>Command</td><td><span class="div-swatch" style="background:#cc2233"></span> Red</td><td>Science</td><td><span class="div-swatch" style="background:#3366cc"></span> Blue</td></tr>
+  <tr><td>Operations</td><td><span class="div-swatch" style="background:#ffaa00"></span> Gold</td><td>Medical</td><td><span class="div-swatch" style="background:#3366cc"></span> Blue</td></tr>
+  <tr><td>Security/Tactical</td><td><span class="div-swatch" style="background:#ffaa00"></span> Gold</td><td>Diplomat</td><td><span class="div-swatch" style="background:#8844bb"></span> Purple</td></tr>
+  <tr><td>Marines</td><td><span class="div-swatch" style="background:#336622"></span> Green</td><td>Custom…</td><td>any colour via colour picker</td></tr>
+</table>
+
+<ul>
+  <li><strong>Species</strong> — free text (e.g. Human, Vulcan, Betazoid)</li>
+  <li><strong>Wiki URL</strong> — a link to the character's wiki page, shown as a clickable link in view mode</li>
+  <li><strong>Aliases</strong> — alternate names or shortened forms the character goes by in sims (e.g. <em>Hopper</em>, <em>R. Hopper</em>). LCARS uses all aliases when scanning sims for this character's appearances. Click <strong>+ Add alias</strong> to add a new one; click ✕ on any alias to remove it.</li>
+  <li><strong>Notes</strong> — short freeform notes visible only to you</li>
+</ul>
+<p>All fields save automatically when you click away. Click <strong>✓ Done Editing</strong> to return to the polished view mode.</p>
+
+<div class="tip"><strong>Tip:</strong> The <em>Primary Name</em> is what gets displayed in profiles and headers. Aliases are the forms used in actual sim dialogue — set them to match how you type the character's name tag (e.g. "Hopper:" rather than "Robin Hopper:") and LCARS will match them automatically.</div>
+
+<h3>Deleting from the Manifest</h3>
+<p>The <strong>🗑 Remove</strong> button at the bottom of a profile removes the character's manifest entry. <em>It does not affect any sim data</em> — the character's name in existing sims is unchanged.</p>
+
+<!-- 13 -->
+<h2 id="s13">13. Full-text Search <span class="new-badge">New in v2</span></h2>
+<p>Click the <strong>🔍</strong> button at the top of the sidebar to open the search bar. Type a query (minimum 2 characters) to search across all sim titles and body text simultaneously.</p>
+
+<h3>Results</h3>
+<p>Search results replace the normal sidebar navigation. Each result shows:</p>
+<ul>
+  <li>The sim title with matching text highlighted in amber</li>
+  <li>The mission name</li>
+  <li>A short text snippet from the sim body showing the context of the match, with the matching text highlighted</li>
+</ul>
+<p>Click any result to open that sim.</p>
+
+<h3>Clearing Search</h3>
+<p>Click the <strong>✕</strong> button in the search bar, or click 🔍 again, to clear the search and restore the normal navigation tree.</p>
+
+<!-- 14 -->
+<h2 id="s14">14. Sim Templates <span class="new-badge">New in v2</span></h2>
+<p>Templates let you save a sim's content and reuse it as a starting point for future sims — useful for recurring scene openings, standard JP headers, or any other content you write repeatedly.</p>
+
+<h3>Saving a Template</h3>
+<p>With a sim open, click <strong>⚙</strong> → <strong>⬡ Templates…</strong>. A dialog appears with an option to save the current sim's content as a new template. Enter a name and click <strong>Save as Template</strong>.</p>
+
+<h3>Using a Template</h3>
+<p>When creating a new sim via <strong>+ Sim</strong>, the New Sim dialog includes a <strong>From Template</strong> dropdown. Choose a saved template to pre-fill the new sim's editor with that content. You can then edit it freely — the template itself is not modified.</p>
+
+<h3>Managing Templates</h3>
+<p>Open <strong>⚙</strong> → <strong>⬡ Templates…</strong> to view all saved templates. From there you can rename or delete any template.</p>
+
+<!-- 15 -->
+<h2 id="s15">15. Revision Snapshots <span class="new-badge">New in v2</span></h2>
+<p>LCARS automatically saves revision snapshots of your sims as you write, giving you a safety net if you need to recover an earlier version.</p>
+
+<h3>How Snapshots Work</h3>
+<p>A snapshot is saved automatically each time your sim's word count changes by <strong>100 or more words</strong> since the last snapshot. Up to <strong>10 snapshots</strong> are stored per sim — when an 11th is created, the oldest is removed.</p>
+
+<h3>Viewing &amp; Restoring</h3>
+<p>Click <strong>⟳</strong> in the sim header (Row 1) to open the revision history panel. It lists all snapshots in reverse chronological order, showing the date saved and word count at the time. Click <strong>Restore</strong> next to any snapshot to replace the current editor content with that version.</p>
+<div class="note">Restoring a snapshot replaces the current content immediately and saves. There is no undo for a restore — consider copying the current text elsewhere first if you are unsure.</div>
+
+<!-- 16 -->
+<h2 id="s16">16. Display &amp; Preferences</h2>
+
+<h3>Theme</h3>
+<p>Click <strong>⚙</strong> and choose a theme:</p>
+<ul>
+  <li><strong>Dark</strong> — dark background, pale blue text (default)</li>
+  <li><strong>Light</strong> — white background, dark text</li>
+  <li><strong>Hi-Con</strong> — high contrast, pure black/white</li>
+</ul>
+
+<h3>Resizable Panels</h3>
+<p>Both the left Sidebar and the right Characters panel can be resized by dragging the thin handle between them and the editor. Panel widths are saved between sessions. Either panel can also be collapsed to a sliver using its toggle button (◀/▶).</p>
+
+<h3>Preferences</h3>
+<p>Click <strong>⚙ Preferences…</strong> for the full preferences panel:</p>
+<table class="shortcuts">
+  <tr><th>Setting</th><th>What it controls</th></tr>
+  <tr><td>Line Spacing</td><td>Vertical spacing between lines in the editor (default: 1.15)</td></tr>
+  <tr><td>Editor Font (pt)</td><td>Text size inside the writing area (default: 12 pt)</td></tr>
+  <tr><td>UI Font (px)</td><td>Text size of the sidebar, toolbar, and panels (default: 15 px)</td></tr>
+  <tr><td>Action Marker colour</td><td>Accent colour for <code>::action::</code> highlights</td></tr>
+  <tr><td>Comms Marker colour</td><td>Accent colour for <code>=/\=comms=/\=</code> highlights</td></tr>
+  <tr><td>Italicise thought</td><td>Whether <code>oO thought Oo</code> renders in italic</td></tr>
+</table>
+<p>Click <strong>Reset to Defaults</strong> to restore all preferences without closing the dialog.</p>
+
+<!-- 17 -->
+<h2 id="s17">17. Export &amp; Import</h2>
+<p>LCARS stores all data in your browser's local storage. To back up your work or move it to another browser, use Export and Import.</p>
+
+<h3>Export</h3>
+<p>Click <strong>⬇ Export</strong>. A file named <code>lcars-YYYY-MM-DD.lcars</code> is downloaded. It contains all your missions, scenes, sims, characters, templates, and settings in JSON format.</p>
+
+<h3>Import</h3>
+<p>Click <strong>⬆ Import</strong> and select a <code>.lcars</code> file. A dialog offers:</p>
+<ul>
+  <li><strong>Cancel</strong> — close the dialog, import nothing</li>
+  <li><strong>⚠ Overwrite</strong> — replace all current data with the imported file</li>
+  <li><strong>Merge</strong> — add the imported missions, scenes, and sims alongside your existing data</li>
+</ul>
+<div class="note">Character Manifest data (including aliases and type assignments), templates, and revision snapshots are all included in the export file and will be fully restored on import.</div>
+
+<!-- 18 -->
+<h2 id="s18">18. Keyboard Shortcuts</h2>
+<table class="shortcuts">
+  <tr><th>Shortcut</th><th>Action</th></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>B</kbd></td><td>Bold selected text (when editor is focused)</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>I</kbd></td><td>Italicise selected text (when editor is focused)</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>Insert link (when editor is focused)</td></tr>
+  <tr><td><kbd>Tab</kbd></td><td>Indent current paragraph (blocked in Academy sims)</td></tr>
+  <tr><td><kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Outdent current paragraph</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd></td><td>Select all text in the editor</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Copy (clean — bold, italic, and indentation only)</td></tr>
+  <tr><td><kbd>Esc</kbd></td><td>Close any open modal, menu, settings panel, or Character Manifest</td></tr>
+  <tr><td><kbd>Enter</kbd></td><td>Confirm a dialog (when focus is not on a form field)</td></tr>
+  <tr><td>-- (double hyphen)</td><td>Auto-converts to an em dash — as you type</td></tr>
+</table>
+
+<!-- FOOTER -->
+<div class="footer">
+  <span>LCARS Writing System — Starbase 118</span>
+  <span>Version 2.1</span>
+</div>
+
+</div><!-- /page -->
+
+<script>
+// Back to top visibility
+const btt = document.getElementById('back-to-top');
+window.addEventListener('scroll', () => {
+  btt.classList.toggle('visible', window.scrollY > 220);
+}, { passive: true });
+</script>
+
+</body>
+</html>
