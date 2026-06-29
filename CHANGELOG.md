@@ -1,6 +1,6 @@
 # LCARS SB118 Writing Tool — Changelog
 
-## v1.1 — 2026-06-29
+## v4.1 — 2026-06-29
 
 - Fixed: italic/highlight formatting persisting past closing marker delimiter when inserted via toolbar buttons
 - Fixed: comms button cursor landing inside closing `=/\=` delimiter
@@ -13,7 +13,7 @@
 - Added "Learn How to Use This Tool" button on Dashboard linking to the user guide
 - Added README.md and CHANGELOG.md to repository
 
-## v1.0 — 2026-06-29
+## v4.0 — 2026-06-29
 
 Initial release.
 
