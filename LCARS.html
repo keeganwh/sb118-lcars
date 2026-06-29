@@ -901,6 +901,8 @@ const VERSIONS = [
     changes: [
       'Fixed: removing a character via the Manifest caused the panel to break — clicking another character required a full page refresh to recover',
       'Added Google Fonts support — UI font and editor font can be set independently (or linked) via Settings → UI Preferences, with a searchable list of 56 popular Google Fonts',
+      'Added Scene Partner reporting to Mission and Scene detail views — shows which characters your characters appear alongside, with scene and sim counts',
+      'Added Top Scene Partners panel to Character Manifest sidebar — shows top 5 co-occurring characters across all sims',
     ]
   }
 ];
@@ -3508,6 +3510,60 @@ function postTypeTag(pt) {
 }
 
 // ================================================================
+// SCENE PARTNER HELPERS
+// ================================================================
+function computeScenePartners(docs) {
+  const myChars = (S.settings.myChars||[]).map(n=>n.toLowerCase());
+  if (!myChars.length) return null; // null = myChars not set
+  const partners = {};
+  docs.forEach(d => {
+    if (!(d.myChars||[]).some(n=>myChars.includes(n.toLowerCase()))) return;
+    (d.chars||[]).forEach(name => {
+      if (myChars.includes(name.toLowerCase())) return;
+      if (!partners[name]) partners[name] = { scenes: new Set(), sims: 0 };
+      partners[name].sims++;
+      if (d.sceneId) partners[name].scenes.add(d.sceneId);
+    });
+  });
+  return Object.entries(partners)
+    .map(([name,{scenes,sims}])=>({name, scenes:scenes.size, sims}))
+    .sort((a,b)=>b.sims-a.sims||b.scenes-a.scenes);
+}
+
+function computeCharacterPartners(c, topN) {
+  const myNames = getAllNamesForChar(c).map(n=>n.toLowerCase());
+  const partners = {};
+  Object.values(S.docs).forEach(d => {
+    if (!(d.chars||[]).some(n=>myNames.includes(n.toLowerCase()))) return;
+    (d.chars||[]).forEach(name => {
+      if (myNames.includes(name.toLowerCase())) return;
+      if (!partners[name]) partners[name] = { scenes: new Set(), sims: 0 };
+      partners[name].sims++;
+      if (d.sceneId) partners[name].scenes.add(d.sceneId);
+    });
+  });
+  return Object.entries(partners)
+    .map(([name,{scenes,sims}])=>({name, scenes:scenes.size, sims}))
+    .sort((a,b)=>b.sims-a.sims||b.scenes-a.scenes)
+    .slice(0, topN||5);
+}
+
+function renderPartnersSection(partners, showScenes, emptyMsg) {
+  if (partners === null) return `<div class="dv-section">SCENE PARTNERS</div><div style="font-size:0.8rem;color:var(--dim);margin-bottom:12px">Mark characters as yours (☑ in the character panel) to see scene partner stats.</div>`;
+  if (!partners.length) return `<div class="dv-section">SCENE PARTNERS</div><div style="font-size:0.8rem;color:var(--dim);margin-bottom:12px">${emptyMsg||'No scene partners detected.'}</div>`;
+  const rows = partners.map(p => {
+    const detail = showScenes
+      ? `${p.scenes} scene${p.scenes!==1?'s':''}, ${p.sims} sim${p.sims!==1?'s':''}`
+      : `${p.sims} sim${p.sims!==1?'s':''}`;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:0.82rem;color:var(--text)">${esc(p.name)}</span>
+      <span style="font-size:0.78rem;color:var(--dim)">${detail}</span>
+    </div>`;
+  }).join('');
+  return `<div class="dv-section">SCENE PARTNERS</div><div style="margin-bottom:12px">${rows}</div>`;
+}
+
+// ================================================================
 // DETAIL VIEWS
 // ================================================================
 function openMission(id) {
@@ -3589,6 +3645,8 @@ function renderMissionView(id) {
     html += `<div style="color:var(--dim);font-size:0.87rem;margin-top:16px">No scenes or sims in this mission yet.</div>`;
   }
 
+  html += renderPartnersSection(computeScenePartners(allDocs), true, 'No character co-occurrences detected in this mission.');
+
   html += `
     <div class="dv-section">ADD TO THIS MISSION</div>
     <div class="dash-actions dv-action-btns">
@@ -3644,6 +3702,8 @@ function renderSceneView(id) {
   } else {
     html += `<div style="color:var(--dim);font-size:0.87rem;margin-top:16px">No sims in this scene yet.</div>`;
   }
+
+  html += renderPartnersSection(computeScenePartners(docs), false, 'No character co-occurrences detected in this scene.');
 
   html += `
     <div class="dv-section">ADD TO THIS SCENE</div>
@@ -5098,6 +5158,7 @@ function renderBioCol(c, clr, initials, myDocs, allDocCount, avgW, lastDoc, type
     <button class="cm-new-sim-btn" onclick="closeManifest();showNewDoc(null,null,'${c.id}')">+ New Sim</button>
     <button class="cm-edit-btn" onclick="enterEditMode()">✏ Edit Profile</button>
     <button class="cm-del-btn" onclick="deleteCharacter('${c.id}')">🗑 Remove</button>
+    ${(()=>{const top=computeCharacterPartners(c,5);if(!top.length)return'';return`<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px"><div style="font-size:0.67rem;font-weight:bold;letter-spacing:1px;color:var(--dim);margin-bottom:6px">TOP SCENE PARTNERS</div>${top.map(p=>`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.78rem"><span style="color:var(--text)">${esc(p.name)}</span><span style="color:var(--dim)">${p.scenes}sc / ${p.sims}sim</span></div>`).join('')}</div>`;})()}
   </div>`;
 }
 
