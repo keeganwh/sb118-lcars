@@ -901,7 +901,7 @@ const VERSIONS = [
     changes: [
       'Fixed: removing a character via the Manifest caused the panel to break — clicking another character required a full page refresh to recover',
       'Added Google Fonts support — UI font and editor font can be set independently (or linked) via Settings → UI Preferences, with a searchable list of 56 popular Google Fonts',
-      'Added Scene Partner reporting to Mission and Scene detail views — shows which characters your characters appear alongside, with scene and sim counts',
+      'Added Scene Partner reporting to Mission and Scene detail views — shows which characters your characters appear alongside, with scene and sim counts; add buttons moved to top-right header',
       'Added Top Scene Partners panel to Character Manifest sidebar — shows top 5 co-occurring characters across all sims',
     ]
   }
@@ -3598,7 +3598,13 @@ function renderMissionView(id) {
   const posted = allDocs.filter(d=>d.postedAt).length;
 
   let html = `
-    <div class="dv-close"><button class="dv-close-btn" onclick="showDashboard()" title="Back to dashboard">✕</button></div>
+    <div class="dv-close">
+      <div style="display:flex;gap:6px;margin-right:auto">
+        <button class="btn btn-s" onclick="showNewScene('${id}')">+ Scene</button>
+        <button class="btn btn-s" onclick="showNewDoc(null,'${id}')">+ Sim</button>
+      </div>
+      <button class="dv-close-btn" onclick="showDashboard()" title="Back to dashboard">✕</button>
+    </div>
     <div class="dv-title">${esc(m.name)}</div>
     <div class="dv-meta">
       <span class="sdot ${m.status||'active'}"></span>
@@ -3647,21 +3653,6 @@ function renderMissionView(id) {
 
   html += renderPartnersSection(computeScenePartners(allDocs), true, 'No character co-occurrences detected in this mission.');
 
-  html += `
-    <div class="dv-section">ADD TO THIS MISSION</div>
-    <div class="dash-actions dv-action-btns">
-      <button class="dash-action" onclick="showNewScene('${id}')">
-        <div class="da-icon">▤</div>
-        <div class="da-label">Create a new Scene</div>
-        <div class="da-hint">Add a scene grouping to this mission</div>
-      </button>
-      <button class="dash-action" onclick="showNewDoc(null,'${id}')">
-        <div class="da-icon">✎</div>
-        <div class="da-label">Write a new Sim</div>
-        <div class="da-hint">Start a new sim in this mission</div>
-      </button>
-    </div>`;
-
   return html;
 }
 
@@ -3672,7 +3663,8 @@ function renderSceneView(id) {
 
   let html = `
     <div class="dv-close">
-      ${m ? `<span class="dv-back" style="margin-right:auto" onclick="openMission('${m.id}')">◀ ${esc(m.name)}</span>` : ''}
+      ${m ? `<span class="dv-back" style="margin-right:auto" onclick="openMission('${m.id}')">◀ ${esc(m.name)}</span>` : '<span style="margin-right:auto"></span>'}
+      <button class="btn btn-s" style="margin-right:6px" onclick="showNewDoc('${id}','${sc.missionId||''}')">+ Sim</button>
       <button class="dv-close-btn" onclick="showDashboard()" title="Back to dashboard">✕</button>
     </div>
     <div class="dv-title">${esc(sc.name)}</div>
@@ -3704,16 +3696,6 @@ function renderSceneView(id) {
   }
 
   html += renderPartnersSection(computeScenePartners(docs), false, 'No character co-occurrences detected in this scene.');
-
-  html += `
-    <div class="dv-section">ADD TO THIS SCENE</div>
-    <div class="dash-actions dv-action-btns">
-      <button class="dash-action" onclick="showNewDoc('${id}','${sc.missionId||''}')">
-        <div class="da-icon">✎</div>
-        <div class="da-label">Write a new Sim</div>
-        <div class="da-hint">Start a new sim in this scene</div>
-      </button>
-    </div>`;
 
   return html;
 }
