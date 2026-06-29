@@ -5777,7 +5777,8 @@ function deleteCharacter(id) {
     _manifestActiveTab = 'sims';
     _srEditMode = false;
     _ribbonEditMode = false;
-    document.getElementById('cm-right').innerHTML = '<div class="cm-empty-msg">Select a character to view their profile.</div>';
+    const _cmProfile = document.getElementById('cm-profile');
+    if (_cmProfile) { _cmProfile.className = 'cm-empty-msg'; _cmProfile.innerHTML = 'Select a character to view their profile.'; }
   }
   renderManifestList();
 }
