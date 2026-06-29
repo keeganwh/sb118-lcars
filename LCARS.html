@@ -1155,6 +1155,109 @@ function applyImport(mode) {
 }
 
 // ================================================================
+// GIST SYNC
+// ================================================================
+const SYNC_KEY = 'lcars_sync_v1';
+const GIST_FILE = 'lcars-data.json';
+let syncTimer = null;
+let syncStatus = { state: 'idle', msg: '' }; // 'idle' | 'ok' | 'error'
+
+function getSyncConfig() {
+  try { return JSON.parse(localStorage.getItem(SYNC_KEY)||'{}'); } catch(e) { return {}; }
+}
+function saveSyncConfig(obj) {
+  try { localStorage.setItem(SYNC_KEY, JSON.stringify(obj)); } catch(e) {}
+}
+
+function setSyncStatus(state, msg) {
+  syncStatus = { state, msg };
+  const el = document.getElementById('sync-status');
+  if (el) {
+    el.textContent = msg;
+    el.style.color = state === 'error' ? 'var(--red,#f55)' : state === 'ok' ? 'var(--green,#4c4)' : 'var(--dim)';
+  }
+}
+
+async function pushToGist() {
+  const cfg = getSyncConfig();
+  if (!cfg.pat) return;
+  const payload = JSON.stringify(S);
+  const now = Date.now();
+  const body = { files: { [GIST_FILE]: { content: JSON.stringify({ data: payload, savedAt: now }) } } };
+  try {
+    setSyncStatus('idle', 'Syncing…');
+    let url, method;
+    if (cfg.gistId) {
+      url = `https://api.github.com/gists/${cfg.gistId}`;
+      method = 'PATCH';
+    } else {
+      url = 'https://api.github.com/gists';
+      method = 'POST';
+      body.description = 'LCARS SB118 sync data';
+      body.public = false;
+    }
+    const res = await fetch(url, {
+      method,
+      headers: { Authorization: `token ${cfg.pat}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) { const t = await res.text(); throw new Error(`${res.status}: ${t.slice(0,120)}`); }
+    const json = await res.json();
+    saveSyncConfig({ ...cfg, gistId: json.id, lastPushed: now });
+    const el = document.getElementById('sync-gist-id');
+    if (el) el.value = json.id;
+    setSyncStatus('ok', 'Synced ✓ ' + new Date(now).toLocaleTimeString());
+  } catch(e) {
+    setSyncStatus('error', 'Sync failed: ' + e.message);
+  }
+}
+
+async function pullFromGist(silent) {
+  const cfg = getSyncConfig();
+  if (!cfg.pat || !cfg.gistId) { if (!silent) alert('No Gist configured. Push first or enter a Gist ID.'); return; }
+  try {
+    if (!silent) setSyncStatus('idle', 'Pulling…');
+    const res = await fetch(`https://api.github.com/gists/${cfg.gistId}`, {
+      headers: { Authorization: `token ${cfg.pat}` }
+    });
+    if (!res.ok) throw new Error(`${res.status}`);
+    const json = await res.json();
+    const raw = json.files?.[GIST_FILE]?.content;
+    if (!raw) throw new Error('No LCARS data found in Gist');
+    const wrapper = JSON.parse(raw);
+    if (!wrapper.data) throw new Error('Invalid Gist data');
+    const remoteAt = wrapper.savedAt || 0;
+    const localAt = cfg.lastPushed || 0;
+    if (silent && remoteAt <= localAt) return; // remote not newer, skip
+    const data = JSON.parse(wrapper.data);
+    if (!data.docs || !data.missions) throw new Error('Invalid data structure');
+    Object.assign(S, data);
+    persist();
+    saveSyncConfig({ ...cfg, lastPushed: remoteAt });
+    curId = null; curView = null; curViewId = null;
+    setTheme(S.settings.theme||'dark');
+    applyPrefs();
+    renderNav();
+    showDashboard();
+    if (!silent) setSyncStatus('ok', 'Pulled ✓ ' + new Date(remoteAt).toLocaleTimeString());
+  } catch(e) {
+    if (!silent) setSyncStatus('error', 'Pull failed: ' + e.message);
+  }
+}
+
+function schedSync() {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(pushToGist, 60000);
+}
+
+function saveSyncFields() {
+  const pat = (document.getElementById('sync-pat')?.value || '').trim();
+  const gistId = (document.getElementById('sync-gist-id')?.value || '').trim();
+  const cfg = getSyncConfig();
+  saveSyncConfig({ ...cfg, pat: pat || cfg.pat, gistId: gistId || cfg.gistId });
+}
+
+// ================================================================
 // MARKDOWN IMPORT
 // ================================================================
 
@@ -2332,6 +2435,7 @@ function flushSave() {
   doc.myChars = (doc.myChars||[]).filter(n => (doc.chars||[]).includes(n));
   syncDocMyChars(doc);   // re-add any that belong via alias chain
   persist();
+  schedSync();
   updateMeta(doc);
   updateCharsPanel(doc);
   renderNav();
@@ -4190,6 +4294,33 @@ function openSettings() {
       </div>
     </div>
 
+    <div class="msec" style="margin-top:18px">CLOUD SYNC</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+      <div style="font-size:0.73rem;color:var(--dim);line-height:1.6">
+        Sync your data to a private GitHub Gist so it's available on any device. Requires a GitHub account and a Personal Access Token with <strong>gist</strong> scope only.<br>
+        <span style="opacity:0.7">Data auto-syncs ~60 seconds after each save. On page load, if the Gist is newer than local data it will auto-pull.</span>
+      </div>
+      <div class="mrow">
+        <div class="mf" style="flex:2">
+          <label class="ml">GITHUB PERSONAL ACCESS TOKEN</label>
+          <input class="mi" id="sync-pat" type="password" placeholder="ghp_…" value="${getSyncConfig().pat||''}" autocomplete="off">
+        </div>
+        <div class="mf" style="flex:1">
+          <label class="ml">GIST ID <span style="font-weight:normal;opacity:0.6">(auto-fills on first push)</span></label>
+          <input class="mi" id="sync-gist-id" type="text" placeholder="auto" value="${getSyncConfig().gistId||''}">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-s" onclick="saveSyncFields();pushToGist()">↑ Push Now</button>
+        <button class="btn btn-s" onclick="saveSyncFields();pullFromGist(false)">↓ Pull Now</button>
+        <span id="sync-status" style="font-size:0.73rem;color:var(--dim);margin-left:4px">${syncStatus.msg||''}</span>
+      </div>
+      <div style="font-size:0.71rem;color:var(--dim);line-height:1.5">
+        To create a token: <em>github.com → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token → tick <strong>gist</strong> only</em>.
+        The token is stored only in your browser's localStorage — never sent anywhere except api.github.com.
+      </div>
+    </div>
+
     <div class="msec" style="margin-top:18px">UI PREFERENCES</div>
     <div style="margin-top:8px;margin-bottom:10px">
       <div class="ml" style="margin-bottom:5px">THEME</div>
@@ -5785,6 +5916,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
   renderNav();
   showDashboard();
+  pullFromGist(true); // silent auto-pull: only applies if Gist is newer than local data
 });
 </script>
 </body>
