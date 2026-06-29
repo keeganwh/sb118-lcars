@@ -895,8 +895,13 @@ const VERSIONS = [
       'Added README.md and CHANGELOG.md to repository',
     ]
   }
-  // Claude appends pending entries here after each session, format:
-  // { version: 'pending', date: 'YYYY-MM-DD', changes: ['...'] }
+  {
+    version: 'pending',
+    date: '2026-06-29',
+    changes: [
+      'Fixed: removing a character via the Manifest caused the panel to break — clicking another character required a full page refresh to recover',
+    ]
+  }
 ];
 function loadState() {
   try { const r = localStorage.getItem(SKEY); if (r) return JSON.parse(r); } catch(e){}
