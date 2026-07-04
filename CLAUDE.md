@@ -34,3 +34,7 @@ After **every code change** to `LCARS.html`, immediately append a pending entry 
 - `D:\Claude Work\LCARS.html` — entire app (single file, all JS/CSS/HTML inline)
 - `D:\Claude Work\LCARS-Guide-v2.html` — user guide (opened via Dashboard button)
 - `D:\Claude Work\CHANGELOG.md` — human-readable version history
+
+## Project Memory
+
+Cross-session memory lives in `memory/` at the repo root (committed to GitHub). At the start of each session, read `memory/MEMORY.md` for the index, then load relevant files. This replaces the local `~/.claude/projects/` memory system so context is portable across machines.

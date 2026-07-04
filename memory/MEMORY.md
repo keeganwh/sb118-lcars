@@ -1,0 +1,2 @@
+- [Wardrobe app](project_wardrobe_app.md) — zero-cost 2-user wardrobe PWA at D:\Claude Work\Wardrobe (own nested git repo; D:\Claude Work is a general workspace with sb118-lcars repo at its root)
+- [Changelog feedback](feedback_changelog.md) — how the user wants changelog/version handling
