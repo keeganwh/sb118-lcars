@@ -209,6 +209,9 @@ body.academy #editor .tm{font-style:normal}
 #editor blockquote{margin:0 0 0 2em;padding:0;border:none;font-style:normal;display:block}
 #editor a{color:var(--blue2);text-decoration:underline}
 
+/* ── PARAGRAPH MARKERS (¶ view) ── */
+#editor.show-pilcrows > div::after,#editor.show-pilcrows > p::after{content:" ¶";color:rgba(128,128,128,0.4);pointer-events:none;user-select:none;font-weight:normal;font-style:normal}
+
 /* ── CUSTOM INDENT ── */
 #editor .ind-1{margin-left:2em!important}
 #editor .ind-2{margin-left:4em!important}
@@ -682,6 +685,7 @@ body.hc #cp{border-left:3px solid var(--blue)}
         <button class="btn btn-s btn-sm" id="btn-copy" onclick="copyPost()" title="Copy to Clipboard with Formatting">📋</button>
         <button class="tbb tbb-names" id="tbb-cf" onclick="removeFormatting()" title="Remove Formatting — strips bold, italic, strikethrough and links from selection or current line">Clear Format</button>
         <button class="tbb tbb-names" id="tbb-src" onclick="toggleSourceView()" title="View / edit raw HTML source of this sim">&lt;/&gt;</button>
+        <button class="tbb tbb-names" id="tbb-pil" onclick="togglePilcrows()" title="Show paragraph markers (¶) — reveals paragraph boundaries and blank lines">¶</button>
         <div class="tsep"></div>
         <button class="tbb" id="tbb-b" onclick="ec('bold')" title="Bold (Ctrl+B)"><strong>B</strong></button>
         <button class="tbb" id="tbb-i" onclick="ec('italic')" title="Italic (Ctrl+I)"><em>I</em></button>
@@ -914,6 +918,9 @@ const VERSIONS = [
       'Fixed: Gist pull always fetches via raw_url (not the truncated API content field) so large datasets never hit the 1MB API truncation limit',
       'Fixed: Gist push was double-serializing data (JSON string inside JSON), inflating file size ~2x; now stores data object directly with backward-compat pull for old format',
       'Fixed: importing a Gist file directly via backup/restore now unwraps the Gist sync envelope automatically, with proper error handling for both old and new formats',
+      'Improved: Link insertion (Ctrl+K / 🔗) now detects when cursor is inside an existing link — opens in Edit mode pre-populated with current URL, with a Remove Link button; new links get target=_blank',
+      'Fixed: empty lines (blank paragraphs) were sometimes compressed into a single line break when copying to external apps — now replaced with non-breaking space in clipboard HTML so paste targets preserve the blank line',
+      'Added: ¶ paragraph marker toggle button — shows a faint ¶ at the end of each paragraph to make line/paragraph structure visible while editing',
     ]
   }
 ];
@@ -971,6 +978,7 @@ let showArchived = false;
 let saveTimer = null;
 let trTimer = null;
 let modalCb = null;
+let _editingLink = null;
 let _resizing = null;
 let _titleWarnMatch = null;
 let searchActive = false;
@@ -2071,8 +2079,20 @@ function installCopyHandler() {
       });
     });
 
+    // Capture plain text before modifying tmp for HTML-clipboard compatibility
+    const plainText = tmp.innerText || tmp.textContent;
+
+    // Empty-line blocks use <br> as a height placeholder — replace with NBSP so paste
+    // targets (Word, Google Docs, forum editors) render a visible blank line instead of
+    // collapsing it to nothing
+    tmp.querySelectorAll('div, p').forEach(block => {
+      if (block.childNodes.length === 1 && block.firstChild.nodeName === 'BR') {
+        block.replaceChildren(document.createTextNode(' '));
+      }
+    });
+
     e.clipboardData.setData('text/html', tmp.innerHTML);
-    e.clipboardData.setData('text/plain', tmp.innerText || tmp.textContent);
+    e.clipboardData.setData('text/plain', plainText);
     e.preventDefault();
   });
 }
@@ -2852,17 +2872,75 @@ function ec(cmd) { document.getElementById('editor').focus(); document.execComma
 function doLink() {
   const sel = window.getSelection();
   const selText = sel ? sel.toString() : '';
-  openModal('INSERT LINK', `
-    <div class="mf"><label class="ml">URL</label><input class="mi" id="m-url" placeholder="https://…"></div>
-    <div class="mf"><label class="ml">DISPLAY TEXT</label><input class="mi" id="m-lt" value="${esc(selText)}" placeholder="Link text"></div>
+
+  // Detect if cursor is inside an existing link
+  _editingLink = null;
+  if (sel && sel.rangeCount > 0) {
+    const ed = document.getElementById('editor');
+    let node = sel.getRangeAt(0).commonAncestorContainer;
+    if (node.nodeType === 3) node = node.parentNode;
+    while (node && node !== ed) {
+      if (node.nodeName === 'A') { _editingLink = node; break; }
+      node = node.parentNode;
+    }
+  }
+
+  const existingUrl = _editingLink ? (_editingLink.getAttribute('href') || '') : '';
+  const existingText = _editingLink ? _editingLink.textContent : '';
+  const isEdit = !!_editingLink;
+
+  openModal(isEdit ? 'EDIT LINK' : 'INSERT LINK', `
+    <div class="mf"><label class="ml">URL</label><input class="mi" id="m-url" placeholder="https://…" value="${esc(existingUrl)}"></div>
+    <div class="mf"><label class="ml">DISPLAY TEXT</label><input class="mi" id="m-lt" value="${esc(selText || existingText)}" placeholder="Link text (optional if text is selected)"></div>
   `, () => {
     const url = document.getElementById('m-url').value.trim();
     const lt = document.getElementById('m-lt').value.trim();
     if (!url) return false;
-    document.getElementById('editor').focus();
-    if (lt && !selText) document.execCommand('insertHTML',false,`<a href="${esc(url)}">${esc(lt)}</a>`);
-    else document.execCommand('createLink',false,url);
-  });
+    const ed = document.getElementById('editor');
+    ed.focus();
+    if (_editingLink) {
+      _editingLink.setAttribute('href', url);
+      _editingLink.setAttribute('target', '_blank');
+      if (lt) _editingLink.textContent = lt;
+    } else if (lt && !selText) {
+      document.execCommand('insertHTML', false, `<a href="${esc(url)}" target="_blank">${esc(lt)}</a>`);
+    } else {
+      document.execCommand('createLink', false, url);
+      // Apply target="_blank" to newly created link
+      const newSel = window.getSelection();
+      if (newSel && newSel.rangeCount > 0) {
+        let n = newSel.getRangeAt(0).commonAncestorContainer;
+        if (n.nodeType === 3) n = n.parentNode;
+        if (n.nodeName === 'A') n.setAttribute('target', '_blank');
+      }
+    }
+    _editingLink = null;
+    schedSave();
+  }, isEdit ? { extra: [{ cls: 'btn-s', label: 'Remove Link', fn: 'doUnlinkCurrent()' }] } : {});
+}
+
+function doUnlinkCurrent() {
+  const link = _editingLink;
+  _editingLink = null;
+  closeModal();
+  if (!link) return;
+  const ed = document.getElementById('editor');
+  ed.focus();
+  const sel = window.getSelection();
+  const r = document.createRange();
+  r.selectNode(link);
+  sel.removeAllRanges();
+  sel.addRange(r);
+  document.execCommand('unlink');
+  schedSave();
+}
+
+function togglePilcrows() {
+  const ed = document.getElementById('editor');
+  const btn = document.getElementById('tbb-pil');
+  if (!ed) return;
+  const on = ed.classList.toggle('show-pilcrows');
+  if (btn) btn.classList.toggle('fmt-on', on);
 }
 
 // ── EDITOR STRUCTURE NORMALISER ──
