@@ -27,7 +27,7 @@ After **every code change** to `LCARS.html`, immediately append a pending entry 
 
 - Commit and push after every change — do not batch unrelated fixes into one commit
 - **Before every commit**, run: `git config user.email noreply@anthropic.com && git config user.name Claude` — this is required for the CCR signing infrastructure to sign the commit; skipping it produces unsigned commits that the stop hook rejects
-- Always push to `main` only: `git push origin HEAD:main`
+- Work on local `main` branch (not `main-ikuxoc`); push with: `git push origin main`
 - Target branch: `main` → auto-deploys to GitHub Pages
 
 ## Key Files
