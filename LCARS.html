@@ -674,13 +674,30 @@ body.hc #cp{border-left:3px solid var(--blue)}
 
     <!-- DOC HEADER + TOOLBAR (combined) -->
     <div id="dh" class="hidden">
-      <!-- Row 1: title · close -->
+      <!-- Row 1: title · close · Auto Format ▾ · Visual Aids ▾ -->
       <div class="dh-r1">
         <input type="text" id="doc-title" placeholder="Sim Title…" oninput="schedSave();checkTitleDupe()">
         <span id="title-warn" class="hidden" title="Similar title exists — click for details" onclick="showTitleWarnModal()">⚠</span>
         <button class="btn btn-s btn-sm" id="btn-close-doc" onclick="closeDoc()" title="Close sim">✕</button>
+        <div class="tb-dd-wrap">
+          <button class="tbb tbb-names" id="tbb-af-btn" onclick="toggleTbDropdown('af')" title="Auto Formatting — bold names, bold locations, italic thoughts, italic OOCs">Auto Format ▾</button>
+          <div class="tb-dd" id="tb-dd-af">
+            <button class="tbb tbb-names" id="tbb-bn" onclick="toggleAutoBold()" title="Auto-bold character names — toggle on applies bold, toggle off removes it"><strong>B Names</strong></button>
+            <button class="tbb tbb-names" id="tbb-bl" onclick="toggleBoldLocations()" title="Auto-bold ((Location)) markers"><strong>B Locations</strong></button>
+            <button class="tbb tbb-names" id="tbb-it" onclick="toggleItalicThoughts()" title="Auto-italicize oO Thoughts Oo"><em>Italic Thoughts</em></button>
+            <button class="tbb tbb-names" id="tbb-oi" onclick="toggleItalicOOC()" title="Auto-italicize ((OOC - ...)) markers"><em>Italic OOCs</em></button>
+          </div>
+        </div>
+        <div class="tb-dd-wrap">
+          <button class="tbb tbb-names" id="tbb-va-btn" onclick="toggleTbDropdown('va')" title="Visual Aids — toggle highlights for Actions, Comms, Thoughts">Visual Aids ▾</button>
+          <div class="tb-dd" id="tb-dd-va">
+            <button class="tbb tbb-names fmt-on" id="tbb-am" onclick="toggleFmt('action')" title="Toggle ::Actions:: highlighting — marks stage direction / action lines">::Actions::</button>
+            <button class="tbb tbb-names fmt-on" id="tbb-cm" onclick="toggleFmt('comms')" title="Toggle =/\= Comms =/\= highlighting — marks communication / transmission lines">=/\= Comms =/\=</button>
+            <button class="tbb tbb-names fmt-on" id="tbb-th" onclick="toggleFmt('thought')" title="Toggle oO Thoughts Oo highlighting">oO Thoughts Oo</button>
+          </div>
+        </div>
       </div>
-      <!-- Row 2: copy | clear | src | B I S link | indent | markers | ——gap—— | Auto Fmt ▾ | Visual Aids ▾ -->
+      <!-- Row 2: copy | clear | src | ¶ | B I S link | indent | markers -->
       <div class="dh-r2">
         <button class="btn btn-s btn-sm" id="btn-copy" onclick="copyPost()" title="Copy to Clipboard with Formatting">📋</button>
         <button class="tbb tbb-names" id="tbb-cf" onclick="removeFormatting()" title="Remove Formatting — strips bold, italic, strikethrough and links from selection or current line">Clear Format</button>
@@ -700,25 +717,6 @@ body.hc #cp{border-left:3px solid var(--blue)}
         <button class="tbb tbb-mkr" onclick="insertMarker('thought')" title="Wrap selection in oO…Oo thought markers, or insert placeholder">oO Thoughts Oo</button>
         <button class="tbb tbb-mkr" onclick="insertMarker('location')" title="Wrap selection in ((…)) location markers, or insert placeholder">((Location))</button>
         <button class="tbb tbb-mkr" onclick="insertMarker('ooc')" title="Wrap selection in ((OOC - …)) OOC markers, or insert placeholder">((OOC))</button>
-        <div class="dh-r2-right">
-          <div class="tb-dd-wrap">
-            <button class="tbb tbb-names" id="tbb-af-btn" onclick="toggleTbDropdown('af')" title="Auto Formatting — bold names, bold locations, italic thoughts, italic OOCs">Auto Format ▾</button>
-            <div class="tb-dd" id="tb-dd-af">
-              <button class="tbb tbb-names" id="tbb-bn" onclick="toggleAutoBold()" title="Auto-bold character names — toggle on applies bold, toggle off removes it"><strong>B Names</strong></button>
-              <button class="tbb tbb-names" id="tbb-bl" onclick="toggleBoldLocations()" title="Auto-bold ((Location)) markers"><strong>B Locations</strong></button>
-              <button class="tbb tbb-names" id="tbb-it" onclick="toggleItalicThoughts()" title="Auto-italicize oO Thoughts Oo"><em>Italic Thoughts</em></button>
-              <button class="tbb tbb-names" id="tbb-oi" onclick="toggleItalicOOC()" title="Auto-italicize ((OOC - ...)) markers"><em>Italic OOCs</em></button>
-            </div>
-          </div>
-          <div class="tb-dd-wrap">
-            <button class="tbb tbb-names" id="tbb-va-btn" onclick="toggleTbDropdown('va')" title="Visual Aids — toggle highlights for Actions, Comms, Thoughts">Visual Aids ▾</button>
-            <div class="tb-dd" id="tb-dd-va">
-              <button class="tbb tbb-names fmt-on" id="tbb-am" onclick="toggleFmt('action')" title="Toggle ::Actions:: highlighting — marks stage direction / action lines">::Actions::</button>
-              <button class="tbb tbb-names fmt-on" id="tbb-cm" onclick="toggleFmt('comms')" title="Toggle =/\= Comms =/\= highlighting — marks communication / transmission lines">=/\= Comms =/\=</button>
-              <button class="tbb tbb-names fmt-on" id="tbb-th" onclick="toggleFmt('thought')" title="Toggle oO Thoughts Oo highlighting">oO Thoughts Oo</button>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -921,6 +919,7 @@ const VERSIONS = [
       'Improved: Link insertion (Ctrl+K / 🔗) now detects when cursor is inside an existing link — opens in Edit mode pre-populated with current URL, with a Remove Link button; new links get target=_blank',
       'Fixed: empty lines (blank paragraphs) were sometimes compressed into a single line break when copying to external apps — now replaced with non-breaking space in clipboard HTML so paste targets preserve the blank line',
       'Added: ¶ paragraph marker toggle button — shows a faint ¶ at the end of each paragraph to make line/paragraph structure visible while editing',
+      'Layout: moved Auto Format and Visual Aids dropdowns from toolbar row 2 to title row 1 (right of close button) to free up horizontal space in the toolbar',
     ]
   }
 ];
