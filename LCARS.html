@@ -913,6 +913,7 @@ const VERSIONS = [
     changes: [
       'Fixed: Gist pull failing with "Unterminated string in JSON" when data exceeded ~1MB — now fetches via raw_url when GitHub truncates the API response',
       'Fixed: Gist push was double-serializing data (JSON string inside JSON), inflating file size ~2x; now stores data object directly with backward-compat pull for old format',
+      'Fixed: importing a Gist file directly via backup/restore now unwraps the Gist sync envelope automatically (supports both old string-wrapped and new object formats)',
     ]
   }
 ];
@@ -1179,6 +1180,10 @@ function onImportFile(e) {
   reader.onload = ev => {
     let data;
     try { data = JSON.parse(ev.target.result); } catch(err) { alert('Invalid file — could not parse JSON.'); return; }
+    // Unwrap Gist sync format: { data: <S or JSON string>, savedAt: <ts> }
+    if (data.savedAt && data.data) {
+      data = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
+    }
     if (!data.docs || !data.missions) { alert('Invalid LCARS save file.'); return; }
     _pendingImport = data;
     const mCount = Object.keys(data.missions||{}).length;
