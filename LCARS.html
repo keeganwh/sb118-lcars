@@ -906,6 +906,14 @@ const VERSIONS = [
       'Fixed: Create a new Scene / Write a new Sim cards wrapping to a second row on the Mission detail view — added flex-wrap:nowrap',
       'Moved mission/scene action cards inline with title (right-aligned) instead of above it',
     ]
+  },
+  {
+    version: 'pending',
+    date: '2026-07-05',
+    changes: [
+      'Fixed: Gist pull failing with "Unterminated string in JSON" when data exceeded ~1MB — now fetches via raw_url when GitHub truncates the API response',
+      'Fixed: Gist push was double-serializing data (JSON string inside JSON), inflating file size ~2x; now stores data object directly with backward-compat pull for old format',
+    ]
   }
 ];
 function loadState() {
@@ -1238,9 +1246,9 @@ function setSyncStatus(state, msg) {
 async function pushToGist() {
   const cfg = getSyncConfig();
   if (!cfg.pat) return;
-  const payload = JSON.stringify(S);
   const now = Date.now();
-  const body = { files: { [GIST_FILE]: { content: JSON.stringify({ data: payload, savedAt: now }) } } };
+  // Store data directly (not double-serialized) to minimize Gist file size
+  const body = { files: { [GIST_FILE]: { content: JSON.stringify({ data: S, savedAt: now }) } } };
   try {
     setSyncStatus('idle', 'Syncing…');
     let url, method;
@@ -1279,14 +1287,26 @@ async function pullFromGist(silent) {
     });
     if (!res.ok) throw new Error(`${res.status}`);
     const json = await res.json();
-    const raw = json.files?.[GIST_FILE]?.content;
-    if (!raw) throw new Error('No LCARS data found in Gist');
+    const fileEntry = json.files?.[GIST_FILE];
+    if (!fileEntry) throw new Error('No LCARS data found in Gist');
+    // GitHub truncates content at ~1MB in the API response; fetch raw_url for full content
+    let raw;
+    if (fileEntry.truncated) {
+      const rawRes = await fetch(fileEntry.raw_url, {
+        headers: { Authorization: `token ${cfg.pat}` }
+      });
+      if (!rawRes.ok) throw new Error(`raw fetch ${rawRes.status}`);
+      raw = await rawRes.text();
+    } else {
+      raw = fileEntry.content;
+    }
     const wrapper = JSON.parse(raw);
     if (!wrapper.data) throw new Error('Invalid Gist data');
     const remoteAt = wrapper.savedAt || 0;
     const localAt = cfg.lastPushed || 0;
     if (silent && remoteAt <= localAt) return; // remote not newer, skip
-    const data = JSON.parse(wrapper.data);
+    // Support both old format (data is a JSON string) and new format (data is an object)
+    const data = typeof wrapper.data === 'string' ? JSON.parse(wrapper.data) : wrapper.data;
     if (!data.docs || !data.missions) throw new Error('Invalid data structure');
     Object.assign(S, data);
     persist();
