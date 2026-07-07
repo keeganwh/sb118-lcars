@@ -117,6 +117,9 @@ body.hc #sidebar{border-right:3px solid var(--amber)}
 .sdot.active{background:var(--blue2)}
 .sdot.complete{background:var(--gold)}
 .sdot.archived{background:var(--scroll);border:1px solid var(--dim)}
+.stale-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-left:auto;cursor:default}
+.stale-dot.stale-amber{background:#d98c00}
+.stale-dot.stale-red{background:#cc2222}
 .lbl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nm-hdr .lbl,.ns-hdr .lbl{cursor:pointer}
 .nm-hdr .lbl:hover{color:var(--amber2);text-decoration:underline}
@@ -674,11 +677,10 @@ body.hc #cp{border-left:3px solid var(--blue)}
 
     <!-- DOC HEADER + TOOLBAR (combined) -->
     <div id="dh" class="hidden">
-      <!-- Row 1: title · close · Auto Format ▾ · Visual Aids ▾ -->
+      <!-- Row 1: warn · title · Auto Format ▾ · Visual Aids ▾ · close -->
       <div class="dh-r1">
-        <input type="text" id="doc-title" placeholder="Sim Title…" oninput="schedSave();checkTitleDupe()">
         <span id="title-warn" class="hidden" title="Similar title exists — click for details" onclick="showTitleWarnModal()">⚠</span>
-        <button class="btn btn-s btn-sm" id="btn-close-doc" onclick="closeDoc()" title="Close sim">✕</button>
+        <input type="text" id="doc-title" placeholder="Sim Title…" oninput="schedSave();checkTitleDupe()">
         <div class="tb-dd-wrap">
           <button class="tbb tbb-names" id="tbb-af-btn" onclick="toggleTbDropdown('af')" title="Auto Formatting — bold names, bold locations, italic thoughts, italic OOCs">Auto Format ▾</button>
           <div class="tb-dd" id="tb-dd-af">
@@ -696,6 +698,7 @@ body.hc #cp{border-left:3px solid var(--blue)}
             <button class="tbb tbb-names fmt-on" id="tbb-th" onclick="toggleFmt('thought')" title="Toggle oO Thoughts Oo highlighting">oO Thoughts Oo</button>
           </div>
         </div>
+        <button class="btn btn-s btn-sm" id="btn-close-doc" onclick="closeDoc()" title="Close sim">✕</button>
       </div>
       <!-- Row 2: copy | clear | src | ¶ | B I S link | indent | markers -->
       <div class="dh-r2">
@@ -920,6 +923,10 @@ const VERSIONS = [
       'Fixed: empty lines (blank paragraphs) were sometimes compressed into a single line break when copying to external apps — now replaced with non-breaking space in clipboard HTML so paste targets preserve the blank line',
       'Added: ¶ paragraph marker toggle button — shows a faint ¶ at the end of each paragraph to make line/paragraph structure visible while editing',
       'Layout: moved Auto Format and Visual Aids dropdowns from toolbar row 2 to title row 1 (right of close button) to free up horizontal space in the toolbar',
+      'Layout: moved ⚠ title-duplicate warning to left of the title input (so it does not offset the close button); moved ✕ close button to rightmost position in the title row',
+      'Fixed: copy-paste now preserves bold on ((Location)) markers and italic on ((OOC)) markers when those auto-format settings are enabled',
+      'Added: scenes in the nav sidebar show a faint amber dot after 2 days or red dot after 3 days of no posting/completion activity, to highlight neglected active scenes',
+      'Fixed: right-clicking a scene and choosing + New Sim now correctly pre-selects that scene and its parent mission in the New Sim modal',
     ]
   }
 ];
@@ -2056,6 +2063,23 @@ function installCopyHandler() {
       while (bq.firstChild) span.appendChild(bq.firstChild);
       p.replaceChild(span, bq);
     });
+
+    // Preserve bold on location markers and italic on OOC markers before unwrapping
+    const prefs = getPrefs();
+    if (prefs.boldLocations) {
+      tmp.querySelectorAll('.lm').forEach(span => {
+        const strong = document.createElement('strong');
+        while (span.firstChild) strong.appendChild(span.firstChild);
+        span.parentNode.replaceChild(strong, span);
+      });
+    }
+    if (prefs.italicOOC) {
+      tmp.querySelectorAll('.om').forEach(span => {
+        const em = document.createElement('em');
+        while (span.firstChild) em.appendChild(span.firstChild);
+        span.parentNode.replaceChild(em, span);
+      });
+    }
 
     // Unwrap ALL spans — marker spans become plain text
     tmp.querySelectorAll('span').forEach(span => {
@@ -3901,6 +3925,22 @@ function hlMatch(text, query) {
 // ================================================================
 // NAVIGATION RENDER
 // ================================================================
+// Returns ms timestamp of last "meaningful" activity in a scene: a sim being posted
+// (postedAt set) or marked complete (status='complete', using updatedAt as proxy).
+// Falls back to scene.createdAt when no qualifying sims exist.
+function sceneLastActivityMs(sceneId) {
+  const docs = Object.values(S.docs).filter(d => d.sceneId === sceneId);
+  let best = 0;
+  docs.forEach(d => {
+    if (d.postedAt) {
+      const t = new Date(d.postedAt).getTime();
+      if (!isNaN(t) && t > best) best = t;
+    }
+    if (d.status === 'complete' && d.updatedAt && d.updatedAt > best) best = d.updatedAt;
+  });
+  return best || (S.scenes[sceneId]?.createdAt) || Date.now();
+}
+
 // Returns the timestamp of the most recently posted (or updated) sim matching the filter fn
 // postedAt takes priority so missions sort chronologically by actual post history
 function newestSimDate(filterFn) {
@@ -4017,10 +4057,17 @@ function renderNav() {
             const sc2status=S.scenes[sc.id]&&S.scenes[sc.id].status;
             const scc=collapsed['sc_'+sc.id]!==undefined?collapsed['sc_'+sc.id]:(sc2status==='archived'||sc2status==='complete');
             const isViewedSc = curView==='scene'&&curViewId===sc.id;
+            let staleDot = '';
+            if ((sc2status||'active')==='active') {
+              const daysSince = (Date.now() - sceneLastActivityMs(sc.id)) / 86400000;
+              if (daysSince >= 3) staleDot = `<span class="stale-dot stale-red" title="${Math.floor(daysSince)} days since last post/completion"></span>`;
+              else if (daysSince >= 2) staleDot = `<span class="stale-dot stale-amber" title="${Math.floor(daysSince)} days since last post/completion"></span>`;
+            }
             html+=`<div><div class="ns-hdr ns-s-${sc2status||'active'}" oncontextmenu="ctxScene(event,'${sc.id}')">
               <span class="caret" onclick="tog('sc_${sc.id}')">${scc?'▶':'▼'}</span>
               <span class="sdot ${sc2.status||'active'}"></span>
               <span class="lbl${isViewedSc?' cur':''}" onclick="openScene('${sc.id}')" title="${esc(sc2.name)}">${esc(sc2.name)}</span>
+              ${staleDot}
             </div>`;
             if (!scc) html+=`<div class="ns-ch">${sc.docs.slice().sort((a,b)=>simSortKey(b)-simSortKey(a)).map(docItem).join('')}</div>`;
             html+=`</div>`;
@@ -4406,8 +4453,8 @@ function _onNewDocSceneChange(sel) {
   sel.value = newId;
 }
 function showNewDoc(sceneId,missionId,preTagCharId){
-  // Default selected mission: passed missionId, or first non-archived mission
-  const defaultMission = missionId || Object.values(S.missions).find(m=>m.status!=='archived')?.id || '';
+  // Infer mission from scene when not supplied (e.g. right-click context menu)
+  const defaultMission = missionId || (sceneId && S.scenes[sceneId]?.missionId) || Object.values(S.missions).find(m=>m.status!=='archived')?.id || '';
   const mOpts = _newDocMissionOpts(defaultMission);
   const scOpts = _newDocSceneOpts(sceneId, defaultMission);
   const tmplOpts='<option value="">— Blank sim —</option>'+(S.templates||[]).map(t=>
