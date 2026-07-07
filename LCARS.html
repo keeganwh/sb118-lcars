@@ -928,7 +928,14 @@ const VERSIONS = [
       'Added: scenes in the nav sidebar show a faint amber dot after 2 days or red dot after 3 days of no posting/completion activity, to highlight neglected active scenes',
       'Fixed: right-clicking a scene and choosing + New Sim now correctly pre-selects that scene and its parent mission in the New Sim modal',
     ]
-  }
+  },
+  {
+    version: 'pending',
+    date: '2026-07-07',
+    changes: [
+      'Added: optional "Started" date field to scenes — set via New Scene modal or right-click → Edit Scene; shown in scene detail view; used as the staleness baseline so scenes without any sim activity age from their start date rather than creation date',
+    ]
+  },
 ];
 function loadState() {
   try { const r = localStorage.getItem(SKEY); if (r) return JSON.parse(r); } catch(e){}
@@ -2631,9 +2638,9 @@ function mkMission(name, year, simType) {
   S.missions[id] = {id,name,year,simType:simType||null,status:'active',createdAt:Date.now()};
   persist(); renderNav();
 }
-function mkScene(name, missionId) {
+function mkScene(name, missionId, startedAt) {
   const id = uid();
-  S.scenes[id] = {id,name,missionId,status:'active',createdAt:Date.now()};
+  S.scenes[id] = {id,name,missionId,status:'active',startedAt:startedAt||null,createdAt:Date.now()};
   persist(); renderNav();
 }
 
@@ -3808,6 +3815,7 @@ function renderSceneView(id) {
           <span class="sdot ${sc.status||'active'}"></span>
           ${m ? `<span>Mission: <span class="dv-link" onclick="openMission('${m.id}')">${esc(m.name)}</span></span>` : ''}
           <span style="text-transform:capitalize">${sc.status||'active'}</span>
+          ${sc.startedAt ? `<span style="color:var(--dim)">Started: ${new Date(sc.startedAt).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'})}</span>` : ''}
         </div>
         <div class="dv-stat">
           <div class="dv-stat-item"><div class="dv-stat-num">${docs.length}</div><div class="dv-stat-lbl">SIMS</div></div>
@@ -3938,7 +3946,7 @@ function sceneLastActivityMs(sceneId) {
     }
     if (d.status === 'complete' && d.updatedAt && d.updatedAt > best) best = d.updatedAt;
   });
-  return best || (S.scenes[sceneId]?.createdAt) || Date.now();
+  return best || (S.scenes[sceneId]?.startedAt) || (S.scenes[sceneId]?.createdAt) || Date.now();
 }
 
 // Returns the timestamp of the most recently posted (or updated) sim matching the filter fn
@@ -4248,7 +4256,7 @@ function ctxScene(e,id){
     {label:sc.status==='archived'?'↩ Unarchive':'⟳ Archive',
       fn:`setStatus('scene','${id}','${sc.status==='archived'?'active':'archived'}');hideCtx()`},
     '-',
-    {label:'✏ Rename',fn:`renameItem('scene','${id}');hideCtx()`},
+    {label:'✏ Edit Scene',fn:`editScene('${id}');hideCtx()`},
     '-',
     {label:'🗑 Delete Scene',cls:'dng',fn:`delScene('${id}');hideCtx()`},
   ]);
@@ -4309,6 +4317,23 @@ function renameItem(type,id){
     const v=document.getElementById('m-rn').value.trim();
     if(!v) return false;
     obj.name=v; persist(); renderNav();
+  });
+}
+function editScene(id){
+  const sc=S.scenes[id]; if(!sc) return;
+  const existingDate=sc.startedAt?new Date(sc.startedAt).toISOString().slice(0,10):'';
+  openModal('EDIT SCENE',`
+    <div class="mf"><label class="ml">SCENE NAME</label><input class="mi" id="sc-en" value="${esc(sc.name)}"></div>
+    <div class="mf"><label class="ml">STARTED (optional)</label><input class="mi" id="sc-ed" type="date" value="${existingDate}" placeholder="Leave blank if unknown"></div>
+  `,()=>{
+    const n=document.getElementById('sc-en').value.trim();
+    if(!n){alert('Please enter a scene name.');return false;}
+    const dv=document.getElementById('sc-ed').value;
+    const ts=dv?new Date(dv+'T00:00:00').getTime():null;
+    sc.name=n;
+    sc.startedAt=ts||null;
+    persist(); renderNav();
+    if(curView==='scene'&&curViewId===id) openScene(id);
   });
 }
 function delMission(id){
@@ -4401,11 +4426,14 @@ function showNewScene(missionId){
   openModal('NEW SCENE',`
     <div class="mf"><label class="ml">SCENE NAME</label><input class="mi" id="sc-n" placeholder="e.g. First Contact"></div>
     <div class="mf"><label class="ml">MISSION</label><select class="ms" id="sc-m">${opts}</select></div>
+    <div class="mf"><label class="ml">STARTED (optional)</label><input class="mi" id="sc-d" type="date" placeholder="Leave blank if unknown"></div>
   `,()=>{
     const n=document.getElementById('sc-n').value.trim();
     const m=document.getElementById('sc-m').value;
+    const dv=document.getElementById('sc-d').value;
     if(!n){alert('Please enter a scene name.');return false;}
-    mkScene(n,m);
+    const ts=dv?new Date(dv+'T00:00:00').getTime():null;
+    mkScene(n,m,ts||null);
   });
 }
 function _newDocMissionOpts(selectedId) {
