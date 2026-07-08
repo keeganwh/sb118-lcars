@@ -935,6 +935,7 @@ const VERSIONS = [
     changes: [
       'Added: optional "Started" date field to scenes — set via New Scene modal or right-click → Edit Scene; shown in scene detail view; used as the staleness baseline so scenes without any sim activity age from their start date rather than creation date',
       'Fixed: Gist pull failing with "Failed to fetch" on new/different computers — raw_url fetch to gist.githubusercontent.com could be blocked by CORS preflight; now tries raw_url without Authorization header as a middle step (no preflight needed for simple GETs), then falls back to the API content field; JSON parse errors from truncated content now show a clear message instead of a cryptic position offset',
+      'Fixed: marking a sim/scene/mission active, complete, or archived via the context menu now triggers a Gist auto-sync (previously only editor saves did)',
     ]
   },
 ];
@@ -4329,7 +4330,7 @@ function setStatus(type,id,status){
     S.docs[id].status=status;
   }
   if (type==='doc'&&id===curId) document.getElementById('doc-status').value=status;
-  persist(); renderNav();
+  persist(); renderNav(); schedSync();
 }
 
 function renameItem(type,id){
