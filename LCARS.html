@@ -934,7 +934,7 @@ const VERSIONS = [
     date: '2026-07-07',
     changes: [
       'Added: optional "Started" date field to scenes — set via New Scene modal or right-click → Edit Scene; shown in scene detail view; used as the staleness baseline so scenes without any sim activity age from their start date rather than creation date',
-      'Fixed: Gist pull failing with "Failed to fetch" on new/different computers — the raw_url fetch to gist.githubusercontent.com could be blocked by CORS preflight (browser blocks Authorization header cross-origin); now falls back to the API content field automatically so pull succeeds even when raw_url is CORS-blocked',
+      'Fixed: Gist pull failing with "Failed to fetch" on new/different computers — raw_url fetch to gist.githubusercontent.com could be blocked by CORS preflight; now tries raw_url without Authorization header as a middle step (no preflight needed for simple GETs), then falls back to the API content field; JSON parse errors from truncated content now show a clear message instead of a cryptic position offset',
     ]
   },
 ];
@@ -1318,22 +1318,33 @@ async function pullFromGist(silent) {
     const json = await res.json();
     const fileEntry = json.files?.[GIST_FILE];
     if (!fileEntry) throw new Error('No LCARS data found in Gist');
-    // Prefer raw_url for full content (API field truncates at 1 MB).
-    // raw_url goes to gist.githubusercontent.com which may block Authorization
-    // via CORS preflight on some browsers — fall back to the API content field if so.
+    // Prefer raw_url for full content (API field truncates at ~1 MB).
+    // raw_url goes to gist.githubusercontent.com; sending Authorization triggers a CORS
+    // preflight that some browsers/networks block. Fall-back chain:
+    //   1. raw_url with auth (best, works when CORS preflight is allowed)
+    //   2. raw_url without auth (no preflight needed; works if GitHub session cookie present)
+    //   3. API content field (always available but truncated at ~1 MB)
     let raw;
-    try {
-      const rawRes = await fetch(fileEntry.raw_url, {
-        headers: { Authorization: `token ${cfg.pat}` }
-      });
-      if (!rawRes.ok) throw new Error(`raw ${rawRes.status}`);
-      raw = await rawRes.text();
-    } catch(_) {
-      // CORS or network error on raw_url — fall back to API content field
-      if (!fileEntry.content) throw new Error('Raw fetch failed and API content unavailable');
-      raw = fileEntry.content;
+    let rawOk = false;
+    for (const opts of [
+      { headers: { Authorization: `token ${cfg.pat}` } },
+      {}
+    ]) {
+      try {
+        const rawRes = await fetch(fileEntry.raw_url, opts);
+        if (rawRes.ok) { raw = await rawRes.text(); rawOk = true; break; }
+      } catch(_) { /* try next */ }
     }
-    const wrapper = JSON.parse(raw);
+    if (!rawOk) {
+      if (!fileEntry.content) throw new Error('Could not fetch Gist content (network or CORS error)');
+      raw = fileEntry.content; // may be truncated for large datasets
+    }
+    let wrapper;
+    try { wrapper = JSON.parse(raw); } catch(je) {
+      throw new Error(!rawOk
+        ? 'Data too large for direct API fetch (~1 MB limit). Push from your other device first, or try again — raw fetch may work once network/CORS resolves.'
+        : 'JSON parse error: ' + je.message);
+    }
     if (!wrapper.data) throw new Error('Invalid Gist data');
     const remoteAt = wrapper.savedAt || 0;
     const localAt = cfg.lastPushed || 0;
