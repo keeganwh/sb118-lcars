@@ -936,6 +936,7 @@ const VERSIONS = [
       'Added: optional "Started" date field to scenes — set via New Scene modal or right-click → Edit Scene; shown in scene detail view; used as the staleness baseline so scenes without any sim activity age from their start date rather than creation date',
       'Fixed: Gist pull failing with "Failed to fetch" on new/different computers — raw_url fetch to gist.githubusercontent.com could be blocked by CORS preflight; now tries raw_url without Authorization header as a middle step (no preflight needed for simple GETs), then falls back to the API content field; JSON parse errors from truncated content now show a clear message instead of a cryptic position offset',
       'Fixed: marking a sim/scene/mission active, complete, or archived via the context menu now triggers a Gist auto-sync after 5 seconds (previously only editor saves did, after 60 s)',
+      'Fixed: link insertion (Ctrl+K / 🔗) was always inserting at the start of the sim — the selection was lost when the modal input took focus; now the range is saved before the modal opens and restored before execCommand runs',
     ]
   },
 ];
@@ -2925,11 +2926,14 @@ function doLink() {
   const sel = window.getSelection();
   const selText = sel ? sel.toString() : '';
 
+  // Save the selection range now — focusing the modal input will destroy it
+  let savedRange = (sel && sel.rangeCount > 0) ? sel.getRangeAt(0).cloneRange() : null;
+
   // Detect if cursor is inside an existing link
   _editingLink = null;
-  if (sel && sel.rangeCount > 0) {
+  if (savedRange) {
     const ed = document.getElementById('editor');
-    let node = sel.getRangeAt(0).commonAncestorContainer;
+    let node = savedRange.commonAncestorContainer;
     if (node.nodeType === 3) node = node.parentNode;
     while (node && node !== ed) {
       if (node.nodeName === 'A') { _editingLink = node; break; }
@@ -2950,6 +2954,12 @@ function doLink() {
     if (!url) return false;
     const ed = document.getElementById('editor');
     ed.focus();
+    // Restore the selection that was lost when the modal took focus
+    if (savedRange) {
+      const rs = window.getSelection();
+      rs.removeAllRanges();
+      rs.addRange(savedRange);
+    }
     if (_editingLink) {
       _editingLink.setAttribute('href', url);
       _editingLink.setAttribute('target', '_blank');
