@@ -934,6 +934,7 @@ const VERSIONS = [
     date: '2026-07-07',
     changes: [
       'Added: optional "Started" date field to scenes — set via New Scene modal or right-click → Edit Scene; shown in scene detail view; used as the staleness baseline so scenes without any sim activity age from their start date rather than creation date',
+      'Fixed: Gist pull failing with "Failed to fetch" on new/different computers — the raw_url fetch to gist.githubusercontent.com could be blocked by CORS preflight (browser blocks Authorization header cross-origin); now falls back to the API content field automatically so pull succeeds even when raw_url is CORS-blocked',
     ]
   },
 ];
@@ -1317,12 +1318,21 @@ async function pullFromGist(silent) {
     const json = await res.json();
     const fileEntry = json.files?.[GIST_FILE];
     if (!fileEntry) throw new Error('No LCARS data found in Gist');
-    // Always fetch via raw_url — API response truncates large content even when truncated flag is false
-    const rawRes = await fetch(fileEntry.raw_url, {
-      headers: { Authorization: `token ${cfg.pat}` }
-    });
-    if (!rawRes.ok) throw new Error(`raw fetch ${rawRes.status}`);
-    const raw = await rawRes.text();
+    // Prefer raw_url for full content (API field truncates at 1 MB).
+    // raw_url goes to gist.githubusercontent.com which may block Authorization
+    // via CORS preflight on some browsers — fall back to the API content field if so.
+    let raw;
+    try {
+      const rawRes = await fetch(fileEntry.raw_url, {
+        headers: { Authorization: `token ${cfg.pat}` }
+      });
+      if (!rawRes.ok) throw new Error(`raw ${rawRes.status}`);
+      raw = await rawRes.text();
+    } catch(_) {
+      // CORS or network error on raw_url — fall back to API content field
+      if (!fileEntry.content) throw new Error('Raw fetch failed and API content unavailable');
+      raw = fileEntry.content;
+    }
     const wrapper = JSON.parse(raw);
     if (!wrapper.data) throw new Error('Invalid Gist data');
     const remoteAt = wrapper.savedAt || 0;
