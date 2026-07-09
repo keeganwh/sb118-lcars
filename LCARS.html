@@ -937,6 +937,7 @@ const VERSIONS = [
       'Fixed: Gist pull failing with "Failed to fetch" on new/different computers — raw_url fetch to gist.githubusercontent.com could be blocked by CORS preflight; now tries raw_url without Authorization header as a middle step (no preflight needed for simple GETs), then falls back to the API content field; JSON parse errors from truncated content now show a clear message instead of a cryptic position offset',
       'Fixed: marking a sim/scene/mission active, complete, or archived via the context menu now triggers a Gist auto-sync after 5 seconds (previously only editor saves did, after 60 s)',
       'Fixed: link insertion (Ctrl+K / 🔗) was always inserting at the start of the sim — the selection was lost when the modal input took focus; now the range is saved before the modal opens and restored before execCommand runs',
+      'Fixed: selecting text in the editor would frequently collapse — background timers (normalize at 80ms, transform at 600ms, bold-names at 900ms after a keystroke) called restoreCaret which always wiped the selection; timers now bail out if a non-collapsed selection is active in the editor',
     ]
   },
 ];
@@ -3280,6 +3281,13 @@ function schedPanelRefresh() {
   }, 400);
 }
 
+function hasEditorSel() {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return false;
+  const ed = document.getElementById('editor');
+  return !!ed && ed.contains(sel.getRangeAt(0).commonAncestorContainer);
+}
+
 function onEditorInput(e) {
   if (e.inputType==='insertText' && e.data==='-') {
     const sel=window.getSelection();
@@ -3296,12 +3304,12 @@ function onEditorInput(e) {
     }
   }
   if (_normTimer) clearTimeout(_normTimer);
-  _normTimer = setTimeout(() => normalizeEditorContent(document.getElementById('editor')), 80);
+  _normTimer = setTimeout(() => { if (!hasEditorSel()) normalizeEditorContent(document.getElementById('editor')); }, 80);
   if (trTimer) clearTimeout(trTimer);
-  trTimer = setTimeout(transformNow,600);
+  trTimer = setTimeout(() => { if (!hasEditorSel()) transformNow(); }, 600);
   if (getPrefs().autoBoldNames && !(curId && isAcademyDoc(S.docs[curId]))) {
     if (_bnTimer) clearTimeout(_bnTimer);
-    _bnTimer = setTimeout(boldNames, 900);
+    _bnTimer = setTimeout(() => { if (!hasEditorSel()) boldNames(); }, 900);
   }
   updateWC();
   schedSave();
