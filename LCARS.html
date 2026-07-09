@@ -936,7 +936,7 @@ const VERSIONS = [
       'Added: optional "Started" date field to scenes — set via New Scene modal or right-click → Edit Scene; shown in scene detail view; used as the staleness baseline so scenes without any sim activity age from their start date rather than creation date',
       'Fixed: Gist pull failing with "Failed to fetch" on new/different computers — raw_url fetch to gist.githubusercontent.com could be blocked by CORS preflight; now tries raw_url without Authorization header as a middle step (no preflight needed for simple GETs), then falls back to the API content field; JSON parse errors from truncated content now show a clear message instead of a cryptic position offset',
       'Fixed: marking a sim/scene/mission active, complete, or archived via the context menu now triggers a Gist auto-sync after 5 seconds (previously only editor saves did, after 60 s)',
-      'Fixed: link insertion (Ctrl+K / 🔗) was always inserting at the start of the sim — the selection was lost when the modal input took focus; now the range is saved before the modal opens and restored before execCommand runs',
+      'Fixed: link insertion (Ctrl+K / 🔗) was always inserting at the start of the sim — the selection was lost when the modal input took focus; now the range is saved before the modal opens and restored before execCommand runs; also fixed ed.focus() after modal close scrolling the sim back to the top (preventScroll: true)',
       'Fixed: selecting text in the editor would frequently collapse — background timers (normalize at 80ms, transform at 600ms, bold-names at 900ms after a keystroke) called restoreCaret which always wiped the selection; timers now bail out if a non-collapsed selection is active in the editor',
     ]
   },
@@ -2954,7 +2954,7 @@ function doLink() {
     const lt = document.getElementById('m-lt').value.trim();
     if (!url) return false;
     const ed = document.getElementById('editor');
-    ed.focus();
+    ed.focus({ preventScroll: true });
     // Restore the selection that was lost when the modal took focus
     if (savedRange) {
       const rs = window.getSelection();
@@ -2988,7 +2988,7 @@ function doUnlinkCurrent() {
   closeModal();
   if (!link) return;
   const ed = document.getElementById('editor');
-  ed.focus();
+  ed.focus({ preventScroll: true });
   const sel = window.getSelection();
   const r = document.createRange();
   r.selectNode(link);
