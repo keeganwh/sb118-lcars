@@ -117,7 +117,8 @@ body.hc #sidebar{border-right:3px solid var(--amber)}
 .sdot.active{background:var(--blue2)}
 .sdot.complete{background:var(--gold)}
 .sdot.archived{background:var(--scroll);border:1px solid var(--dim)}
-.stale-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-left:auto;cursor:default}
+.stale-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;cursor:default}
+.stale-label{margin-left:auto;display:flex;align-items:center;gap:4px;flex-shrink:0}
 .stale-dot.stale-amber{background:#d98c00}
 .stale-dot.stale-red{background:#cc2222}
 .lbl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -937,6 +938,7 @@ const VERSIONS = [
       'Fixed: Gist pull failing with "Failed to fetch" on new/different computers — raw_url fetch to gist.githubusercontent.com could be blocked by CORS preflight; now tries raw_url without Authorization header as a middle step (no preflight needed for simple GETs), then falls back to the API content field; JSON parse errors from truncated content now show a clear message instead of a cryptic position offset',
       'Fixed: marking a sim/scene/mission active, complete, or archived via the context menu now triggers a Gist auto-sync after 5 seconds (previously only editor saves did, after 60 s)',
       'Fixed: link insertion (Ctrl+K / 🔗) was always inserting at the start of the sim — the selection was lost when the modal input took focus; now the range is saved before the modal opens and restored before execCommand runs; also fixed ed.focus() after modal close scrolling the sim back to the top (preventScroll: true)',
+      'Improved: stale scene indicators in the nav now show the day count (e.g. "3d") in small text alongside the amber/red dot',
       'Fixed: selecting text in the editor would frequently collapse — background timers (normalize at 80ms, transform at 600ms, bold-names at 900ms after a keystroke) called restoreCaret which always wiped the selection; timers now bail out if a non-collapsed selection is active in the editor',
     ]
   },
@@ -4108,8 +4110,10 @@ function renderNav() {
             let staleDot = '';
             if ((sc2status||'active')==='active') {
               const daysSince = (Date.now() - sceneLastActivityMs(sc.id)) / 86400000;
-              if (daysSince >= 3) staleDot = `<span class="stale-dot stale-red" title="${Math.floor(daysSince)} days since last post/completion"></span>`;
-              else if (daysSince >= 2) staleDot = `<span class="stale-dot stale-amber" title="${Math.floor(daysSince)} days since last post/completion"></span>`;
+              const d = Math.floor(daysSince);
+              const tip = `${d} days since last post/completion`;
+              if (daysSince >= 3) staleDot = `<span class="stale-label" title="${tip}"><span style="font-size:0.7rem;opacity:0.6">${d}d</span><span class="stale-dot stale-red"></span></span>`;
+              else if (daysSince >= 2) staleDot = `<span class="stale-label" title="${tip}"><span style="font-size:0.7rem;opacity:0.6">${d}d</span><span class="stale-dot stale-amber"></span></span>`;
             }
             html+=`<div><div class="ns-hdr ns-s-${sc2status||'active'}" oncontextmenu="ctxScene(event,'${sc.id}')">
               <span class="caret" onclick="tog('sc_${sc.id}')">${scc?'▶':'▼'}</span>
