@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LCARS v4.0</title>
+<title>LCARS v4.2</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22256%22 height=%22256%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23cc5500%22/%3E%3Cpath fill=%22%23fff%22 d=%22M72.91 100.24L23.33 100.24L37.49-0.24L58.74-0.24L46.79 82.98L76.67 82.98L72.91 100.24Z%22/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Droid+Sans:wght@400;700&display=swap" rel="stylesheet">
@@ -940,6 +940,13 @@ const VERSIONS = [
       'Added: ↕ Sort button in the sidebar header for scene sort order — 8 options: Sim Posting (recent/last), Due Status (stalest/freshest), Alphabetical (A–Z / Z–A), Scene Start (recent/last); preference persists to profile',
       'Fixed: changing scene sort order now re-renders the sidebar immediately',
       'Fixed: completed scenes no longer compete in Due Status sort orders — they sink to the bottom regardless of start date, since a finished scene cannot be stale',
+    ]
+  },
+  {
+    version: 'pending',
+    date: '2026-07-14',
+    changes: [
+      'Fixed: browser tab title was still showing v4.0; updated to v4.2',
     ]
   },
 ];
