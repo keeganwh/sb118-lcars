@@ -173,7 +173,7 @@ body.academy #editor .tm{font-style:normal}
 .nd-s-active .nd-title  {color:var(--blue2)}
 .nd-s-complete .nd-title{color:var(--gold)}
 .nd-s-archived .nd-title{color:var(--dim)}
-.nd.cur .nd-title       {color:var(--blue2)}
+.nd.cur.nd-s-active .nd-title{color:var(--blue2)}
 /* ── TOOLBAR (now embedded in dh-r2) ── */
 .tbb{padding:3px 7px;background:transparent;border:1px solid transparent;color:var(--text);cursor:pointer;border-radius:4px;font-size:0.87rem;font-family:inherit;white-space:nowrap;line-height:1.4}
 .tbb:hover{background:rgba(255,153,51,.12);border-color:var(--amber);color:var(--amber)}
@@ -940,6 +940,9 @@ const VERSIONS = [
       'Fixed: link insertion (Ctrl+K / 🔗) was always inserting at the start of the sim — the selection was lost when the modal input took focus; now the range is saved before the modal opens and restored before execCommand runs; also fixed ed.focus() after modal close scrolling the sim back to the top (preventScroll: true)',
       'Improved: stale scene indicators in the nav now show the day count (e.g. "3d") in small text alongside the amber/red dot',
       'Fixed: stale scene indicator could wrongly suppress for scenes whose sims had been edited (flushSave updates updatedAt on every save, making scenes look fresh); now records an explicit completedAt timestamp only when a sim is actually marked complete, and clears it when marked active; sceneLastActivityMs uses completedAt instead of updatedAt',
+      'Fixed: currently-open sim showing blue title even when marked complete — the .nd.cur CSS override now only applies to active sims; complete sims keep their gold color while selected',
+      'Fixed: opening Settings and saving would silently erase boldLocations and italicOOC prefs set via the Auto Format toolbar; save now merges into existing prefs rather than replacing them',
+      'Added: scene sort order preference in Settings → Navigation — choose between Most recently posted, Most overdue, Alphabetical, or By scene start date; persists across sessions',
       'Fixed: selecting text in the editor would frequently collapse — background timers (normalize at 80ms, transform at 600ms, bold-names at 900ms after a keystroke) called restoreCaret which always wiped the selection; timers now bail out if a non-collapsed selection is active in the editor',
     ]
   },
@@ -1095,6 +1098,7 @@ const PREF_DEFAULTS = {
   thoughtItalic: true,
   boldLocations: true,
   italicOOC: false,
+  navSceneSort: 'recent',
 };
 
 const GOOGLE_FONTS = [
@@ -4106,7 +4110,14 @@ function renderNav() {
         </div>`;
         if (!mc) {
           html+=`<div class="nm-ch">`;
-          Object.values(m.scenes).sort((a,b)=>newestSimDate(d=>d.sceneId===b.id)-newestSimDate(d=>d.sceneId===a.id)).forEach(sc => {
+          const _nss = getPrefs().navSceneSort||'recent';
+          const _sceneSorted = Object.values(m.scenes).slice().sort((a,b) => {
+            if (_nss==='alpha')   return a.name.localeCompare(b.name);
+            if (_nss==='stale')   return sceneLastActivityMs(a.id)-sceneLastActivityMs(b.id);
+            if (_nss==='started') return (S.scenes[a.id]?.startedAt||S.scenes[a.id]?.createdAt||0)-(S.scenes[b.id]?.startedAt||S.scenes[b.id]?.createdAt||0);
+            return newestSimDate(d=>d.sceneId===b.id)-newestSimDate(d=>d.sceneId===a.id); // 'recent'
+          });
+          _sceneSorted.forEach(sc => {
             const sc2=S.scenes[sc.id]; if (!sc2) return;
             const sc2status=S.scenes[sc.id]&&S.scenes[sc.id].status;
             const scc=collapsed['sc_'+sc.id]!==undefined?collapsed['sc_'+sc.id]:(sc2status==='archived'||sc2status==='complete');
@@ -4750,6 +4761,19 @@ function openSettings() {
       </div>
     </div>
 
+    <div class="msub" style="margin-top:14px">NAVIGATION</div>
+    <div class="mrow" style="margin-top:6px">
+      <div class="mf">
+        <label class="ml">SCENE SORT ORDER</label>
+        <select class="ms" id="pf-nss">
+          <option value="recent" ${p.navSceneSort==='recent'?'selected':''}>Most recently posted first</option>
+          <option value="stale"  ${p.navSceneSort==='stale' ?'selected':''}>Most overdue first</option>
+          <option value="alpha"  ${p.navSceneSort==='alpha' ?'selected':''}>Alphabetical</option>
+          <option value="started"${p.navSceneSort==='started'?'selected':''}>By scene start date</option>
+        </select>
+      </div>
+    </div>
+
     <div class="msub" style="margin-top:14px">AUTO-FORMATTING</div>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">
       <div style="display:flex;align-items:flex-start;gap:10px">
@@ -4782,14 +4806,16 @@ function openSettings() {
     const uiFont = document.getElementById('pf-uifont').value.trim();
     const efSame = document.getElementById('pf-ef-same').checked;
     const editorFont = efSame ? '' : document.getElementById('pf-editorfont').value.trim();
+    const nss = document.getElementById('pf-nss').value;
     if (isNaN(ls)||isNaN(efs)||isNaN(ufs)) { alert('Please enter valid numbers.'); return false; }
-    S.settings.prefs = {
+    // Merge so toggles set outside this modal (boldLocations, italicOOC, etc.) are preserved
+    S.settings.prefs = Object.assign({}, S.settings.prefs, {
       lineSpacing:ls, editorFontSize:efs, uiFontSize:ufs,
       uiFont, editorFont, editorFontSameAsUI:efSame,
       actionAccent:ac, commsAccent:cc, thoughtAccent:tc,
       actionOn:ao, commsOn:co, thoughtOn:to_,
-      autoBoldNames:abn, thoughtItalic:ti
-    };
+      autoBoldNames:abn, thoughtItalic:ti, navSceneSort:nss
+    });
     applyPrefs();
     persist();
     if (curId) transformNow();
