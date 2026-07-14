@@ -867,7 +867,7 @@ body.hc #cp{border-left:3px solid var(--blue)}
 const ZWS = String.fromCharCode(0x200B); // zero-width space used as caret anchor after marker spans
 const SKEY = 'lcars_v1';
 
-const APP_VERSION = '4.1';
+const APP_VERSION = '4.2';
 const VERSIONS = [
   {
     version: '4.0',
@@ -908,57 +908,38 @@ const VERSIONS = [
     ]
   },
   {
-    version: 'pending',
-    date: '2026-06-29',
-    changes: [
-      'Fixed: removing a character via the Manifest caused the panel to break — clicking another character required a full page refresh to recover',
-      'Added Google Fonts support — UI font and editor font can be set independently (or linked) via Settings → UI Preferences, with a searchable list of 56 popular Google Fonts',
-      'Added Scene Partner reporting to Mission and Scene detail views — shows which characters your characters appear alongside, with scene and sim counts; add buttons moved to top-right header',
-      'Added Top Scene Partners panel to Character Manifest sidebar — shows top 5 co-occurring characters across all sims',
-      'Fixed: Create a new Scene / Write a new Sim cards wrapping to a second row on the Mission detail view — added flex-wrap:nowrap',
-      'Moved mission/scene action cards inline with title (right-aligned) instead of above it',
-    ]
-  },
-  {
-    version: 'pending',
-    date: '2026-07-05',
-    changes: [
-      'Fixed: Gist pull always fetches via raw_url (not the truncated API content field) so large datasets never hit the 1MB API truncation limit',
-      'Fixed: Gist push was double-serializing data (JSON string inside JSON), inflating file size ~2x; now stores data object directly with backward-compat pull for old format',
-      'Fixed: importing a Gist file directly via backup/restore now unwraps the Gist sync envelope automatically, with proper error handling for both old and new formats',
-      'Improved: Link insertion (Ctrl+K / 🔗) now detects when cursor is inside an existing link — opens in Edit mode pre-populated with current URL, with a Remove Link button; new links get target=_blank',
-      'Fixed: empty lines (blank paragraphs) were sometimes compressed into a single line break when copying to external apps — now replaced with non-breaking space in clipboard HTML so paste targets preserve the blank line',
-      'Added: ¶ paragraph marker toggle button — shows a faint ¶ at the end of each paragraph to make line/paragraph structure visible while editing',
-      'Layout: moved Auto Format and Visual Aids dropdowns from toolbar row 2 to title row 1 (right of close button) to free up horizontal space in the toolbar',
-      'Layout: moved ⚠ title-duplicate warning to left of the title input (so it does not offset the close button); moved ✕ close button to rightmost position in the title row',
-      'Fixed: copy-paste now preserves bold on ((Location)) markers and italic on ((OOC)) markers when those auto-format settings are enabled',
-      'Added: scenes in the nav sidebar show a faint amber dot after 2 days or red dot after 3 days of no posting/completion activity, to highlight neglected active scenes',
-      'Fixed: right-clicking a scene and choosing + New Sim now correctly pre-selects that scene and its parent mission in the New Sim modal',
-    ]
-  },
-  {
-    version: 'pending',
-    date: '2026-07-07',
-    changes: [
-      'Added: optional "Started" date field to scenes — set via New Scene modal or right-click → Edit Scene; shown in scene detail view; used as the staleness baseline so scenes without any sim activity age from their start date rather than creation date',
-      'Fixed: Gist pull failing with "Failed to fetch" on new/different computers — raw_url fetch to gist.githubusercontent.com could be blocked by CORS preflight; now tries raw_url without Authorization header as a middle step (no preflight needed for simple GETs), then falls back to the API content field; JSON parse errors from truncated content now show a clear message instead of a cryptic position offset',
-      'Fixed: marking a sim/scene/mission active, complete, or archived via the context menu now triggers a Gist auto-sync after 5 seconds (previously only editor saves did, after 60 s)',
-      'Fixed: link insertion (Ctrl+K / 🔗) was always inserting at the start of the sim — the selection was lost when the modal input took focus; now the range is saved before the modal opens and restored before execCommand runs; also fixed ed.focus() after modal close scrolling the sim back to the top (preventScroll: true)',
-      'Improved: stale scene indicators in the nav now show the day count (e.g. "3d") in small text alongside the amber/red dot',
-      'Fixed: stale scene indicator could wrongly suppress for scenes whose sims had been edited (flushSave updates updatedAt on every save, making scenes look fresh); now records an explicit completedAt timestamp only when a sim is actually marked complete, and clears it when marked active; sceneLastActivityMs uses completedAt instead of updatedAt',
-      'Fixed: currently-open sim showing blue title even when marked complete — the .nd.cur CSS override now only applies to active sims; complete sims keep their gold color while selected',
-      'Fixed: opening Settings and saving would silently erase boldLocations and italicOOC prefs set via the Auto Format toolbar; save now merges into existing prefs rather than replacing them',
-      'Added: scene sort order preference in Settings → Navigation — choose between Most recently posted, Most overdue, Alphabetical, or By scene start date; persists across sessions',
-      'Fixed: selecting text in the editor would frequently collapse — background timers (normalize at 80ms, transform at 600ms, bold-names at 900ms after a keystroke) called restoreCaret which always wiped the selection; timers now bail out if a non-collapsed selection is active in the editor',
-    ]
-  },
-  {
-    version: 'pending',
+    version: '4.2',
     date: '2026-07-14',
     changes: [
-      'Added: right-clicking a sim in the sidebar now shows "Move to Scene…" — opens a modal to reassign the sim to any non-archived scene in any non-archived mission (grouped by mission); also updates the sim\'s missionId to match the target scene',
-      'Changed: scene sort order moved from Settings to a ↕ Sort button in the sidebar header — click to pick from 8 options (Sim Posting recent/last, Due Status stalest/freshest, Alphabetical A–Z/Z–A, Scene Start recent/last); preference still persists to profile; Settings NAVIGATION section removed',
-      'Fixed: changing scene sort order now re-renders the sidebar immediately; previously sorting was read correctly but renderNav() was never called after saving from Settings',
+      'Fixed: removing a character via the Manifest caused the panel to break — clicking another character required a full page refresh to recover',
+      'Added: Google Fonts support — UI font and editor font can be set independently (or linked) via Settings → UI Preferences, with a searchable list of 56 popular Google Fonts',
+      'Added: Scene Partner reporting to Mission and Scene detail views — shows which characters your characters appear alongside, with scene and sim counts; add buttons moved to top-right header',
+      'Added: Top Scene Partners panel to Character Manifest sidebar — shows top 5 co-occurring characters across all sims',
+      'Fixed: Create a new Scene / Write a new Sim cards wrapping to a second row on the Mission detail view',
+      'Layout: mission/scene action cards moved inline with title (right-aligned) instead of above it',
+      'Fixed: Gist push was double-serializing data (JSON string inside JSON), inflating file size ~2x; now stores data object directly with backward-compat pull for old format',
+      'Fixed: importing a Gist file directly via backup/restore now unwraps the Gist sync envelope automatically, with proper error handling for both old and new formats',
+      'Fixed: Gist pull failing with "Failed to fetch" on new/different computers — raw_url fetch could be blocked by CORS preflight on fresh browsers; now tries without Authorization header as a middle step (simple GET, no preflight), then falls back to the truncated API content field with a clear error if data is too large',
+      'Fixed: marking a sim/scene/mission active, complete, or archived via the context menu now triggers a Gist auto-sync after 5 seconds (previously only editor saves did, after 60 s)',
+      'Improved: Link insertion (Ctrl+K / 🔗) now detects when cursor is inside an existing link — opens in Edit mode pre-populated with current URL, with a Remove Link button; new links get target=_blank',
+      'Fixed: link insertion was always inserting at the start of the sim — the selection was lost when the modal input took focus; range is now saved before the modal opens and restored before execCommand runs',
+      'Fixed: closing the link modal scrolled the sim back to the top; now uses focus({ preventScroll: true })',
+      'Fixed: selecting text in the editor would frequently collapse — background timers (normalize 80ms, transform 600ms, bold-names 900ms) called restoreCaret which wiped the selection; timers now bail out if a non-collapsed selection is active in the editor',
+      'Fixed: empty lines (blank paragraphs) were sometimes compressed into a single line break when copying to external apps — now preserved with non-breaking space in clipboard HTML',
+      'Fixed: copy-paste now preserves bold on ((Location)) markers and italic on ((OOC)) markers when those auto-format settings are enabled',
+      'Added: ¶ paragraph marker toggle button — shows a faint ¶ at the end of each paragraph to make line/paragraph structure visible while editing',
+      'Layout: moved Auto Format and Visual Aids dropdowns from toolbar row 2 to title row 1 to free up horizontal space in the toolbar',
+      'Layout: moved ⚠ title-duplicate warning to left of the title input; moved ✕ close button to rightmost position in the title row',
+      'Added: optional "Started" date field to scenes — set via New Scene modal or right-click → Edit Scene; shown in scene detail view; used as the staleness fallback when a scene has no sim activity',
+      'Added: scenes in the nav sidebar show a faint amber dot after 2 days or red dot after 3 days of no posting/completion activity, with the day count in small text alongside the dot',
+      'Fixed: stale indicator could wrongly suppress for scenes whose sims had been edited recently; now records an explicit completedAt timestamp only when a sim is actually marked complete',
+      'Fixed: currently-open sim showing blue title even when marked complete — the CSS override now only applies to active sims; complete sims keep their gold colour while selected',
+      'Fixed: opening Settings and saving would silently erase boldLocations and italicOOC prefs set via the Auto Format toolbar; save now merges into existing prefs rather than replacing them',
+      'Fixed: right-clicking a scene and choosing + New Sim now correctly pre-selects that scene and its parent mission in the New Sim modal',
+      'Added: right-clicking a sim in the sidebar now shows "Move to Scene…" — opens a modal to reassign the sim to any non-archived scene in any non-archived mission, grouped by mission',
+      'Added: ↕ Sort button in the sidebar header for scene sort order — 8 options: Sim Posting (recent/last), Due Status (stalest/freshest), Alphabetical (A–Z / Z–A), Scene Start (recent/last); preference persists to profile',
+      'Fixed: changing scene sort order now re-renders the sidebar immediately',
+      'Fixed: completed scenes no longer compete in Due Status sort orders — they sink to the bottom regardless of start date, since a finished scene cannot be stale',
     ]
   },
 ];
@@ -4129,8 +4110,12 @@ function renderNav() {
           const _sceneSorted = Object.values(m.scenes).slice().sort((a,b) => {
             if (_nss==='alpha-az')     return a.name.localeCompare(b.name);
             if (_nss==='alpha-za')     return b.name.localeCompare(a.name);
-            if (_nss==='stale-first')  return sceneLastActivityMs(a.id)-sceneLastActivityMs(b.id);
-            if (_nss==='stale-last')   return sceneLastActivityMs(b.id)-sceneLastActivityMs(a.id);
+            if (_nss==='stale-first' || _nss==='stale-last') {
+              const aC=a.status==='complete', bC=b.status==='complete';
+              if (aC!==bC) return aC?1:-1;
+              if (aC) return a.name.localeCompare(b.name);
+              return _nss==='stale-first'?sceneLastActivityMs(a.id)-sceneLastActivityMs(b.id):sceneLastActivityMs(b.id)-sceneLastActivityMs(a.id);
+            }
             if (_nss==='recent-last')  return newestSimDate(doc=>doc.sceneId===a.id)-newestSimDate(doc=>doc.sceneId===b.id);
             if (_nss==='started-first')return (b.startedAt||b.createdAt||0)-(a.startedAt||a.createdAt||0);
             if (_nss==='started-last') return (a.startedAt||a.createdAt||0)-(b.startedAt||b.createdAt||0);

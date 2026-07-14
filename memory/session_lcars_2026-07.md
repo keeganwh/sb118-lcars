@@ -7,8 +7,8 @@ metadata:
 
 # LCARS Session Log — July 2026
 
-## Pending Version Entry Summary
-All changes below are in the `VERSIONS` array as `pending` entries (dates 2026-06-29 through 2026-07-09).
+## Version Status
+Current released version: **4.2** (2026-07-14). No pending entries in VERSIONS array.
 CHANGELOG.md is only updated on explicit "save new version X.Y" — don't touch it otherwise.
 
 ---
