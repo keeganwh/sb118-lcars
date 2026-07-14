@@ -946,6 +946,13 @@ const VERSIONS = [
       'Fixed: selecting text in the editor would frequently collapse — background timers (normalize at 80ms, transform at 600ms, bold-names at 900ms after a keystroke) called restoreCaret which always wiped the selection; timers now bail out if a non-collapsed selection is active in the editor',
     ]
   },
+  {
+    version: 'pending',
+    date: '2026-07-14',
+    changes: [
+      'Added: right-clicking a sim in the sidebar now shows "Move to Scene…" — opens a modal to reassign the sim to any non-archived scene in any non-archived mission (grouped by mission); also updates the sim\'s missionId to match the target scene',
+    ]
+  },
 ];
 function loadState() {
   try { const r = localStorage.getItem(SKEY); if (r) return JSON.parse(r); } catch(e){}
@@ -4340,8 +4347,36 @@ function ctxDoc(e,id){
     });
   }
   items.push('-');
+  items.push({label:'↗ Move to Scene…',fn:`moveDocToScene('${id}');hideCtx()`});
+  items.push('-');
   items.push({label:'🗑 Delete Sim',cls:'dng',fn:`delDoc('${id}');hideCtx()`});
   showCtx(e, items);
+}
+
+function moveDocToScene(id) {
+  const d = S.docs[id]; if (!d) return;
+  let opts = `<option value="">— No scene (unsorted within mission) —</option>`;
+  Object.values(S.missions)
+    .filter(m => m.status !== 'archived')
+    .sort((a,b) => a.name.localeCompare(b.name))
+    .forEach(m => {
+      const scenes = Object.values(S.scenes)
+        .filter(sc => sc.missionId === m.id && sc.status !== 'archived' && sc.id !== d.sceneId)
+        .sort((a,b) => a.name.localeCompare(b.name));
+      if (!scenes.length) return;
+      opts += `<optgroup label="${esc(m.name)} (${m.year})">`;
+      scenes.forEach(sc => { opts += `<option value="${sc.id}">${esc(sc.name)}</option>`; });
+      opts += `</optgroup>`;
+    });
+  openModal('MOVE SIM TO SCENE', `
+    <div style="font-size:0.8rem;color:var(--dim);margin-bottom:10px">"${esc((d.title||'Untitled').slice(0,60))}"</div>
+    <div class="mf"><label class="ml">TARGET SCENE</label><select class="ms" id="m-mv-sc">${opts}</select></div>
+  `, () => {
+    const sceneId = document.getElementById('m-mv-sc').value || null;
+    d.sceneId = sceneId;
+    if (sceneId) d.missionId = S.scenes[sceneId].missionId;
+    persist(); renderNav();
+  });
 }
 
 function setDocDisplayTitle(id, val) {
