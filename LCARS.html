@@ -83,7 +83,7 @@ body.hc #sidebar{border-right:3px solid var(--amber)}
 .sb-top .panel-toggle,.cp-top .panel-toggle{color:var(--panel-hdr-tx);opacity:.55}
 .sb-top .panel-toggle:hover,.cp-top .panel-toggle:hover{opacity:1}
 #sidebar.collapsed .panel-toggle{margin-left:0}
-#sidebar.collapsed #sb-search-btn,#sidebar.collapsed #sb-detail-btn{display:none}
+#sidebar.collapsed #sb-search-btn,#sidebar.collapsed #sb-detail-btn,#sidebar.collapsed #sb-sort-btn{display:none}
 #cp.collapsed .panel-toggle{margin-left:0}
 
 /* ── RESIZE HANDLES ── */
@@ -118,6 +118,11 @@ body.hc #sidebar{border-right:3px solid var(--amber)}
 .sdot.complete{background:var(--gold)}
 .sdot.archived{background:var(--scroll);border:1px solid var(--dim)}
 .stale-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;cursor:default}
+#sort-menu{position:fixed;background:var(--panel);border:1px solid var(--border);border-radius:4px;z-index:9999;min-width:210px;box-shadow:0 4px 14px rgba(0,0,0,.45);padding:4px 0}
+#sort-menu .sm-item{padding:5px 12px;font-size:0.75rem;cursor:pointer;display:flex;align-items:center;gap:6px;color:var(--text);white-space:nowrap}
+#sort-menu .sm-item:hover{background:var(--hover)}
+#sort-menu .sm-item.sm-cur{color:var(--blue2)}
+#sort-menu .sm-sep{border-top:1px solid var(--border);margin:3px 0}
 .stale-label{margin-left:auto;display:flex;align-items:center;gap:4px;flex-shrink:0}
 .stale-dot.stale-amber{background:#d98c00}
 .stale-dot.stale-red{background:#cc2222}
@@ -645,6 +650,7 @@ body.hc #cp{border-left:3px solid var(--blue)}
     <div class="sb-top">
       <span class="panel-label">SIMS</span>
       <button class="panel-toggle" id="sb-search-btn" onclick="toggleSearch()" title="Search sims" style="font-size:12px">🔍 Search</button>
+      <button class="panel-toggle" id="sb-sort-btn" onclick="showSortMenu(event)" title="Scene sort order">↕ Sort</button>
       <button class="panel-toggle" id="sb-detail-btn" onclick="toggleSidebarDetail()" title="Toggle detail view (date &amp; characters)">≡ Details</button>
       <button class="panel-toggle" id="sb-toggle" onclick="toggleSidebar()" title="Toggle sidebar">◀</button>
     </div>
@@ -951,6 +957,8 @@ const VERSIONS = [
     date: '2026-07-14',
     changes: [
       'Added: right-clicking a sim in the sidebar now shows "Move to Scene…" — opens a modal to reassign the sim to any non-archived scene in any non-archived mission (grouped by mission); also updates the sim\'s missionId to match the target scene',
+      'Changed: scene sort order moved from Settings to a ↕ Sort button in the sidebar header — click to pick from 8 options (Sim Posting recent/last, Due Status stalest/freshest, Alphabetical A–Z/Z–A, Scene Start recent/last); preference still persists to profile; Settings NAVIGATION section removed',
+      'Fixed: changing scene sort order now re-renders the sidebar immediately; previously sorting was read correctly but renderNav() was never called after saving from Settings',
     ]
   },
 ];
@@ -1105,7 +1113,7 @@ const PREF_DEFAULTS = {
   thoughtItalic: true,
   boldLocations: true,
   italicOOC: false,
-  navSceneSort: 'recent',
+  navSceneSort: 'recent-first',
 };
 
 const GOOGLE_FONTS = [
@@ -4117,12 +4125,16 @@ function renderNav() {
         </div>`;
         if (!mc) {
           html+=`<div class="nm-ch">`;
-          const _nss = getPrefs().navSceneSort||'recent';
+          const _nss = getPrefs().navSceneSort||'recent-first';
           const _sceneSorted = Object.values(m.scenes).slice().sort((a,b) => {
-            if (_nss==='alpha')   return a.name.localeCompare(b.name);
-            if (_nss==='stale')   return sceneLastActivityMs(a.id)-sceneLastActivityMs(b.id);
-            if (_nss==='started') return (S.scenes[a.id]?.startedAt||S.scenes[a.id]?.createdAt||0)-(S.scenes[b.id]?.startedAt||S.scenes[b.id]?.createdAt||0);
-            return newestSimDate(d=>d.sceneId===b.id)-newestSimDate(d=>d.sceneId===a.id); // 'recent'
+            if (_nss==='alpha-az')     return a.name.localeCompare(b.name);
+            if (_nss==='alpha-za')     return b.name.localeCompare(a.name);
+            if (_nss==='stale-first')  return sceneLastActivityMs(a.id)-sceneLastActivityMs(b.id);
+            if (_nss==='stale-last')   return sceneLastActivityMs(b.id)-sceneLastActivityMs(a.id);
+            if (_nss==='recent-last')  return newestSimDate(doc=>doc.sceneId===a.id)-newestSimDate(doc=>doc.sceneId===b.id);
+            if (_nss==='started-first')return (b.startedAt||b.createdAt||0)-(a.startedAt||a.createdAt||0);
+            if (_nss==='started-last') return (a.startedAt||a.createdAt||0)-(b.startedAt||b.createdAt||0);
+            return newestSimDate(doc=>doc.sceneId===b.id)-newestSimDate(doc=>doc.sceneId===a.id); // 'recent-first'
           });
           _sceneSorted.forEach(sc => {
             const sc2=S.scenes[sc.id]; if (!sc2) return;
@@ -4175,6 +4187,44 @@ function toggleSidebarDetail() {
   document.getElementById('sidebar').classList.toggle('sidebar-detail', !!S.settings.sidebarDetail);
   document.getElementById('sb-detail-btn').textContent = S.settings.sidebarDetail ? '☰ Details' : '≡ Details';
   persist();
+}
+
+const SORT_OPTIONS = [
+  { val:'recent-first',  label:'Sim Posting (Recent First)' },
+  { val:'recent-last',   label:'Sim Posting (Recent Last)' },
+  { val:'stale-first',   label:'Due Status (Stalest First)' },
+  { val:'stale-last',    label:'Due Status (Freshest First)' },
+  { val:'alpha-az',      label:'Alphabetical (A – Z)' },
+  { val:'alpha-za',      label:'Alphabetical (Z – A)' },
+  { val:'started-first', label:'Scene Start (Recent First)' },
+  { val:'started-last',  label:'Scene Start (Recent Last)' },
+];
+function showSortMenu(e) {
+  e.stopPropagation();
+  const existing = document.getElementById('sort-menu');
+  if (existing) { existing.remove(); return; }
+  const cur = getPrefs().navSceneSort || 'recent-first';
+  const menu = document.createElement('div');
+  menu.id = 'sort-menu';
+  SORT_OPTIONS.forEach(opt => {
+    const item = document.createElement('div');
+    item.className = 'sm-item' + (opt.val === cur ? ' sm-cur' : '');
+    item.textContent = (opt.val === cur ? '✓ ' : '    ') + opt.label;
+    item.onclick = ev => {
+      ev.stopPropagation();
+      S.settings.prefs = Object.assign({}, S.settings.prefs, { navSceneSort: opt.val });
+      persist();
+      renderNav();
+      menu.remove();
+    };
+    menu.appendChild(item);
+  });
+  document.body.appendChild(menu);
+  const btn = document.getElementById('sb-sort-btn');
+  const r = btn.getBoundingClientRect();
+  menu.style.top = (r.bottom + 4) + 'px';
+  menu.style.left = r.left + 'px';
+  document.addEventListener('click', function h() { menu.remove(); document.removeEventListener('click', h); }, { once: true });
 }
 
 function toggleCharsPanel() {
@@ -4796,19 +4846,6 @@ function openSettings() {
       </div>
     </div>
 
-    <div class="msub" style="margin-top:14px">NAVIGATION</div>
-    <div class="mrow" style="margin-top:6px">
-      <div class="mf">
-        <label class="ml">SCENE SORT ORDER</label>
-        <select class="ms" id="pf-nss">
-          <option value="recent" ${p.navSceneSort==='recent'?'selected':''}>Most recently posted first</option>
-          <option value="stale"  ${p.navSceneSort==='stale' ?'selected':''}>Most overdue first</option>
-          <option value="alpha"  ${p.navSceneSort==='alpha' ?'selected':''}>Alphabetical</option>
-          <option value="started"${p.navSceneSort==='started'?'selected':''}>By scene start date</option>
-        </select>
-      </div>
-    </div>
-
     <div class="msub" style="margin-top:14px">AUTO-FORMATTING</div>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">
       <div style="display:flex;align-items:flex-start;gap:10px">
@@ -4841,7 +4878,6 @@ function openSettings() {
     const uiFont = document.getElementById('pf-uifont').value.trim();
     const efSame = document.getElementById('pf-ef-same').checked;
     const editorFont = efSame ? '' : document.getElementById('pf-editorfont').value.trim();
-    const nss = document.getElementById('pf-nss').value;
     if (isNaN(ls)||isNaN(efs)||isNaN(ufs)) { alert('Please enter valid numbers.'); return false; }
     // Merge so toggles set outside this modal (boldLocations, italicOOC, etc.) are preserved
     S.settings.prefs = Object.assign({}, S.settings.prefs, {
@@ -4849,7 +4885,7 @@ function openSettings() {
       uiFont, editorFont, editorFontSameAsUI:efSame,
       actionAccent:ac, commsAccent:cc, thoughtAccent:tc,
       actionOn:ao, commsOn:co, thoughtOn:to_,
-      autoBoldNames:abn, thoughtItalic:ti, navSceneSort:nss
+      autoBoldNames:abn, thoughtItalic:ti
     });
     applyPrefs();
     persist();
