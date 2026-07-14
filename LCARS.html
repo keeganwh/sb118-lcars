@@ -939,6 +939,7 @@ const VERSIONS = [
       'Fixed: marking a sim/scene/mission active, complete, or archived via the context menu now triggers a Gist auto-sync after 5 seconds (previously only editor saves did, after 60 s)',
       'Fixed: link insertion (Ctrl+K / 🔗) was always inserting at the start of the sim — the selection was lost when the modal input took focus; now the range is saved before the modal opens and restored before execCommand runs; also fixed ed.focus() after modal close scrolling the sim back to the top (preventScroll: true)',
       'Improved: stale scene indicators in the nav now show the day count (e.g. "3d") in small text alongside the amber/red dot',
+      'Fixed: stale scene indicator could wrongly suppress for scenes whose sims had been edited (flushSave updates updatedAt on every save, making scenes look fresh); now records an explicit completedAt timestamp only when a sim is actually marked complete, and clears it when marked active; sceneLastActivityMs uses completedAt instead of updatedAt',
       'Fixed: selecting text in the editor would frequently collapse — background timers (normalize at 80ms, transform at 600ms, bold-names at 900ms after a keystroke) called restoreCaret which always wiped the selection; timers now bail out if a non-collapsed selection is active in the editor',
     ]
   },
@@ -2582,7 +2583,10 @@ function flushSave() {
   }
   doc.content = html;
   doc.title = document.getElementById('doc-title').value;
+  const prevStatus = doc.status;
   doc.status = document.getElementById('doc-status').value;
+  if (doc.status === 'complete' && prevStatus !== 'complete') doc.completedAt = Date.now();
+  else if (doc.status !== 'complete') doc.completedAt = null;
   doc.postType = document.getElementById('doc-posttype').value||null;
   doc.updatedAt = Date.now();
   doc.chars = detectChars(ed.innerText||'');
@@ -3986,7 +3990,7 @@ function sceneLastActivityMs(sceneId) {
       const t = new Date(d.postedAt).getTime();
       if (!isNaN(t) && t > best) best = t;
     }
-    if (d.status === 'complete' && d.updatedAt && d.updatedAt > best) best = d.updatedAt;
+    if (d.completedAt && d.completedAt > best) best = d.completedAt;
   });
   return best || (S.scenes[sceneId]?.startedAt) || (S.scenes[sceneId]?.createdAt) || Date.now();
 }
@@ -4338,18 +4342,24 @@ function setDocDisplayTitle(id, val) {
 
 // ── STATUS WITH CASCADE ──
 function setStatus(type,id,status){
+  const now=Date.now();
+  function stampDoc(d){
+    d.status=status;
+    if(status==='complete') d.completedAt=now;
+    else if(status==='active'||status==='archived') d.completedAt=null;
+  }
   if (type==='mission'){
     S.missions[id].status=status;
     Object.values(S.scenes).filter(sc=>sc.missionId===id).forEach(sc=>{
       sc.status=status;
-      Object.values(S.docs).filter(d=>d.sceneId===sc.id).forEach(d=>{d.status=status;});
+      Object.values(S.docs).filter(d=>d.sceneId===sc.id).forEach(stampDoc);
     });
-    Object.values(S.docs).filter(d=>d.missionId===id&&!d.sceneId).forEach(d=>{d.status=status;});
+    Object.values(S.docs).filter(d=>d.missionId===id&&!d.sceneId).forEach(stampDoc);
   } else if (type==='scene'){
     S.scenes[id].status=status;
-    Object.values(S.docs).filter(d=>d.sceneId===id).forEach(d=>{d.status=status;});
+    Object.values(S.docs).filter(d=>d.sceneId===id).forEach(stampDoc);
   } else {
-    S.docs[id].status=status;
+    stampDoc(S.docs[id]);
   }
   if (type==='doc'&&id===curId) document.getElementById('doc-status').value=status;
   persist(); renderNav(); schedSync(5000);
