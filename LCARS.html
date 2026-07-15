@@ -694,30 +694,13 @@ body.hc #cp{border-left:3px solid var(--blue)}
 
     <!-- DOC HEADER + TOOLBAR (combined) -->
     <div id="dh" class="hidden">
-      <!-- Row 1: warn · title · Auto Format ▾ · Visual Aids ▾ · close -->
+      <!-- Row 1: warn · title · close -->
       <div class="dh-r1">
         <span id="title-warn" class="hidden" title="Similar title exists — click for details" onclick="showTitleWarnModal()">⚠</span>
         <input type="text" id="doc-title" placeholder="Sim Title…" oninput="schedSave();checkTitleDupe()">
-        <div class="tb-dd-wrap">
-          <button class="tbb tbb-names" id="tbb-af-btn" onclick="toggleTbDropdown('af')" title="Auto Formatting — bold names, bold locations, italic thoughts, italic OOCs">Auto Format ▾</button>
-          <div class="tb-dd" id="tb-dd-af">
-            <button class="tbb tbb-names" id="tbb-bn" onclick="toggleAutoBold()" title="Auto-bold character names — toggle on applies bold, toggle off removes it"><strong>B Names</strong></button>
-            <button class="tbb tbb-names" id="tbb-bl" onclick="toggleBoldLocations()" title="Auto-bold ((Location)) markers"><strong>B Locations</strong></button>
-            <button class="tbb tbb-names" id="tbb-it" onclick="toggleItalicThoughts()" title="Auto-italicize oO Thoughts Oo"><em>Italic Thoughts</em></button>
-            <button class="tbb tbb-names" id="tbb-oi" onclick="toggleItalicOOC()" title="Auto-italicize ((OOC - ...)) markers"><em>Italic OOCs</em></button>
-          </div>
-        </div>
-        <div class="tb-dd-wrap">
-          <button class="tbb tbb-names" id="tbb-va-btn" onclick="toggleTbDropdown('va')" title="Visual Aids — toggle highlights for Actions, Comms, Thoughts">Visual Aids ▾</button>
-          <div class="tb-dd" id="tb-dd-va">
-            <button class="tbb tbb-names fmt-on" id="tbb-am" onclick="toggleFmt('action')" title="Toggle ::Actions:: highlighting — marks stage direction / action lines">::Actions::</button>
-            <button class="tbb tbb-names fmt-on" id="tbb-cm" onclick="toggleFmt('comms')" title="Toggle =/\= Comms =/\= highlighting — marks communication / transmission lines">=/\= Comms =/\=</button>
-            <button class="tbb tbb-names fmt-on" id="tbb-th" onclick="toggleFmt('thought')" title="Toggle oO Thoughts Oo highlighting">oO Thoughts Oo</button>
-          </div>
-        </div>
         <button class="btn btn-s btn-sm" id="btn-close-doc" onclick="closeDoc()" title="Close sim">✕</button>
       </div>
-      <!-- Row 2: copy | clear | src | ¶ | B I S link | indent | insert -->
+      <!-- Row 2: copy | clear | src | ¶ | B I S link | indent | insert | Auto Format ▾ | Visual Aids ▾ -->
       <div class="dh-r2">
         <button class="btn btn-s btn-sm" id="btn-copy" onclick="copyPost()" title="Copy sim to clipboard">📋</button>
         <button class="tbb tbb-names" id="tbb-cf" onclick="removeFormatting()" title="Remove manual formatting (bold, italic, strikethrough, links) — auto-formatting (bold names, locations, etc.) remains active" style="font-size:1rem;padding:2px 5px">🧹</button>
@@ -732,30 +715,61 @@ body.hc #cp{border-left:3px solid var(--blue)}
         <button class="tbb tbb-names" onclick="doIndent()" title="Indent (Tab)" style="padding:3px 5px;font-size:1rem">⇥</button>
         <button class="tbb tbb-names" onclick="doOutdent()" title="Outdent (Shift+Tab)" style="padding:3px 5px;font-size:1rem">⇤</button>
         <div class="tsep"></div>
+        <!-- Dropdown mode (default) -->
+        <div class="tb-dd-wrap tb-ins-wrap" id="tb-ins-wrap">
+          <button class="tbb tbb-names" id="tbb-ins"
+            onclick="toggleTbDropdown('ins')"
+            onmouseenter="openTbDd('ins')"
+            onmouseleave="schedCloseTbDd('ins')"
+            title="Insert marker">Insert ▾</button>
+          <div class="tb-dd" id="tb-dd-ins"
+            onmouseenter="cancelCloseTbDd()"
+            onmouseleave="schedCloseTbDd('ins')">
+            <button class="tbb tbb-mkr" onclick="insertMarker('action')" title="Wrap selection in ::…:: action markers, or insert placeholder">::Action::</button>
+            <button class="tbb tbb-mkr" onclick="insertMarker('comms')" title="Wrap selection in =/\=…=/\= comms markers, or insert placeholder">=/\= Comms =/\=</button>
+            <button class="tbb tbb-mkr" onclick="insertMarker('thought')" title="Wrap selection in oO…Oo thought markers, or insert placeholder">oO Thoughts Oo</button>
+            <button class="tbb tbb-mkr" onclick="insertMarker('location')" title="Wrap selection in ((…)) location markers, or insert placeholder">((Location))</button>
+            <button class="tbb tbb-mkr" onclick="insertMarker('ooc')" title="Wrap selection in ((OOC - …)) OOC markers, or insert placeholder">((OOC))</button>
+          </div>
+        </div>
+        <!-- Expanded mode (individual buttons, shown when markerLayout='buttons') -->
+        <button class="tbb tbb-mkr tb-mkr-exp" onclick="insertMarker('action')" title="Wrap selection in ::…:: action markers, or insert placeholder">::Action::</button>
+        <button class="tbb tbb-mkr tb-mkr-exp" onclick="insertMarker('comms')" title="Wrap selection in =/\=…=/\= comms markers, or insert placeholder">=/\= Comms =/\=</button>
+        <button class="tbb tbb-mkr tb-mkr-exp" onclick="insertMarker('thought')" title="Wrap selection in oO…Oo thought markers, or insert placeholder">oO Thoughts Oo</button>
+        <button class="tbb tbb-mkr tb-mkr-exp" onclick="insertMarker('location')" title="Wrap selection in ((…)) location markers, or insert placeholder">((Location))</button>
+        <button class="tbb tbb-mkr tb-mkr-exp" onclick="insertMarker('ooc')" title="Wrap selection in ((OOC - …)) OOC markers, or insert placeholder">((OOC))</button>
+        <!-- Right side: Auto Format + Visual Aids -->
         <div class="dh-r2-right">
-          <!-- Dropdown mode (default) -->
-          <div class="tb-dd-wrap tb-ins-wrap" id="tb-ins-wrap">
-            <button class="tbb tbb-names" id="tbb-ins"
-              onclick="toggleTbDropdown('ins')"
-              onmouseenter="openTbDd('ins')"
-              onmouseleave="schedCloseTbDd('ins')"
-              title="Insert marker">Insert ▾</button>
-            <div class="tb-dd" id="tb-dd-ins"
+          <div class="tsep"></div>
+          <div class="tb-dd-wrap">
+            <button class="tbb tbb-names" id="tbb-af-btn"
+              onclick="toggleTbDropdown('af')"
+              onmouseenter="openTbDd('af')"
+              onmouseleave="schedCloseTbDd('af')"
+              title="Auto Formatting — bold names, bold locations, italic thoughts, italic OOCs">Auto Format ▾</button>
+            <div class="tb-dd" id="tb-dd-af"
               onmouseenter="cancelCloseTbDd()"
-              onmouseleave="schedCloseTbDd('ins')">
-              <button class="tbb tbb-mkr" onclick="insertMarker('action')" title="Wrap selection in ::…:: action markers, or insert placeholder">::Action::</button>
-              <button class="tbb tbb-mkr" onclick="insertMarker('comms')" title="Wrap selection in =/\=…=/\= comms markers, or insert placeholder">=/\= Comms =/\=</button>
-              <button class="tbb tbb-mkr" onclick="insertMarker('thought')" title="Wrap selection in oO…Oo thought markers, or insert placeholder">oO Thoughts Oo</button>
-              <button class="tbb tbb-mkr" onclick="insertMarker('location')" title="Wrap selection in ((…)) location markers, or insert placeholder">((Location))</button>
-              <button class="tbb tbb-mkr" onclick="insertMarker('ooc')" title="Wrap selection in ((OOC - …)) OOC markers, or insert placeholder">((OOC))</button>
+              onmouseleave="schedCloseTbDd('af')">
+              <button class="tbb tbb-names" id="tbb-bn" onclick="toggleAutoBold()" title="Auto-bold character names — toggle on applies bold, toggle off removes it"><strong>B Names</strong></button>
+              <button class="tbb tbb-names" id="tbb-bl" onclick="toggleBoldLocations()" title="Auto-bold ((Location)) markers"><strong>B Locations</strong></button>
+              <button class="tbb tbb-names" id="tbb-it" onclick="toggleItalicThoughts()" title="Auto-italicize oO Thoughts Oo"><em>Italic Thoughts</em></button>
+              <button class="tbb tbb-names" id="tbb-oi" onclick="toggleItalicOOC()" title="Auto-italicize ((OOC - ...)) markers"><em>Italic OOCs</em></button>
             </div>
           </div>
-          <!-- Expanded mode (individual buttons, shown when markerLayout='buttons') -->
-          <button class="tbb tbb-mkr tb-mkr-exp" onclick="insertMarker('action')" title="Wrap selection in ::…:: action markers, or insert placeholder">::Action::</button>
-          <button class="tbb tbb-mkr tb-mkr-exp" onclick="insertMarker('comms')" title="Wrap selection in =/\=…=/\= comms markers, or insert placeholder">=/\= Comms =/\=</button>
-          <button class="tbb tbb-mkr tb-mkr-exp" onclick="insertMarker('thought')" title="Wrap selection in oO…Oo thought markers, or insert placeholder">oO Thoughts Oo</button>
-          <button class="tbb tbb-mkr tb-mkr-exp" onclick="insertMarker('location')" title="Wrap selection in ((…)) location markers, or insert placeholder">((Location))</button>
-          <button class="tbb tbb-mkr tb-mkr-exp" onclick="insertMarker('ooc')" title="Wrap selection in ((OOC - …)) OOC markers, or insert placeholder">((OOC))</button>
+          <div class="tb-dd-wrap">
+            <button class="tbb tbb-names" id="tbb-va-btn"
+              onclick="toggleTbDropdown('va')"
+              onmouseenter="openTbDd('va')"
+              onmouseleave="schedCloseTbDd('va')"
+              title="Visual Aids — toggle highlights for Actions, Comms, Thoughts">Visual Aids ▾</button>
+            <div class="tb-dd" id="tb-dd-va"
+              onmouseenter="cancelCloseTbDd()"
+              onmouseleave="schedCloseTbDd('va')">
+              <button class="tbb tbb-names fmt-on" id="tbb-am" onclick="toggleFmt('action')" title="Toggle ::Actions:: highlighting — marks stage direction / action lines">::Actions::</button>
+              <button class="tbb tbb-names fmt-on" id="tbb-cm" onclick="toggleFmt('comms')" title="Toggle =/\= Comms =/\= highlighting — marks communication / transmission lines">=/\= Comms =/\=</button>
+              <button class="tbb tbb-names fmt-on" id="tbb-th" onclick="toggleFmt('thought')" title="Toggle oO Thoughts Oo highlighting">oO Thoughts Oo</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -982,6 +996,7 @@ const VERSIONS = [
       'Fixed: Copy button tooltip was misleading; now says "Copy sim to clipboard"',
       'Added: marker insertion buttons replaced by a compact "Insert ▾" dropdown that opens on hover or click; toggle between dropdown and individual buttons in Settings → Toolbar',
       'Added: paste cleanup — extra consecutive blank lines in pasted content are automatically collapsed to one; a dismissible "Extra blank lines removed / Undo" banner appears above the editor for 8 seconds',
+      'Layout: moved Auto Format ▾ and Visual Aids ▾ back to toolbar row 2 (right side), clearing row 1 to just title + close; both dropdowns now open on hover as well as click; Insert ▾ moved inline with other row-2 buttons',
     ]
   },
 ];
