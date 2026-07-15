@@ -1063,6 +1063,7 @@ const VERSIONS = [
       'Added: paste cleanup — extra consecutive blank lines in pasted content are automatically collapsed to one; a dismissible "Extra blank lines removed / Undo" banner appears above the editor for 8 seconds',
       'Layout: moved Auto Format ▾ and Visual Aids ▾ back to toolbar row 2 (right side), clearing row 1 to just title + close; both dropdowns now open on hover as well as click; Insert ▾ moved inline with other row-2 buttons',
       'Added: ↑ Narrate — experimental narration import from previous sim in scene; uses exact dialogue matches as anchors to place narration blocks, with per-block Discard/Keep controls and a flagged state for uncertain trailing narration',
+      'Fixed: narration import Accept All was un-discarding blocks that had been individually discarded before applying — discarded blocks are now correctly skipped',
     ]
   },
 ];
@@ -6732,8 +6733,8 @@ function niScrollToFlagged() {
 
 function niAcceptAll() {
   if (!_niPlan) return;
+  // Auto-keep any still-pending flagged blocks; discarded blocks are respected and skipped
   _niPlan.filter(p => p.type === 'flagged' && p.state === 'pending').forEach(p => niFlaggedKeep(p.id));
-  _niPlan.filter(p => p.type === 'imported' && p.discarded).forEach(p => niToggleDiscard(p.id));
   _niApplyPlan();
 }
 
