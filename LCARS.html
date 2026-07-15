@@ -186,6 +186,8 @@ body.academy #editor .tm{font-style:normal}
 .tbb.fmt-on{background:rgba(77,136,255,.12);border-color:rgba(77,136,255,.35);color:var(--blue2)}
 .tbb-names{border-color:var(--border)!important;color:var(--dim)!important;font-size:0.73rem!important;letter-spacing:.5px;font-weight:normal!important;font-style:normal!important}
 .tbb-names:hover{border-color:var(--amber)!important;color:var(--amber)!important}
+.tbb-proto{border-color:var(--amber)!important;color:var(--dim)!important;font-size:0.73rem!important;letter-spacing:.5px;font-weight:normal!important;font-style:normal!important}
+.tbb-proto:hover{color:var(--amber)!important}
 /* nav-tree inline action buttons */
 .hdr-act{display:flex;align-items:center;gap:2px;margin-left:auto;flex-shrink:0;opacity:0;transition:opacity .12s}
 .nm-hdr:hover .hdr-act,.ns-hdr:hover .hdr-act{opacity:1}
@@ -808,7 +810,7 @@ body.hc #cp{border-left:3px solid var(--blue)}
             </div>
           </div>
           <div class="tsep"></div>
-          <button class="tbb" id="tbb-ni" onclick="importNarrationFromPrev()" title="Import your narration from the previous sim in this scene — experimental, review all blocks before posting">↑ Narrate</button>
+          <button class="tbb tbb-proto" id="tbb-ni" onclick="importNarrationFromPrev()" title="⚠ Experimental — may produce errors. Imports your narration from the previous sim in this scene. Review every block before accepting.">↑ Narrate</button>
         </div>
       </div>
     </div>
@@ -1064,6 +1066,7 @@ const VERSIONS = [
       'Layout: moved Auto Format ▾ and Visual Aids ▾ back to toolbar row 2 (right side), clearing row 1 to just title + close; both dropdowns now open on hover as well as click; Insert ▾ moved inline with other row-2 buttons',
       'Added: ↑ Narrate — experimental narration import from previous sim in scene; uses exact dialogue matches as anchors to place narration blocks, with per-block Discard/Keep controls and a flagged state for uncertain trailing narration',
       'Fixed: narration import Accept All was un-discarding blocks that had been individually discarded before applying — discarded blocks are now correctly skipped',
+      'Changed: ↑ Narrate button now uses amber border (.tbb-proto) to signal experimental/prototype status; tooltip rewritten to lead with ⚠ Experimental warning',
     ]
   },
 ];
