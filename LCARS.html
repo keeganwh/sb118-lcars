@@ -1067,6 +1067,7 @@ const VERSIONS = [
       'Added: ↑ Narrate — experimental narration import from previous sim in scene; uses exact dialogue matches as anchors to place narration blocks, with per-block Discard/Keep controls and a flagged state for uncertain trailing narration',
       'Fixed: narration import Accept All was un-discarding blocks that had been individually discarded before applying — discarded blocks are now correctly skipped',
       'Changed: ↑ Narrate button now uses amber border (.tbb-proto) to signal experimental/prototype status; tooltip rewritten to lead with ⚠ Experimental warning',
+      'Fixed: copying from the editor with Ctrl+C (no manual selection) now works the same as the 📋 button — the copy handler previously bailed out when the selection was collapsed, causing the browser to fall back to its own clipboard with raw markup, losing formatting and blank lines in Discord',
     ]
   },
 ];
@@ -2252,8 +2253,14 @@ function installPasteHandler() {
 
 function installCopyHandler() {
   document.getElementById('editor').addEventListener('copy', e => {
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+    let sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    // No selection (cursor only) — select all so the handler always runs cleanly
+    if (sel.isCollapsed) {
+      document.execCommand('selectAll');
+      sel = window.getSelection();
+      if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+    }
     const frag = sel.getRangeAt(0).cloneContents();
     const tmp = document.createElement('div');
     tmp.appendChild(frag);
