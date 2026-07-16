@@ -1068,6 +1068,7 @@ const VERSIONS = [
       'Fixed: narration import Accept All was un-discarding blocks that had been individually discarded before applying — discarded blocks are now correctly skipped',
       'Changed: ↑ Narrate button now uses amber border (.tbb-proto) to signal experimental/prototype status; tooltip rewritten to lead with ⚠ Experimental warning',
       'Fixed: copying from the editor with Ctrl+C (no manual selection) now works the same as the 📋 button — the copy handler previously bailed out when the selection was collapsed, causing the browser to fall back to its own clipboard with raw markup, losing formatting and blank lines in Discord',
+      'Fixed: copy/paste to Discord (and other apps reading text/plain) was losing all line breaks and paragraph spacing — caused by innerText on a detached DOM node having no layout context and silently concatenating all text; now walks block children manually and joins with newlines',
     ]
   },
 ];
@@ -2321,8 +2322,12 @@ function installCopyHandler() {
       });
     });
 
-    // Capture plain text before modifying tmp for HTML-clipboard compatibility
-    const plainText = tmp.innerText || tmp.textContent;
+    // Capture plain text before modifying tmp for HTML-clipboard compatibility.
+    // Walk top-level children manually — innerText on a detached node has no layout
+    // context and silently falls back to textContent (no block-level newlines).
+    const plainText = [...tmp.childNodes]
+      .map(n => (n.textContent || '').replace(/ /g, ' '))
+      .join('\n');
 
     // Empty-line blocks use <br> as a height placeholder — replace with NBSP so paste
     // targets (Word, Google Docs, forum editors) render a visible blank line instead of
