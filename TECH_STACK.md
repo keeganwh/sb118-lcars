@@ -1,5 +1,12 @@
 # LCARS SB118 Writing Tool — Tech Stack
 
+```stack
+data:none
+backend:none
+lib:sync-gist
+lib:backup
+```
+
 _The whole stack at a glance. Current app version: **4.2**._
 
 ## The short version
