@@ -1069,6 +1069,10 @@ const VERSIONS = [
       'Changed: ↑ Narrate button now uses amber border (.tbb-proto) to signal experimental/prototype status; tooltip rewritten to lead with ⚠ Experimental warning',
       'Fixed: copying from the editor with Ctrl+C (no manual selection) now works the same as the 📋 button — the copy handler previously bailed out when the selection was collapsed, causing the browser to fall back to its own clipboard with raw markup, losing formatting and blank lines in Discord',
       'Fixed: copy/paste to Discord (and other apps reading text/plain) was losing all line breaks and paragraph spacing — caused by innerText on a detached DOM node having no layout context and silently concatenating all text; now walks block children manually and joins with newlines',
+      'Changed: Gist cloud sync now gzip-compresses the payload (native CompressionStream) and splits it across multiple <1 MB chunk files with a manifest, reassembled and decompressed on pull — lets multi-MB datasets (e.g. a large imported sim archive) sync reliably past the ~1 MB GitHub API truncation wall that previously corrupted pulls',
+      'Improved: pull now uses one hardened three-tier fetch (raw_url+auth → raw_url no-auth → API content field) for the manifest and every chunk; since chunks are under 1 MB the content-field tier is no longer truncatable, and a failed fetch reports which file failed instead of a bare error',
+      'Compat: pull auto-detects and still reads old single-file Gists; the first push after upgrading migrates the Gist to the chunked format and removes the legacy file. Browsers without CompressionStream fall back to the old single-file format',
+      'Added: Settings → Cloud Sync now shows current uncompressed data size (KB) and the last synced chunk count',
     ]
   },
 ];
@@ -1390,9 +1394,52 @@ function applyImport(mode) {
 // GIST SYNC
 // ================================================================
 const SYNC_KEY = 'lcars_sync_v1';
-const GIST_FILE = 'lcars-data.json';
+const GIST_FILE = 'lcars-data.json';        // legacy single-file format (still read on pull for backward compat)
+const MANIFEST_FILE = 'lcars-manifest.json'; // new chunked-format manifest
+const CHUNK_PREFIX = 'lcars-chunk-';         // chunk file name prefix (lcars-chunk-000, -001, …)
+const CHUNK_SIZE = 700000;                   // base64 chars per chunk — safely under the ~1 MB API truncation wall
 let syncTimer = null;
 let syncStatus = { state: 'idle', msg: '' }; // 'idle' | 'ok' | 'error'
+
+// ---- Compression + base64 helpers (native gzip, no dependency) ----------
+// The sync payload is gzip-compressed (HTML sim content compresses ~3–5×) and
+// stored as base64 so a multi-MB dataset fits well under the Gist per-file limit.
+function bytesToBase64(bytes) {
+  let bin = '';
+  const CH = 0x8000; // chunk the String.fromCharCode call to avoid arg-count limits
+  for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  return btoa(bin);
+}
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+async function gzipToBase64(str) {
+  const cs = new CompressionStream('gzip');
+  const writer = cs.writable.getWriter();
+  writer.write(new TextEncoder().encode(str)); writer.close();
+  const buf = await new Response(cs.readable).arrayBuffer();
+  return bytesToBase64(new Uint8Array(buf));
+}
+async function base64ToUngzip(b64) {
+  const ds = new DecompressionStream('gzip');
+  const writer = ds.writable.getWriter();
+  writer.write(base64ToBytes(b64)); writer.close();
+  const buf = await new Response(ds.readable).arrayBuffer();
+  return new TextDecoder().decode(buf);
+}
+// Fetch one Gist file's full content via the hardened three-tier fallback:
+//   1. raw_url with auth  2. raw_url without auth (no CORS preflight)  3. API content field.
+// Chunks + manifest are each < 1 MB, so tier 3 is now always safe (never truncated).
+async function fetchGistFile(fileEntry, pat) {
+  for (const opts of [{ headers: { Authorization: `token ${pat}` } }, {}]) {
+    try { const r = await fetch(fileEntry.raw_url, opts); if (r.ok) return await r.text(); } catch(_) { /* next tier */ }
+  }
+  if (fileEntry.content && !fileEntry.truncated) return fileEntry.content;
+  throw new Error(`Could not fetch "${fileEntry.filename||'?'}" (network/CORS, or file truncated over ~1 MB). Push from your other device first, or try again.`);
+}
 
 function getSyncConfig() {
   try { return JSON.parse(localStorage.getItem(SYNC_KEY)||'{}'); } catch(e) { return {}; }
@@ -1414,10 +1461,33 @@ async function pushToGist() {
   const cfg = getSyncConfig();
   if (!cfg.pat) return;
   const now = Date.now();
-  // Store data directly (not double-serialized) to minimize Gist file size
-  const body = { files: { [GIST_FILE]: { content: JSON.stringify({ data: S, savedAt: now }) } } };
   try {
     setSyncStatus('idle', 'Syncing…');
+    const files = {};
+    let chunkCount, note;
+    if (typeof CompressionStream !== 'undefined') {
+      // New format: gzip the payload, then split base64 into < 1 MB chunk files
+      // plus a small manifest. Reassembled + decompressed on pull.
+      const b64 = await gzipToBase64(JSON.stringify({ data: S }));
+      chunkCount = Math.max(1, Math.ceil(b64.length / CHUNK_SIZE));
+      for (let i = 0; i < chunkCount; i++) {
+        files[CHUNK_PREFIX + String(i).padStart(3, '0')] = { content: b64.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE) };
+      }
+      files[MANIFEST_FILE] = { content: JSON.stringify({ format: 'gz-chunked-v1', savedAt: now, chunks: chunkCount, encoding: 'gzip+base64', b64Bytes: b64.length }) };
+      if (cfg.gistId) {
+        // Remove stale chunk files left by a previous, larger push.
+        for (let i = chunkCount; i < (cfg.chunks || 0); i++) files[CHUNK_PREFIX + String(i).padStart(3, '0')] = null;
+        // On first chunked push to an existing gist, delete the legacy single file.
+        if (!cfg.chunks) files[GIST_FILE] = null;
+      }
+      note = chunkCount + ' chunk' + (chunkCount > 1 ? 's' : '') + ', ' + Math.round(b64.length / 1024) + ' KB gz';
+    } else {
+      // Fallback for browsers without CompressionStream: legacy single file.
+      files[GIST_FILE] = { content: JSON.stringify({ data: S, savedAt: now }) };
+      chunkCount = 0;
+      note = 'uncompressed';
+    }
+    const body = { files };
     let url, method;
     if (cfg.gistId) {
       url = `https://api.github.com/gists/${cfg.gistId}`;
@@ -1435,10 +1505,10 @@ async function pushToGist() {
     });
     if (!res.ok) { const t = await res.text(); throw new Error(`${res.status}: ${t.slice(0,120)}`); }
     const json = await res.json();
-    saveSyncConfig({ ...cfg, gistId: json.id, lastPushed: now });
+    saveSyncConfig({ ...cfg, gistId: json.id, lastPushed: now, chunks: chunkCount });
     const el = document.getElementById('sync-gist-id');
     if (el) el.value = json.id;
-    setSyncStatus('ok', 'Synced ✓ ' + new Date(now).toLocaleTimeString());
+    setSyncStatus('ok', 'Synced ✓ ' + new Date(now).toLocaleTimeString() + ' (' + note + ')');
   } catch(e) {
     setSyncStatus('error', 'Sync failed: ' + e.message);
   }
@@ -1454,39 +1524,30 @@ async function pullFromGist(silent) {
     });
     if (!res.ok) throw new Error(`${res.status}`);
     const json = await res.json();
-    const fileEntry = json.files?.[GIST_FILE];
-    if (!fileEntry) throw new Error('No LCARS data found in Gist');
-    // Prefer raw_url for full content (API field truncates at ~1 MB).
-    // raw_url goes to gist.githubusercontent.com; sending Authorization triggers a CORS
-    // preflight that some browsers/networks block. Fall-back chain:
-    //   1. raw_url with auth (best, works when CORS preflight is allowed)
-    //   2. raw_url without auth (no preflight needed; works if GitHub session cookie present)
-    //   3. API content field (always available but truncated at ~1 MB)
-    let raw;
-    let rawOk = false;
-    for (const opts of [
-      { headers: { Authorization: `token ${cfg.pat}` } },
-      {}
-    ]) {
-      try {
-        const rawRes = await fetch(fileEntry.raw_url, opts);
-        if (rawRes.ok) { raw = await rawRes.text(); rawOk = true; break; }
-      } catch(_) { /* try next */ }
+    const files = json.files || {};
+    let wrapper, remoteAt;
+    if (files[MANIFEST_FILE]) {
+      // New chunked format: read manifest, fetch each chunk, reassemble, decompress.
+      const manifest = JSON.parse(await fetchGistFile(files[MANIFEST_FILE], cfg.pat));
+      remoteAt = manifest.savedAt || 0;
+      if (silent && remoteAt <= (cfg.lastPushed || 0)) return; // remote not newer, skip
+      let b64 = '';
+      for (let i = 0; i < manifest.chunks; i++) {
+        const name = CHUNK_PREFIX + String(i).padStart(3, '0');
+        const fe = files[name];
+        if (!fe) throw new Error(`Missing sync chunk ${name} — Gist may be mid-update; try again.`);
+        b64 += await fetchGistFile(fe, cfg.pat);
+      }
+      wrapper = JSON.parse(await base64ToUngzip(b64));
+    } else if (files[GIST_FILE]) {
+      // Legacy single-file format (backward compat / pre-migration gists).
+      wrapper = JSON.parse(await fetchGistFile(files[GIST_FILE], cfg.pat));
+      remoteAt = wrapper.savedAt || 0;
+      if (silent && remoteAt <= (cfg.lastPushed || 0)) return; // remote not newer, skip
+    } else {
+      throw new Error('No LCARS data found in Gist');
     }
-    if (!rawOk) {
-      if (!fileEntry.content) throw new Error('Could not fetch Gist content (network or CORS error)');
-      raw = fileEntry.content; // may be truncated for large datasets
-    }
-    let wrapper;
-    try { wrapper = JSON.parse(raw); } catch(je) {
-      throw new Error(!rawOk
-        ? 'Data too large for direct API fetch (~1 MB limit). Push from your other device first, or try again — raw fetch may work once network/CORS resolves.'
-        : 'JSON parse error: ' + je.message);
-    }
-    if (!wrapper.data) throw new Error('Invalid Gist data');
-    const remoteAt = wrapper.savedAt || 0;
-    const localAt = cfg.lastPushed || 0;
-    if (silent && remoteAt <= localAt) return; // remote not newer, skip
+    if (!wrapper || !wrapper.data) throw new Error('Invalid Gist data');
     // Support both old format (data is a JSON string) and new format (data is an object)
     const data = typeof wrapper.data === 'string' ? JSON.parse(wrapper.data) : wrapper.data;
     if (!data.docs || !data.missions) throw new Error('Invalid data structure');
@@ -4944,6 +5005,9 @@ function openSettings() {
         <button class="btn btn-s" onclick="saveSyncFields();pushToGist()">↑ Push Now</button>
         <button class="btn btn-s" onclick="saveSyncFields();pullFromGist(false)">↓ Pull Now</button>
         <span id="sync-status" style="font-size:0.73rem;color:var(--dim);margin-left:4px">${syncStatus.msg||''}</span>
+      </div>
+      <div style="font-size:0.71rem;color:var(--dim);line-height:1.5">
+        Current data size: <strong style="color:var(--text)">${Math.round(new Blob([JSON.stringify(S)]).size/1024)} KB</strong> uncompressed${getSyncConfig().chunks?` &middot; last synced as ${getSyncConfig().chunks} chunk(s)`:''}. Sync gzip-compresses and chunks the payload, so multi-MB datasets sync reliably past the old ~1&nbsp;MB Gist limit.
       </div>
       <div style="font-size:0.71rem;color:var(--dim);line-height:1.5">
         To create a token: <em>github.com → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token → tick <strong>gist</strong> only</em>.
