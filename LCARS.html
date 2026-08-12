@@ -1002,6 +1002,7 @@ const VERSIONS = [
       'Fixed: the first line of a copied sim (often the ((Location)) line) sometimes pasted in a different font, as though it were a header — bare top-level inline/text nodes are now wrapped in a <div> on copy so every line has the same block structure',
       'Added: Ctrl+S (Cmd+S on Mac) while a sim is open now saves a revision snapshot and immediately syncs to your Gist (if configured), with a brief confirmation toast',
       'Added: stale markers (amber ≥2 days / red ≥3 days since last post or completion) now show in the Mission dashboard SCENES table next to each scene status (Active/Completed), matching the sidebar indicators',
+      'Added: "SINCE LAST POST" stat on the Command Dashboard showing days since your most recently posted sim, tinted amber at ≥2 days and red at ≥3 days',
       'Fixed: copying from the editor with Ctrl+C (no manual selection) now works the same as the 📋 button — the copy handler previously bailed out when the selection was collapsed, causing the browser to fall back to its own clipboard with raw markup, losing formatting and blank lines in Discord',
       'Fixed: copy/paste to Discord (and other apps reading text/plain) was losing all line breaks and paragraph spacing — caused by innerText on a detached DOM node having no layout context and silently concatenating all text; now walks block children manually and joins with newlines',
     ]
@@ -1765,6 +1766,14 @@ function renderDashboard() {
     totalWords += wc(tmp.innerText||'');
   });
   const totalPosted = allDocs.filter(d=>d.postedAt).length;
+  // Days since the most recent posted sim (amber ≥2d, red ≥3d)
+  const lastPostMs = allDocs.filter(d=>d.postedAt)
+    .map(d=>new Date(d.postedAt).getTime()).filter(t=>!isNaN(t))
+    .reduce((a,b)=>Math.max(a,b),0);
+  const daysSincePost = lastPostMs ? Math.floor((Date.now()-lastPostMs)/86400000) : null;
+  const dspColor = daysSincePost==null ? 'var(--dim)' : daysSincePost>=3 ? '#cc2222' : daysSincePost>=2 ? '#d98c00' : 'inherit';
+  const dspVal = daysSincePost==null ? '—' : daysSincePost+'d';
+  const dspTip = daysSincePost==null ? 'No posted sims yet' : `${daysSincePost} day${daysSincePost===1?'':'s'} since your last posted sim`;
   const inProgress = allDocs.filter(d=>d.status==='active')
     .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,10);
   const recentPosted = allDocs.filter(d=>d.postedAt)
@@ -1779,6 +1788,7 @@ function renderDashboard() {
           <div class="dash-stat-item"><div class="dash-stat-num">${allDocs.length}</div><div class="dash-stat-lbl">SIMS</div></div>
           <div class="dash-stat-item"><div class="dash-stat-num">${totalPosted}</div><div class="dash-stat-lbl">POSTED</div></div>
           <div class="dash-stat-item"><div class="dash-stat-num">${totalWords.toLocaleString()}</div><div class="dash-stat-lbl">WORDS</div></div>
+          <div class="dash-stat-item" title="${dspTip}"><div class="dash-stat-num" style="color:${dspColor}">${dspVal}</div><div class="dash-stat-lbl">SINCE LAST POST</div></div>
         </div>
       </div>
       <div class="dash-ai-box" id="dash-ai-box">
