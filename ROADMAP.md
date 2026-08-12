@@ -44,6 +44,12 @@ Candidates surfaced from project notes. Confirm scope with the user before start
 - [ ] **Storage headroom.** If `localStorage` (or Gist) growth becomes a recurring pain, evaluate migrating primary storage to IndexedDB.
       _Done when: a decision is recorded in TECH_STACK.md (migrate or explicitly defer, with the reason)._
 
+- [ ] **Multi-sim narration/parsing integration** _(being developed on the side)._ Replaces the removed experimental ↑ Narrate button with a more robust way to parse and pull content from other sims in a scene.
+      _Done when: the side-developed approach is ready to integrate, then wired into the editor._
+
+- [ ] **Visual redesign / beautify pass** _(user considering)._ Prototype a refreshed look as a standalone HTML artifact, lock the visual language, then port CSS variables/components back into `LCARS.html`. Bundle the emoji→SVG (Lucide) icon swap into this effort.
+      _Done when: a new visual direction is agreed and the CSS-variable/component layer is updated in the single file without breaking the LCARS/Dark/Light themes._
+
 - [ ] _Add real feature requests here as they come up._ Keep each one to a one-line description plus a **Done when…** so it's pickup-ready.
 
 ---
