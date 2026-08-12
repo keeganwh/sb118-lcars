@@ -998,6 +998,7 @@ const VERSIONS = [
       'Layout: moved Auto Format ▾ and Visual Aids ▾ back to toolbar row 2 (right side), clearing row 1 to just title + close; both dropdowns now open on hover as well as click; Insert ▾ moved inline with other row-2 buttons',
       'Removed: ↑ Narrate experimental narration-import button and its modal/logic — unreliable in practice; a more robust multi-sim parsing integration is planned for the roadmap instead',
       'Fixed: "StartFragment"/"EndFragment" text sometimes leaking into copy/pasted output (mostly Discord, occasionally email) — comment nodes are now stripped both when copying out and when pasting in, so they can no longer round-trip through the editor',
+      'Fixed: auto-italic oO Thoughts Oo were not copying out italicized (only manual italics survived) — the CSS-only italic on .tm is now converted to a real <em> on copy, matching how ((OOC)) italics are handled',
       'Fixed: copying from the editor with Ctrl+C (no manual selection) now works the same as the 📋 button — the copy handler previously bailed out when the selection was collapsed, causing the browser to fall back to its own clipboard with raw markup, losing formatting and blank lines in Discord',
       'Fixed: copy/paste to Discord (and other apps reading text/plain) was losing all line breaks and paragraph spacing — caused by innerText on a detached DOM node having no layout context and silently concatenating all text; now walks block children manually and joins with newlines',
     ]
@@ -2236,6 +2237,15 @@ function installCopyHandler() {
     }
     if (prefs.italicOOC) {
       tmp.querySelectorAll('.om').forEach(span => {
+        const em = document.createElement('em');
+        while (span.firstChild) em.appendChild(span.firstChild);
+        span.parentNode.replaceChild(em, span);
+      });
+    }
+    // Auto-italic thoughts are styled via CSS on .tm (no inline <em>), so convert
+    // them to real <em> here or the italics would be lost on copy out
+    if (prefs.thoughtItalic) {
+      tmp.querySelectorAll('.tm').forEach(span => {
         const em = document.createElement('em');
         while (span.firstChild) em.appendChild(span.firstChild);
         span.parentNode.replaceChild(em, span);
