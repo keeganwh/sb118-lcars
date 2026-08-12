@@ -997,6 +997,7 @@ const VERSIONS = [
       'Added: paste cleanup — extra consecutive blank lines in pasted content are automatically collapsed to one; a dismissible "Extra blank lines removed / Undo" banner appears above the editor for 8 seconds',
       'Layout: moved Auto Format ▾ and Visual Aids ▾ back to toolbar row 2 (right side), clearing row 1 to just title + close; both dropdowns now open on hover as well as click; Insert ▾ moved inline with other row-2 buttons',
       'Removed: ↑ Narrate experimental narration-import button and its modal/logic — unreliable in practice; a more robust multi-sim parsing integration is planned for the roadmap instead',
+      'Fixed: "StartFragment"/"EndFragment" text sometimes leaking into copy/pasted output (mostly Discord, occasionally email) — comment nodes are now stripped both when copying out and when pasting in, so they can no longer round-trip through the editor',
       'Fixed: copying from the editor with Ctrl+C (no manual selection) now works the same as the 📋 button — the copy handler previously bailed out when the selection was collapsed, causing the browser to fall back to its own clipboard with raw markup, losing formatting and blank lines in Discord',
       'Fixed: copy/paste to Discord (and other apps reading text/plain) was losing all line breaks and paragraph spacing — caused by innerText on a detached DOM node having no layout context and silently concatenating all text; now walks block children manually and joins with newlines',
     ]
@@ -2077,6 +2078,7 @@ function cleanPasteHTML(html) {
 
   // Recursively unwrap or clean each element
   function processNode(node) {
+    if (node.nodeType === 8) { node.parentNode.removeChild(node); return; } // drop comment nodes (StartFragment/EndFragment)
     if (node.nodeType !== 1) return; // text nodes pass through
     const tag = node.tagName.toLowerCase();
     const keep = ['strong','b','em','i','s','strike','del','a',
@@ -2195,6 +2197,15 @@ function installCopyHandler() {
     const frag = sel.getRangeAt(0).cloneContents();
     const tmp = document.createElement('div');
     tmp.appendChild(frag);
+
+    // Strip comment nodes (e.g. <!--StartFragment-->/<!--EndFragment--> that some
+    // clipboards/apps inject) so they never leak into pasted text in Discord/email
+    (function stripComments(node) {
+      [...node.childNodes].forEach(child => {
+        if (child.nodeType === 8) child.remove();
+        else if (child.nodeType === 1) stripComments(child);
+      });
+    })(tmp);
 
     // Convert ind-N classes to inline margin-left before stripping
     [1,2,3,4].forEach(n => {
