@@ -1,5 +1,24 @@
 # LCARS SB118 Writing Tool — Changelog
 
+## v4.21 — 2026-08-12
+
+- Fixed: browser tab title was still showing v4.0; updated to reflect the current version
+- Changed: Clear Format toolbar button now shows a 🧹 icon instead of text; tooltip clarifies that auto-formatting (bold names, locations, etc.) is not affected
+- Changed: Indent and Outdent buttons now use ⇥ / ⇤ symbols instead of wide →| / |← text
+- Fixed: Copy button tooltip was misleading; now says "Copy sim to clipboard"
+- Added: marker insertion buttons replaced by a compact "Insert ▾" dropdown that opens on hover or click; toggle between dropdown and individual buttons in Settings → Toolbar
+- Added: paste cleanup — extra consecutive blank lines in pasted content are automatically collapsed to one; a dismissible "Extra blank lines removed / Undo" banner appears above the editor for 8 seconds
+- Layout: moved Auto Format ▾ and Visual Aids ▾ back to toolbar row 2 (right side), clearing row 1 to just title + close; both dropdowns now open on hover as well as click; Insert ▾ moved inline with other row-2 buttons
+- Removed: ↑ Narrate experimental narration-import button and its modal/logic — unreliable in practice; a more robust multi-sim parsing integration is planned instead
+- Fixed: "StartFragment"/"EndFragment" text sometimes leaking into copy/pasted output (mostly Discord, occasionally email) — comment nodes are now stripped both when copying out and when pasting in, so they can no longer round-trip through the editor
+- Fixed: auto-italic `oO Thoughts Oo` were not copying out italicized (only manual italics survived) — the CSS-only italic on `.tm` is now converted to a real `<em>` on copy, matching how `((OOC))` italics are handled
+- Fixed: the first line of a copied sim (often the `((Location))` line) sometimes pasted in a different font, as though it were a header — bare top-level inline/text nodes are now wrapped in a `<div>` on copy so every line has the same block structure
+- Added: Ctrl+S (Cmd+S on Mac) while a sim is open now saves a revision snapshot and immediately syncs to your Gist (if configured), with a brief confirmation toast
+- Added: stale markers (amber ≥2 days / red ≥3 days since last post or completion) now show in the Mission dashboard SCENES table next to each scene status (Active/Completed), matching the sidebar indicators
+- Added: "SINCE LAST POST" stat on the Command Dashboard showing days since your most recently posted sim, tinted amber at ≥2 days and red at ≥3 days
+- Fixed: copying from the editor with Ctrl+C (no manual selection) now works the same as the 📋 button — the copy handler previously bailed out when the selection was collapsed, causing the browser to fall back to its own clipboard with raw markup, losing formatting and blank lines in Discord
+- Fixed: copy/paste to Discord (and other apps reading text/plain) was losing all line breaks and paragraph spacing — caused by innerText on a detached DOM node having no layout context and silently concatenating all text; now walks block children manually and joins with newlines
+
 ## v4.2 — 2026-07-14
 
 - Fixed: removing a character via the Manifest caused the panel to break — clicking another character required a full page refresh to recover
