@@ -1001,6 +1001,7 @@ const VERSIONS = [
       'Fixed: auto-italic oO Thoughts Oo were not copying out italicized (only manual italics survived) — the CSS-only italic on .tm is now converted to a real <em> on copy, matching how ((OOC)) italics are handled',
       'Fixed: the first line of a copied sim (often the ((Location)) line) sometimes pasted in a different font, as though it were a header — bare top-level inline/text nodes are now wrapped in a <div> on copy so every line has the same block structure',
       'Added: Ctrl+S (Cmd+S on Mac) while a sim is open now saves a revision snapshot and immediately syncs to your Gist (if configured), with a brief confirmation toast',
+      'Added: stale markers (amber ≥2 days / red ≥3 days since last post or completion) now show in the Mission dashboard SCENES table next to each scene status (Active/Completed), matching the sidebar indicators',
       'Fixed: copying from the editor with Ctrl+C (no manual selection) now works the same as the 📋 button — the copy handler previously bailed out when the selection was collapsed, causing the browser to fall back to its own clipboard with raw markup, losing formatting and blank lines in Discord',
       'Fixed: copy/paste to Discord (and other apps reading text/plain) was losing all line breaks and paragraph spacing — caused by innerText on a detached DOM node having no layout context and silently concatenating all text; now walks block children manually and joins with newlines',
     ]
@@ -4011,7 +4012,7 @@ function renderMissionView(id) {
         return `<tr>
           <td><span class="dv-link" onclick="openScene('${sc.id}')">${esc(sc.name)}</span></td>
           <td>${cnt}</td>
-          <td><span class="sdot ${sc.status||'active'}" style="display:inline-block;margin-right:4px"></span><span style="text-transform:capitalize;font-size:0.8rem;color:var(--dim)">${sc.status||'active'}</span></td>
+          <td><span class="sdot ${sc.status||'active'}" style="display:inline-block;margin-right:4px"></span><span style="text-transform:capitalize;font-size:0.8rem;color:var(--dim)">${sc.status||'active'}</span>${staleMarker(sc.id, sc.status)}</td>
         </tr>`;
       }).join('')}
     </table>`;
@@ -4188,6 +4189,18 @@ function sceneLastActivityMs(sceneId) {
     if (d.completedAt && d.completedAt > best) best = d.completedAt;
   });
   return best || (S.scenes[sceneId]?.startedAt) || (S.scenes[sceneId]?.createdAt) || Date.now();
+}
+
+// Stale marker (amber ≥2d / red ≥3d since last post/completion) for a scene.
+// Returns '' for non-active scenes (a finished scene can't be stale) or fresh ones.
+function staleMarker(sceneId, status) {
+  if ((status || 'active') !== 'active') return '';
+  const daysSince = (Date.now() - sceneLastActivityMs(sceneId)) / 86400000;
+  const d = Math.floor(daysSince);
+  const tip = `${d} days since last post/completion`;
+  const cls = daysSince >= 3 ? 'stale-red' : daysSince >= 2 ? 'stale-amber' : '';
+  if (!cls) return '';
+  return `<span class="stale-label" style="margin-left:6px;display:inline-flex" title="${tip}"><span style="font-size:0.7rem;opacity:0.6">${d}d</span><span class="stale-dot ${cls}"></span></span>`;
 }
 
 // Returns the timestamp of the most recently posted (or updated) sim matching the filter fn
