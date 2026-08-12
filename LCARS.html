@@ -1000,6 +1000,7 @@ const VERSIONS = [
       'Fixed: "StartFragment"/"EndFragment" text sometimes leaking into copy/pasted output (mostly Discord, occasionally email) — comment nodes are now stripped both when copying out and when pasting in, so they can no longer round-trip through the editor',
       'Fixed: auto-italic oO Thoughts Oo were not copying out italicized (only manual italics survived) — the CSS-only italic on .tm is now converted to a real <em> on copy, matching how ((OOC)) italics are handled',
       'Fixed: the first line of a copied sim (often the ((Location)) line) sometimes pasted in a different font, as though it were a header — bare top-level inline/text nodes are now wrapped in a <div> on copy so every line has the same block structure',
+      'Added: Ctrl+S (Cmd+S on Mac) while a sim is open now saves a revision snapshot and immediately syncs to your Gist (if configured), with a brief confirmation toast',
       'Fixed: copying from the editor with Ctrl+C (no manual selection) now works the same as the 📋 button — the copy handler previously bailed out when the selection was collapsed, causing the browser to fall back to its own clipboard with raw markup, losing formatting and blank lines in Discord',
       'Fixed: copy/paste to Discord (and other apps reading text/plain) was losing all line breaks and paragraph spacing — caused by innerText on a detached DOM node having no layout context and silently concatenating all text; now walks block children manually and joins with newlines',
     ]
@@ -2761,6 +2762,30 @@ function flushSave() {
 function schedSave() {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(flushSave, 1200);
+}
+
+// Ctrl/Cmd+S — flush the current sim, force a revision snapshot (bypassing the
+// usual ≥100-word threshold), and push to the Gist immediately if sync is set up.
+function manualSaveAndSync() {
+  if (!curId || !S.docs[curId]) { showToast('No sim open to save'); return; }
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  flushSave(); // persists content + detects chars + schedules a sync
+  const doc = S.docs[curId];
+  if (!doc.snapshots) doc.snapshots = [];
+  const last = doc.snapshots[doc.snapshots.length - 1];
+  if (!last || last.content !== doc.content) {
+    doc.snapshots.push({ content: doc.content, savedAt: Date.now(), wordCount: wc(document.getElementById('editor').innerText || '') });
+    if (doc.snapshots.length > 10) doc.snapshots.shift();
+    persist();
+  }
+  const cfg = getSyncConfig();
+  if (cfg.pat) {
+    if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
+    pushToGist();
+    showToast('Snapshot saved · syncing to Gist');
+  } else {
+    showToast('Snapshot saved');
+  }
 }
 
 // ================================================================
@@ -5083,6 +5108,11 @@ document.addEventListener('keydown',e=>{
   }
   if(e.key==='Enter'&&!document.getElementById('mo').classList.contains('hidden')){
     if(!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)){doModal();e.preventDefault();}
+    return;
+  }
+  // Ctrl/Cmd+S — save a snapshot + sync (works whenever a sim is open, not just editor focus)
+  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&(e.key==='s'||e.key==='S')){
+    if(curId){e.preventDefault();manualSaveAndSync();}
     return;
   }
   if(!inEditor) return;
