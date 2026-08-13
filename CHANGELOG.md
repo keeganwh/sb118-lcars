@@ -24,6 +24,7 @@
 - Changed: the editor text caret follows the duty accent in Delta Prime rather than the status blue
 - Fixed: the Style menu's revert button showed raw SVG markup as text — the label is rebuilt on every style change and was being written through `textContent`, which cannot carry markup
 - Fixed: the Sim Details panel's open/close chevron pointed the wrong way — it now mirrors the left sidebar, pointing right to collapse the panel rightwards and left to reopen it
+- Fixed: modal text was hard to read in Epic — dialogs were being frosted like region surfaces, and a 55% panel over the dimmed backdrop mixed down to a murky grey. Modals are now solid in Epic; blur stays on regions only, per the style guide
 
 ## v4.21 — 2026-08-12
 

@@ -899,12 +899,16 @@ body.hc #cp{border-left:3px solid var(--blue)}
 :root[data-skin="prime"][data-vibe="calm"][data-mode="light"] body .dash-action,
 :root[data-skin="prime"][data-vibe="calm"][data-mode="light"] body .dash-stat-item,
 :root[data-skin="prime"][data-vibe="calm"][data-mode="light"] body .dv-stat-item{box-shadow:0 1px 2px rgba(36,31,26,.07)}
+/* Modals are deliberately NOT in this list. They sit above the dimmed backdrop,
+   so a 55% panel mixes down to a murky grey that ink text cannot hold contrast
+   against. StyleHandoff §7 limits backdrop-filter to region surfaces, and
+   StyleGuide §5 keeps blur off text — a dialog is neither. */
 :root[data-skin="prime"][data-vibe="epic"] body .dash-table,
 :root[data-skin="prime"][data-vibe="epic"] body .dv-table,
-:root[data-skin="prime"][data-vibe="epic"] body .dash-action,
-:root[data-skin="prime"][data-vibe="epic"] body .modal{
+:root[data-skin="prime"][data-vibe="epic"] body .dash-action{
   background:color-mix(in oklab,var(--panel) 55%,transparent);backdrop-filter:blur(14px);
 }
+:root[data-skin="prime"][data-vibe="epic"] body .modal{background:var(--panel)}
 
 /* ── Scrollbars ── */
 :root[data-skin="prime"] body #nav-tree,
@@ -1468,6 +1472,7 @@ const VERSIONS = [
       'Changed: the editor text caret follows the duty accent in Delta Prime rather than the status blue',
       'Fixed: the Style menu\'s revert button showed raw SVG markup as text — the label is rebuilt on every style change and was being written through textContent, which cannot carry markup',
       'Fixed: the Sim Details panel\'s open/close chevron pointed the wrong way — it now mirrors the left sidebar, pointing right to collapse the panel rightwards and left to reopen it',
+      'Fixed: modal text was hard to read in Epic — dialogs were being frosted like region surfaces, and a 55% panel over the dimmed backdrop mixed down to a murky grey. Modals are now solid in Epic; blur stays on regions only, per the style guide',
     ]
   },
 ];
