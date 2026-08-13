@@ -22,6 +22,8 @@
 - Changed: in Epic the editor keeps a flat background instead of the duty-lit gradient, which stays on the dashboards — a gradient behind long-form writing was distracting
 - Fixed: the sim title in the editor was still cold blue in Delta Prime — it is set as an inline style by status, which no stylesheet rule could override. Active titles now use a `--title-active` token so each skin decides; Delta Prime keeps them ink, Classic keeps its blue. Complete (gold) and archived (dim) are unchanged in both
 - Changed: the editor text caret follows the duty accent in Delta Prime rather than the status blue
+- Fixed: the Style menu's revert button showed raw SVG markup as text — the label is rebuilt on every style change and was being written through `textContent`, which cannot carry markup
+- Fixed: the Sim Details panel's open/close chevron pointed the wrong way — it now mirrors the left sidebar, pointing right to collapse the panel rightwards and left to reopen it
 
 ## v4.21 — 2026-08-12
 

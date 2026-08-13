@@ -1218,7 +1218,7 @@ body.hc #cp{border-left:3px solid var(--blue)}
   <!-- SIM DETAILS / CHARACTERS PANEL -->
   <div id="cp">
     <div class="cp-top">
-      <button class="panel-toggle" id="cp-toggle" onclick="toggleCharsPanel()" title="Toggle panel"><svg class="ic" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
+      <button class="panel-toggle" id="cp-toggle" onclick="toggleCharsPanel()" title="Toggle panel"><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
       <span class="panel-label">SIM DETAILS</span>
     </div>
     <div id="sim-details" class="hidden">
@@ -1466,6 +1466,8 @@ const VERSIONS = [
       'Changed: in Epic the editor keeps a flat background instead of the duty-lit gradient, which stays on the dashboards — a gradient behind long-form writing was distracting',
       'Fixed: the sim title in the editor was still cold blue in Delta Prime — it is set as an inline style by status, which no stylesheet rule could override. Active titles now use a --title-active token so each skin decides; Delta Prime keeps them ink, Classic keeps its blue. Complete (gold) and archived (dim) are unchanged in both',
       'Changed: the editor text caret follows the duty accent in Delta Prime rather than the status blue',
+      'Fixed: the Style menu\'s revert button showed raw SVG markup as text — the label is rebuilt on every style change and was being written through textContent, which cannot carry markup',
+      'Fixed: the Sim Details panel\'s open/close chevron pointed the wrong way — it now mirrors the left sidebar, pointing right to collapse the panel rightwards and left to reopen it',
     ]
   },
 ];
@@ -1686,7 +1688,7 @@ function updateStyleMenu() {
       b.setAttribute('aria-checked', String(b.dataset.vibeOpt === s.vibe)));
   });
   const rev = document.getElementById('sty-revert');
-  if (rev) rev.textContent = s.skin === 'prime'
+  if (rev) rev.innerHTML = s.skin === 'prime'
     ? ic('chevron-left') + ' Revert to the classic LCARS look'
     : ic('sparkles') + ' Switch to the Delta Prime look';
   const btn = document.getElementById('btn-style');
@@ -5147,7 +5149,7 @@ function toggleCharsPanel() {
   S.settings.charsOpen = !S.settings.charsOpen;
   const cp = document.getElementById('cp');
   cp.classList.toggle('collapsed', !S.settings.charsOpen);
-  document.getElementById('cp-toggle').innerHTML = ic(S.settings.charsOpen ? 'chevron-left' : 'chevron-right');
+  document.getElementById('cp-toggle').innerHTML = ic(S.settings.charsOpen ? 'chevron-right' : 'chevron-left');
   persist();
 }
 
@@ -7323,7 +7325,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   }
   if (S.settings.charsOpen === false) {
     document.getElementById('cp').classList.add('collapsed');
-    document.getElementById('cp-toggle').innerHTML=ic('chevron-right');
+    document.getElementById('cp-toggle').innerHTML=ic('chevron-left');
   }
   if (S.settings.sidebarDetail) {
     document.getElementById('sidebar').classList.add('sidebar-detail');
