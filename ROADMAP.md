@@ -47,8 +47,11 @@ Candidates surfaced from project notes. Confirm scope with the user before start
 - [ ] **Multi-sim narration/parsing integration** _(being developed on the side)._ Replaces the removed experimental ↑ Narrate button with a more robust way to parse and pull content from other sims in a scene.
       _Done when: the side-developed approach is ready to integrate, then wired into the editor._
 
-- [ ] **Visual redesign / beautify pass** _(user considering)._ Prototype a refreshed look as a standalone HTML artifact, lock the visual language, then port CSS variables/components back into `LCARS.html`. Bundle the emoji→SVG (Lucide) icon swap into this effort.
-      _Done when: a new visual direction is agreed and the CSS-variable/component layer is updated in the single file without breaking the LCARS/Dark/Light themes._
+- [x] **Visual redesign / beautify pass** — _shipped in v4.22 as the **Delta Prime** skin._ Prototyped in Claude Design (`Dashboard Skins.dc.html`, option 6a), locked in `StyleGuide.md` / `StyleHandoff.md`, then ported into `LCARS.html` as a token layer mapped onto the existing CSS variables. Classic LCARS (Dark / Light / High Contrast) is preserved and switchable.
+      _Follow-ups still open:_
+      - [ ] Emoji→SVG (Lucide) icon swap — deliberately **not** bundled into 4.22 to keep the reskin reviewable on its own.
+      - [ ] Gather feedback on Delta Prime vs Classic, then decide whether Classic stays supported long-term or is retired.
+      - [ ] Test Epic mood on integrated graphics before considering it as a default — `backdrop-filter` on region surfaces is the one real performance risk (StyleHandoff §7).
 
 - [ ] _Add real feature requests here as they come up._ Keep each one to a one-line description plus a **Done when…** so it's pickup-ready.
 

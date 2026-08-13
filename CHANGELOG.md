@@ -1,5 +1,20 @@
 # LCARS SB118 Writing Tool — Changelog
 
+## v4.22 — 2026-08-13
+
+- New look: **Delta Prime** is now the default skin — same layout and controls, rebuilt on a new surface, type and shape system (elbow frames, accent-filled section caps, a hero stat strip, ruled tables, Space Grotesk + Public Sans)
+- Added: **Style ▾** menu in the top bar with three independent settings — Duty Post (Command / Science / Operations / Medical accent), Appearance (Light / Dark / System) and Mood (Calm / Epic). Changes apply immediately, no Save button
+- Added: Calm is warm bone and graphite with solid panels; Epic is a cool deep-space field with duty-lit washes, frosted region surfaces and accent glow. Both share every dimension, radius, font and layout rule
+- Added: the duty post accent resolves per (duty × light/dark × calm/epic) rather than one hex per post, so warm light fields get the muted accent and dark modes get the lighter one
+- Added: one-time "A new look" introduction on first load after upgrading, with the three style controls live inside it so the app can be previewed behind the window; reopen any time from Style ▾ → *What's new*
+- Added: the classic 4.21 LCARS look (Dark / Light / High Contrast) is still available and fully supported — switch back via Style ▾ → *Revert to the classic LCARS look*, the theme dropdown, or Settings → UI Preferences → Visual Style
+- Added: style changes animate with a circular reveal expanding from the control you clicked (View Transitions API); skipped automatically when the browser lacks support or the OS requests reduced motion
+- Added: Appearance → System follows the operating system light/dark setting and re-resolves live when it changes
+- Changed: the skin is applied from a tiny separate `localStorage` mirror before first paint, so the app never boots in the wrong look and corrects itself
+- Changed: Public Sans and Space Grotesk are only fetched when Delta Prime is active — classic users load no extra fonts
+- Fixed: the UI font chosen in Settings still overrides the skin body font, as it did before
+- Note: Delta Prime is new and still being tuned — feedback on it, or on staying with Classic LCARS, is welcome
+
 ## v4.21 — 2026-08-12
 
 - Fixed: browser tab title was still showing v4.0; updated to reflect the current version
