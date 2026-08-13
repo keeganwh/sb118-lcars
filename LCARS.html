@@ -45,7 +45,10 @@ body.hc {
 
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
-body{font-family:var(--ui-font,'Droid Sans',Verdana,Arial,sans-serif);background:var(--bg);color:var(--text);font-size:1rem}
+body{font-family:var(--ui-font,'Droid Sans',Verdana,Arial,sans-serif);background:var(--bg);color:var(--text);font-size:1rem;
+     /* declared on body so it resolves against this element's --blue2, which the
+        light/hc theme classes also set here */
+     --title-active:var(--blue2)}
 
 /* ── LAYOUT ── */
 #app{display:flex;flex-direction:column;height:100vh}
@@ -682,6 +685,7 @@ body.hc #cp{border-left:3px solid var(--blue)}
   --scroll:color-mix(in oklab,var(--ac) 42%,var(--line));
   --hover:color-mix(in oklab,var(--ac) 12%,transparent);
   --panel-hdr:var(--ac);--panel-hdr-cp:var(--ac);--panel-hdr-tx:var(--on-ac);
+  --title-active:var(--ink);
   /* Consumed by the base `body` rule, so a user font set in Settings still wins */
   --ui-font:'Public Sans',system-ui,-apple-system,Segoe UI,sans-serif;
   --display-font:'Space Grotesk','Public Sans',system-ui,sans-serif;
@@ -738,6 +742,8 @@ body.hc #cp{border-left:3px solid var(--blue)}
 :root[data-skin="prime"] body .hdr-title{color:rgba(231,237,243,.62)}
 :root[data-skin="prime"] body .dash-link,
 :root[data-skin="prime"] body .dv-link{color:var(--ink)}
+/* The text caret picks up the duty accent rather than the status blue */
+:root[data-skin="prime"] body #editor{caret-color:var(--ac)}
 :root[data-skin="prime"] body .dash-link:hover,
 :root[data-skin="prime"] body .dv-link:hover{color:var(--ac)}
 
@@ -947,16 +953,12 @@ body.hc #cp{border-left:3px solid var(--blue)}
   from{clip-path:circle(0 at var(--vtx,50%) var(--vty,50%))}
   to{clip-path:circle(160% at var(--vtx,50%) var(--vty,50%))}
 }
-/* The UA defaults these snapshots to mix-blend-mode:plus-lighter so a cross-fade
-   composites correctly. That makes the old and new images ADD, which washes the
-   growing circle out into a diffuse brightening with no visible edge — the wipe
-   stops reading as coming from the clicked control. Force normal blending, and
-   stretch the group animation to match, or it ends at the UA default .25s. */
-::view-transition-group(root){animation-duration:.6s}
-::view-transition-old(root){animation:none;mix-blend-mode:normal}
-::view-transition-new(root){animation:vt-reveal .6s cubic-bezier(.22,.72,.2,1);mix-blend-mode:normal}
+/* Left on the UA default blending (plus-lighter), which gives the reveal its
+   soft edge — the circle eases in rather than wiping across. The origin is set
+   from the pointer position in applyWithReveal(), not the control's centre. */
+::view-transition-old(root){animation:none}
+::view-transition-new(root){animation:vt-reveal .6s cubic-bezier(.22,.72,.2,1)}
 @media (prefers-reduced-motion:reduce){
-  ::view-transition-group(root){animation-duration:0s}
   ::view-transition-new(root){animation:none}
 }
 
@@ -1076,7 +1078,7 @@ body.hc #cp{border-left:3px solid var(--blue)}
         <button class="theme-opt" data-theme="dark" onclick="setTheme('dark')"><svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg> Dark</button>
         <button class="theme-opt" data-theme="light" onclick="setTheme('light')"><svg class="ic" aria-hidden="true"><use href="#i-sun"/></svg> Light</button>
         <button class="theme-opt" data-theme="hc" onclick="setTheme('hc')"><svg class="ic" aria-hidden="true"><use href="#i-contrast"/></svg> High Contrast</button>
-        <button class="theme-opt" onclick="toggleSkin(this)"><svg class="ic" aria-hidden="true"><use href="#i-sparkles"/></svg> Delta Prime look</button>
+        <button class="theme-opt" onclick="toggleSkin(this,event)"><svg class="ic" aria-hidden="true"><use href="#i-sparkles"/></svg> Delta Prime look</button>
       </div>
     </div>
     <button class="btn btn-s btn-sm" onclick="openSettings()" id="btn-settings" title="Settings"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg> Settings</button>
@@ -1307,7 +1309,7 @@ body.hc #cp{border-left:3px solid var(--blue)}
           <button class="theme-opt" data-theme="dark" onclick="setTheme('dark')"><svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg> Dark</button>
           <button class="theme-opt" data-theme="light" onclick="setTheme('light')"><svg class="ic" aria-hidden="true"><use href="#i-sun"/></svg> Light</button>
           <button class="theme-opt" data-theme="hc" onclick="setTheme('hc')"><svg class="ic" aria-hidden="true"><use href="#i-contrast"/></svg> High Contrast</button>
-          <button class="theme-opt" onclick="toggleSkin(this)"><svg class="ic" aria-hidden="true"><use href="#i-sparkles"/></svg> Delta Prime look</button>
+          <button class="theme-opt" onclick="toggleSkin(this,event)"><svg class="ic" aria-hidden="true"><use href="#i-sparkles"/></svg> Delta Prime look</button>
         </div>
       </div>
       <button class="btn btn-s btn-sm" onclick="openSettings()"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg> Settings</button>
@@ -1458,10 +1460,12 @@ const VERSIONS = [
       'Note: Delta Prime is new and still being tuned — feedback on it, or on staying with Classic LCARS, is welcome',
       'Changed: every emoji in the interface replaced with inline Lucide SVG icons, drawn in the current text colour and sized in em so they scale with the UI font setting and match in both skins. The icon set is an inline <symbol> sprite, so the app stays a single dependency-free file',
       'Fixed: Search / Sort / Details and the panel collapse arrows were nearly invisible in Delta Prime — they sit on the accent-filled panel header and were inheriting a translucent ink colour instead of the accent ink',
-      'Fixed: the style-change reveal appeared to radiate from an arbitrary point rather than the control clicked — browsers default the transition snapshots to mix-blend-mode:plus-lighter, which made the expanding circle add into the old image and lose its edge. Blending is now forced to normal and the group animation stretched to match',
+      'Fixed: the style-change reveal did not appear to come from the control clicked — it expanded from the control\'s centre, which on a segmented button is up to ~34px from where the pointer actually was. The origin now follows the pointer, falling back to the control centre for keyboard activation. Blending is left at the browser default, which keeps the softer edge',
       'Fixed: the Delta Prime / Classic LCARS buttons in Settings were unreadable in dark mode — they render as outlined buttons on the panel, so they were picking up the dark accent ink meant for solid accent fills',
-      'Fixed: page and sim titles were tinted cold blue, which clashed with the warm Calm palette — titles are now ink, per the style guide rule that hierarchy is typographic rather than chromatic. Blue and gold stay reserved for active / complete status',
+      'Fixed: dashboard and detail-view titles were tinted cold blue, which clashed with the warm Calm palette — titles are now ink, per the style guide rule that hierarchy is typographic rather than chromatic. Blue and gold stay reserved for active / complete status',
       'Changed: in Epic the editor keeps a flat background instead of the duty-lit gradient, which stays on the dashboards — a gradient behind long-form writing was distracting',
+      'Fixed: the sim title in the editor was still cold blue in Delta Prime — it is set as an inline style by status, which no stylesheet rule could override. Active titles now use a --title-active token so each skin decides; Delta Prime keeps them ink, Classic keeps its blue. Complete (gold) and archived (dim) are unchanged in both',
+      'Changed: the editor text caret follows the duty accent in Delta Prime rather than the status blue',
     ]
   },
 ];
@@ -1610,23 +1614,33 @@ function applyStyle() {
   updateStyleMenu();
 }
 
-function setStyle(patch, el) {
+function setStyle(patch, el, ev) {
   const apply = () => {
     S.settings.style = Object.assign(getStyle(), patch);
     persist();
     applyStyle();
   };
-  applyWithReveal(el, apply);
+  applyWithReveal(el, apply, ev);
 }
 
-// Radial reveal from the clicked control. Progressive enhancement only —
+// Radial reveal from the point that was clicked. Progressive enhancement only —
 // without View Transitions (or with reduced motion) the change just applies.
-function applyWithReveal(el, apply) {
+//
+// The origin is the pointer position, not the control's centre: on a segmented
+// button (62px min-width plus padding) those differ by up to ~30px, which reads
+// as the animation starting near the button rather than at it. Keyboard-driven
+// clicks report clientX/clientY of 0, so fall back to the element's centre.
+function applyWithReveal(el, apply, ev) {
   try {
-    const r = el && el.getBoundingClientRect && el.getBoundingClientRect();
-    if (r) {
-      document.documentElement.style.setProperty('--vtx', (r.left + r.width/2) + 'px');
-      document.documentElement.style.setProperty('--vty', (r.top + r.height/2) + 'px');
+    let x = null, y = null;
+    if (ev && (ev.clientX || ev.clientY)) { x = ev.clientX; y = ev.clientY; }
+    else {
+      const r = el && el.getBoundingClientRect && el.getBoundingClientRect();
+      if (r) { x = r.left + r.width/2; y = r.top + r.height/2; }
+    }
+    if (x !== null) {
+      document.documentElement.style.setProperty('--vtx', x + 'px');
+      document.documentElement.style.setProperty('--vty', y + 'px');
     }
   } catch(e){}
   let reduced = false;
@@ -1680,9 +1694,9 @@ function updateStyleMenu() {
     ? `Style: ${s.duty} · ${s.mode} · ${s.vibe}` : 'Style: classic LCARS';
 }
 
-function toggleSkin(el) {
+function toggleSkin(el, ev) {
   const next = getStyle().skin === 'prime' ? 'classic' : 'prime';
-  setStyle({ skin: next }, el);
+  setStyle({ skin: next }, el, ev);
 }
 
 // ================================================================
@@ -1729,11 +1743,11 @@ function closeStyleMenu(){ toggleStyleMenu(false); }
 function styleControlsHtml() {
   const swatches = DUTY_ORDER.map(d =>
     `<button class="sty-sw" role="radio" data-duty="${d}" aria-label="${d[0].toUpperCase()+d.slice(1)}"
-       title="${d[0].toUpperCase()+d.slice(1)}" onclick="setStyle({duty:'${d}'},this)"></button>`).join('');
+       title="${d[0].toUpperCase()+d.slice(1)}" onclick="setStyle({duty:'${d}'},this,event)"></button>`).join('');
   const modes = [['light','LIGHT'],['dark','DARK'],['system','SYSTEM']].map(([v,l]) =>
-    `<button role="radio" data-mode-opt="${v}" onclick="setStyle({mode:'${v}'},this)">${l}</button>`).join('');
+    `<button role="radio" data-mode-opt="${v}" onclick="setStyle({mode:'${v}'},this,event)">${l}</button>`).join('');
   const vibes = [['calm','CALM'],['epic','EPIC']].map(([v,l]) =>
-    `<button role="radio" data-vibe-opt="${v}" onclick="setStyle({vibe:'${v}'},this)">${l}</button>`).join('');
+    `<button role="radio" data-vibe-opt="${v}" onclick="setStyle({vibe:'${v}'},this,event)">${l}</button>`).join('');
   return `
     <div class="sty-controls">
       <div class="sty-grp"><div class="sty-lbl">DUTY POST</div>
@@ -1752,7 +1766,7 @@ function renderStyleMenu() {
   m.innerHTML = styleControlsHtml() + `
     <div class="sty-sep"></div>
     <div class="sty-foot">
-      <button id="sty-revert" onclick="toggleSkin(this)">${ic('chevron-left')} Revert to the classic LCARS look</button>
+      <button id="sty-revert" onclick="toggleSkin(this,event)">${ic('chevron-left')} Revert to the classic LCARS look</button>
       <button onclick="showStyleIntro()">${ic('sparkles')} What's new in ${STYLE_VERSION}</button>
     </div>
     <div class="sty-feedback"><strong>New in ${STYLE_VERSION}</strong> — the classic look stays
@@ -3562,7 +3576,9 @@ function updateTitleColor(doc) {
   if (!el || !doc) return;
   if      (doc.status === 'archived') el.style.color = 'var(--dim)';
   else if (doc.status === 'complete') el.style.color = 'var(--gold)';
-  else                                el.style.color = 'var(--blue2)';
+  // Active titles use a token rather than --blue2 directly, so a skin can
+  // decide whether the title is tinted at all (Delta Prime keeps it ink).
+  else                                el.style.color = 'var(--title-active)';
 }
 function updateStatusStyle(doc) {
   const el = document.getElementById('doc-status');
@@ -4156,8 +4172,8 @@ function setThemeFromSettings(t) {
   );
 }
 // Switching skin swaps which controls the panel shows, so re-render it in place
-function setStyleFromSettings(skin, el) {
-  setStyle({ skin }, el);
+function setStyleFromSettings(skin, el, ev) {
+  setStyle({ skin }, el, ev);
   const body = document.getElementById('mo-body');
   if (body) { closeModal(); openSettings(); }
 }
@@ -5669,8 +5685,8 @@ function openSettings() {
     <div style="margin-top:8px;margin-bottom:10px">
       <div class="ml" style="margin-bottom:5px">VISUAL STYLE</div>
       <div style="display:flex;gap:6px;margin-bottom:10px">
-        <button class="btn btn-s st-btn${skin==='prime'?' btn-p':''}" onclick="setStyleFromSettings('prime',this)" style="flex:1">${ic('sparkles')} Delta Prime (${STYLE_VERSION})</button>
-        <button class="btn btn-s st-btn${skin==='classic'?' btn-p':''}" onclick="setStyleFromSettings('classic',this)" style="flex:1">${ic('layout-grid')} Classic LCARS (4.21)</button>
+        <button class="btn btn-s st-btn${skin==='prime'?' btn-p':''}" onclick="setStyleFromSettings('prime',this,event)" style="flex:1">${ic('sparkles')} Delta Prime (${STYLE_VERSION})</button>
+        <button class="btn btn-s st-btn${skin==='classic'?' btn-p':''}" onclick="setStyleFromSettings('classic',this,event)" style="flex:1">${ic('layout-grid')} Classic LCARS (4.21)</button>
       </div>
       ${skin==='prime' ? `
       <div id="sty-settings" style="display:flex;flex-direction:column;gap:12px;margin-bottom:10px">

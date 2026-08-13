@@ -16,10 +16,12 @@
 - Note: Delta Prime is new and still being tuned — feedback on it, or on staying with Classic LCARS, is welcome
 - Changed: every emoji in the interface replaced with inline **Lucide** SVG icons, drawn in the current text colour and sized in `em` so they scale with the UI font setting and match in both skins. The icon set is an inline `<symbol>` sprite, so the app stays a single dependency-free file
 - Fixed: Search / Sort / Details and the panel collapse arrows were nearly invisible in Delta Prime — they sit on the accent-filled panel header and were inheriting a translucent ink colour instead of the accent ink
-- Fixed: the style-change reveal appeared to radiate from an arbitrary point rather than the control clicked — browsers default the transition snapshots to `mix-blend-mode:plus-lighter`, which made the expanding circle add into the old image and lose its edge. Blending is now forced to `normal` and the group animation stretched to match
+- Fixed: the style-change reveal did not appear to come from the control clicked — it expanded from the control's centre, which on a segmented button is up to ~34px from where the pointer actually was. The origin now follows the pointer, falling back to the control centre for keyboard activation. Blending is left at the browser default, which keeps the softer edge
 - Fixed: the Delta Prime / Classic LCARS buttons in Settings were unreadable in dark mode — they render as outlined buttons on the panel, so they were picking up the dark accent ink meant for solid accent fills
-- Fixed: page and sim titles were tinted cold blue, which clashed with the warm Calm palette — titles are now ink, per the style guide rule that hierarchy is typographic rather than chromatic. Blue and gold stay reserved for active / complete status
+- Fixed: dashboard and detail-view titles were tinted cold blue, which clashed with the warm Calm palette — titles are now ink, per the style guide rule that hierarchy is typographic rather than chromatic. Blue and gold stay reserved for active / complete status
 - Changed: in Epic the editor keeps a flat background instead of the duty-lit gradient, which stays on the dashboards — a gradient behind long-form writing was distracting
+- Fixed: the sim title in the editor was still cold blue in Delta Prime — it is set as an inline style by status, which no stylesheet rule could override. Active titles now use a `--title-active` token so each skin decides; Delta Prime keeps them ink, Classic keeps its blue. Complete (gold) and archived (dim) are unchanged in both
+- Changed: the editor text caret follows the duty accent in Delta Prime rather than the status blue
 
 ## v4.21 — 2026-08-12
 
