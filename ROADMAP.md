@@ -49,7 +49,7 @@ Candidates surfaced from project notes. Confirm scope with the user before start
 
 - [x] **Visual redesign / beautify pass** — _shipped in v4.22 as the **Delta Prime** skin._ Prototyped in Claude Design (`Dashboard Skins.dc.html`, option 6a), locked in `StyleGuide.md` / `StyleHandoff.md`, then ported into `LCARS.html` as a token layer mapped onto the existing CSS variables. Classic LCARS (Dark / Light / High Contrast) is preserved and switchable.
       _Follow-ups still open:_
-      - [ ] Emoji→SVG (Lucide) icon swap — deliberately **not** bundled into 4.22 to keep the reskin reviewable on its own.
+      - [x] Emoji→SVG (Lucide) icon swap — done in 4.22; inline `<symbol>` sprite, icons inherit `currentColor`.
       - [ ] Gather feedback on Delta Prime vs Classic, then decide whether Classic stays supported long-term or is retired.
       - [ ] Test Epic mood on integrated graphics before considering it as a default — `backdrop-filter` on region surfaces is the one real performance risk (StyleHandoff §7).
 
