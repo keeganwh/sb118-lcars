@@ -1479,6 +1479,7 @@ const VERSIONS = [
     date: '2026-08-14',
     changes: [
       'Removed: the "Import Sims" Markdown/Google Docs importer in Settings — exporting a Doc to Markdown and re-importing it was clunky, and better ways to bring sims in are being built. Backup and Restore are unaffected',
+      'Changed: revision snapshots now live in your account rather than inside the main data blob. They were ten full copies of each sim being re-uploaded on every save, and were by far the largest part of the payload; they are now fetched only when you open the Snapshots window, and follow you between devices',
       'Changed: Writer ID entry now checks the real ten-character format (ship letter, stardate year and month, two initials, academy digit) and the example shown is a placeholder, not a real writer',
       'Added: accounts. Sign in with your Writer ID and a PIN, and your sims save to your account automatically and follow you to any device — no tokens, no export files. An optional recovery email can be given when creating the account',
       'Added: a first-run choice between signing in and working offline on one device only. Offline sends nothing anywhere; you can switch to an account later from Settings, and your existing work is carried across',
@@ -2172,6 +2173,67 @@ function cloudSignOut() {
   location.reload();
 }
 
+// Snapshots are ten full copies of a sim's HTML apiece. Kept in the main payload
+// they dominated its size and were re-uploaded on every single save, so they go
+// to their own table and are fetched only when the history modal is opened.
+// doc.snapshots stays as the local copy — offline mode needs it, and restoring
+// from it is instant.
+function cloudPayload() {
+  const docs = {};
+  for (const k in (S.docs || {})) {
+    const { snapshots, ...rest } = S.docs[k];
+    docs[k] = rest;
+  }
+  return { ...S, docs };
+}
+
+async function pushSnapshot(docId, snap) {
+  if (!isCloud()) return;
+  const a = getAuth();
+  if (!a.uid) return;
+  try {
+    const r = await supaFetch('/rest/v1/snapshots', {
+      method: 'POST',
+      body: JSON.stringify({ writer_uid: a.uid, doc_id: docId, html: snap.content,
+                             word_count: snap.wordCount, created_at: new Date(snap.savedAt).toISOString() })
+    });
+    if (r.ok) await pruneSnapshots(docId);
+  } catch(e) { /* local copy still holds it */ }
+}
+
+// Keep the server to the same ten-per-sim cap as local.
+async function pruneSnapshots(docId) {
+  const a = getAuth();
+  const q = '/rest/v1/snapshots?writer_uid=eq.' + encodeURIComponent(a.uid) +
+            '&doc_id=eq.' + encodeURIComponent(docId);
+  const r = await supaFetch(q + '&select=id&order=created_at.desc&limit=200&offset=10');
+  if (!r.ok) return;
+  const old = await r.json();
+  for (const row of old) await supaFetch('/rest/v1/snapshots?id=eq.' + row.id, { method: 'DELETE' });
+}
+
+async function fetchSnapshots(docId) {
+  const a = getAuth();
+  if (!a.uid) return null;
+  const r = await supaFetch('/rest/v1/snapshots?writer_uid=eq.' + encodeURIComponent(a.uid) +
+                            '&doc_id=eq.' + encodeURIComponent(docId) +
+                            '&select=html,word_count,created_at&order=created_at.asc');
+  if (!r.ok) return null;
+  const rows = await r.json();
+  return rows.map(x => ({ content: x.html, wordCount: x.word_count, savedAt: new Date(x.created_at).getTime() }));
+}
+
+// One-off: lift snapshots that already existed locally up to the server, so a
+// writer's existing history follows them to a new device.
+async function backfillSnapshots() {
+  if (!isCloud() || S._snapBackfill) return;
+  for (const id in (S.docs || {})) {
+    for (const snap of (S.docs[id].snapshots || [])) await pushSnapshot(id, snap);
+  }
+  S._snapBackfill = true;
+  persist();
+}
+
 // Push the whole state. localStorage keeps its own copy either way, so a failed
 // push is a warning rather than data loss.
 async function saveToCloud() {
@@ -2183,7 +2245,7 @@ async function saveToCloud() {
     const r = await supaFetch('/rest/v1/state', {
       method: 'POST',
       headers: { 'Prefer': 'resolution=merge-duplicates' },
-      body: JSON.stringify({ writer_uid: a.uid, payload: S, updated_at: new Date().toISOString() })
+      body: JSON.stringify({ writer_uid: a.uid, payload: cloudPayload(), updated_at: new Date().toISOString() })
     });
     if (!r.ok) throw new Error((await r.text()).slice(0, 160));
     setSyncStatus('ok', 'Saved ' + new Date().toLocaleTimeString());
@@ -2223,7 +2285,7 @@ async function cloudBoot() {
   catch(e) { setSyncStatus('error', 'Working offline — could not reach the server.'); return; }
 
   if (!row) {                       // nothing on the server yet
-    if (hasLocalData()) { await saveToCloud(); }
+    if (hasLocalData()) { await saveToCloud(); await backfillSnapshots(); }
     else setSyncStatus('ok', '');
     return;
   }
@@ -2231,6 +2293,7 @@ async function cloudBoot() {
   const remoteDocs = Object.keys(remote.docs || {}).length;
 
   if (!hasLocalData()) { adoptCloudState(remote); setSyncStatus('ok', ''); return; }
+  backfillSnapshots();              // lift any pre-existing local history up once
 
   // Both sides have data. Same account on a second device is the normal case, so
   // prefer the server, but never silently discard local work.
@@ -3389,8 +3452,10 @@ function flushSave() {
   const lastSnap = doc.snapshots.length ? doc.snapshots[doc.snapshots.length-1] : null;
   const lastSnapWC = lastSnap ? lastSnap.wordCount : 0;
   if (Math.abs(curWC - lastSnapWC) >= 100) {
-    doc.snapshots.push({content:html, savedAt:Date.now(), wordCount:curWC});
+    const snap = {content:html, savedAt:Date.now(), wordCount:curWC};
+    doc.snapshots.push(snap);
     if (doc.snapshots.length > 10) doc.snapshots.shift();
+    pushSnapshot(curId, snap);
   }
   doc.content = html;
   doc.title = document.getElementById('doc-title').value;
@@ -3428,9 +3493,11 @@ function manualSaveAndSync() {
   if (!doc.snapshots) doc.snapshots = [];
   const last = doc.snapshots[doc.snapshots.length - 1];
   if (!last || last.content !== doc.content) {
-    doc.snapshots.push({ content: doc.content, savedAt: Date.now(), wordCount: wc(document.getElementById('editor').innerText || '') });
+    const snap = { content: doc.content, savedAt: Date.now(), wordCount: wc(document.getElementById('editor').innerText || '') };
+    doc.snapshots.push(snap);
     if (doc.snapshots.length > 10) doc.snapshots.shift();
     persist();
+    pushSnapshot(curId, snap);
   }
   if (isCloud()) {
     if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
@@ -3444,10 +3511,22 @@ function manualSaveAndSync() {
 // ================================================================
 // REVISION SNAPSHOTS
 // ================================================================
-function showHistory() {
+let _histList = [];
+
+async function showHistory() {
   if (!curId) return;
   const doc = S.docs[curId]; if (!doc) return;
-  const snaps = doc.snapshots||[];
+
+  // The server is the durable record once signed in; local is the fallback so
+  // history still opens offline or if the request fails.
+  let snaps = (doc.snapshots || []).slice();
+  if (isCloud()) {
+    try { const rows = await fetchSnapshots(curId); if (rows && rows.length) snaps = rows; }
+    catch(e) { /* keep the local list */ }
+  }
+  snaps.sort((a,b) => a.savedAt - b.savedAt);
+  _histList = snaps;
+
   if (!snaps.length) {
     openModal('REVISION SNAPSHOTS',
       `<p style="color:var(--dim);font-size:0.87rem;line-height:1.6">No snapshots yet.<br>
@@ -3469,14 +3548,14 @@ function showHistory() {
       <tr><th>SAVED</th><th>WORDS</th><th></th></tr>
       ${rows}
     </table>
-    <p style="font-size:0.73rem;color:var(--dim);margin-top:10px">Up to 10 snapshots stored. Oldest removed when limit is reached.</p>
+    <p style="font-size:0.73rem;color:var(--dim);margin-top:10px">Up to 10 snapshots stored. Oldest removed when limit is reached.${isCloud() ? ' Saved to your account, so they follow you between devices.' : ''}</p>
   `, null);
 }
 
 function restoreSnapshot(i) {
   if (!curId) return;
   const doc = S.docs[curId]; if (!doc) return;
-  const snap = (doc.snapshots||[])[i]; if (!snap) return;
+  const snap = _histList[i]; if (!snap) return;   // indexes the list showHistory built
   const date = new Date(snap.savedAt).toLocaleString();
   if (!confirm(`Restore this snapshot?\n\n${date} — ${snap.wordCount} words\n\nThis will replace the current editor content.`)) return;
   closeModal();
