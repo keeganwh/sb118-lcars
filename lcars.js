@@ -153,6 +153,8 @@ const VERSIONS = [
       'Note: if this browser and your account both hold sims, you are asked which copy to keep rather than one silently replacing the other',
       'Changed: the app is now three files — LCARS.html, lcars.css and lcars.js — instead of one. Nothing looks or behaves differently; it is groundwork so Settings and the Character Manifest can become pages of their own. Offline downloads are still a single self-contained file',
       'Added: Settings and the Character Manifest now have their own web addresses — /settings and /manifest. The back and forward buttons move between them, and a link straight to one opens it. They are still part of the same page, so opening the Manifest mid-sim leaves your unsaved typing exactly where it was',
+      'Added: Settings \u2192 Data Management now offers Download LCARS for offline use \u2014 one self-contained file you can keep on your own machine and open with no internet at all. The app is built from three files now, and the download puts them back together for you',
+      'Fixed: on a first visit the Delta Prime introduction could open on top of a page you had gone straight to, such as /settings, and hide it. It now waits until you are back on the dashboard',
     ],
   },
 ];
@@ -421,7 +423,9 @@ function showStyleIntro() {
 
 function maybeShowStyleIntro() {
   if ((S.settings.prefs || {}).seenStyleIntro === STYLE_VERSION) return;
-  setTimeout(showStyleIntro, 400);
+  // Deferred, so re-check on fire: a direct hit on /settings or /manifest opens
+  // its view in between, and the intro must not steal the modal from under it.
+  setTimeout(() => { if (_routeView === 'dash') showStyleIntro(); }, 400);
 }
 
 function closeStyleMenu(){ toggleStyleMenu(false); }
@@ -4675,6 +4679,17 @@ function renderVersionHistory() {
   }).join('');
 }
 
+// Downloads the app itself, not the data: /api/download re-inlines lcars.css and
+// lcars.js back into LCARS.html so the offline copy stays a single file. Only
+// the hosted site can build it, so opened from a file there is nothing to fetch.
+function downloadOfflineCopy() {
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') {
+    alert('You are already running LCARS from a file on this machine — this copy is the offline copy.');
+    return;
+  }
+  location.href = new URL('/api/download', location.origin).href;
+}
+
 function openSettings(fromRoute) {
   if (!fromRoute) syncRoute('settings');
   _openingSettings = true;
@@ -4700,6 +4715,10 @@ function openSettings(fromRoute) {
           <button class="btn btn-s" style="flex:1" onclick="importData()">${ic('upload')} Restore Data</button>
         </div>
         <div style="font-size:0.73rem;color:var(--dim);margin-top:5px">Saves or restores all your data — Sims, Character Manifest, and preferences. Use Backup regularly to keep a copy outside the browser. <strong>Restore replaces all current data.</strong></div>
+      </div>
+      <div style="border-top:1px solid var(--border,#333);padding-top:12px">
+        <button class="btn btn-s" onclick="downloadOfflineCopy()">${ic('download')} Download LCARS for offline use</button>
+        <div style="font-size:0.73rem;color:var(--dim);margin-top:5px">One self-contained file you can keep on your own machine and open with no internet at all. Your sims live in that copy's own browser storage, so move work between it and this one with Backup and Restore.</div>
       </div>
     </div>
 
