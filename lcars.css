@@ -42,14 +42,27 @@ body{font-family:var(--ui-font,'Droid Sans',Verdana,Arial,sans-serif);background
 
 /* ── LAYOUT ── */
 #app{display:flex;flex-direction:column;height:100vh}
-#workspace{display:flex;flex:1;overflow:hidden}
+/* Top-level views are siblings under the one header: exactly one is visible at
+   a time and each fills the space between the header and the status bar. */
+.view{flex:1;min-height:0;overflow:hidden}
+#workspace{display:flex}
 
 /* ── HEADER ── */
 #hdr{height:56px;background:var(--panel);border-bottom:3px solid var(--amber);display:flex;align-items:center;padding:0;flex-shrink:0}
 .hdr-badge{background:var(--amber);color:#fff;font-weight:bold;font-size:1.33rem;letter-spacing:5px;padding:6px 20px;border-radius:0 0 36px 0;margin-right:16px;height:100%;display:flex;align-items:center;flex-shrink:0}
 body.hc .hdr-badge{color:#000}
 .hdr-title{color:var(--blue2);font-size:0.87rem;letter-spacing:3px;opacity:.8}
-.hdr-right{margin-left:auto;display:flex;align-items:center;gap:6px;padding-right:12px}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:6px;padding-right:12px;flex-shrink:0}
+/* On a narrow screen the header's buttons no longer fit. Drop the strapline
+   and let the bar scroll sideways rather than clip — every control, including
+   the way back out of a view, has to stay reachable. */
+@media (max-width:820px){
+  #hdr{overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  #hdr::-webkit-scrollbar{display:none}
+  .hdr-title{display:none}
+  .hdr-badge{margin-right:10px;padding:6px 14px;font-size:1.1rem;letter-spacing:3px}
+  .hdr-right{padding-right:8px}
+}
 .theme-picker{position:relative;display:inline-flex}
 .theme-dropdown{position:absolute;top:100%;right:0;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:3px 0;min-width:148px;z-index:200;display:none;flex-direction:column;box-shadow:0 4px 16px rgba(0,0,0,.4)}
 .theme-picker:hover .theme-dropdown{display:flex}
@@ -291,6 +304,40 @@ body.hc #cp{border-left:3px solid var(--blue)}
 .mi-color{width:44px;height:32px;padding:2px;border-radius:4px;cursor:pointer;flex-shrink:0}
 .mi-color-sm{width:18px;height:18px;padding:1px;border:none;border-radius:3px;cursor:pointer;flex-shrink:0;vertical-align:middle}
 .msub{font-size:0.67rem;letter-spacing:2px;color:var(--dim);margin:12px 0 6px;font-weight:bold;text-transform:uppercase}
+
+/* ── SETTINGS VIEW ──
+   A scrolling page of cards rather than a single tall modal. One column,
+   capped for readability; the fields inside each card reflow on their own so
+   the whole thing works from a phone up without a breakpoint per group. */
+#view-settings{overflow-y:auto;display:block}
+.set-wrap{max-width:900px;margin:0 auto;padding:20px 20px 28px}
+.set-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.set-title{font-size:1.15rem;font-weight:bold;letter-spacing:3px;color:var(--amber)}
+.set-sub{font-size:0.76rem;color:var(--dim)}
+.set-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:6px 18px 16px;margin-bottom:16px}
+.set-card>.msec:first-child{margin-top:10px}
+.set-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.set-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.set-actions .btn{flex:1 1 auto;min-width:180px;justify-content:center}
+.set-note{font-size:0.73rem;color:var(--dim);margin-top:6px;line-height:1.6}
+.set-block{padding-top:14px;margin-top:14px;border-top:1px solid var(--border)}
+.set-block:first-of-type{padding-top:0;margin-top:0;border-top:none}
+.set-check{display:flex;align-items:flex-start;gap:10px}
+.set-check input[type=checkbox]{width:auto;flex-shrink:0;margin-top:3px}
+.set-check-t{display:flex;align-items:center;gap:8px;font-size:0.78rem;font-weight:bold;color:var(--text)}
+.set-danger{border-color:var(--red,#a44)}
+/* The preference fields are the only settings that need an explicit save, so
+   the bar rides the bottom of the page rather than the bottom of the screen. */
+.set-bar{position:sticky;bottom:0;background:var(--panel);border:1px solid var(--border);
+  border-radius:10px;padding:12px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+  box-shadow:0 -6px 18px rgba(0,0,0,.28);margin-top:4px}
+.set-bar .set-note{margin:0;flex:1 1 200px}
+@media (max-width:640px){
+  .set-wrap{padding:14px 12px 20px}
+  .set-card{padding:4px 13px 14px}
+  .set-actions .btn{min-width:0;flex:1 1 100%}
+  .set-bar .btn{flex:1 1 100%;justify-content:center}
+}
 
 /* ── BUTTONS ── */
 .btn{padding:5px 13px;border-radius:4px;border:1px solid transparent;cursor:pointer;font-family:inherit;font-size:0.8rem;font-weight:bold;letter-spacing:.5px}

@@ -43,7 +43,7 @@ Settings and Manifest become **routed views inside the one app**, not separate H
 
 ## Session 2 — Settings page and account management
 
-- [ ] **Move Settings out of the modal to the `/settings` view.**
+- [x] **Move Settings out of the modal to the `/settings` view.**
       The panel is overstuffed. Regroup it while moving. Build it responsive from the start so the later mobile session does not have to redo it.
       _Done when: settings is its own view with its own URL, every existing setting still works, and it is usable on a phone._
 

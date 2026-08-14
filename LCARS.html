@@ -124,8 +124,8 @@
   </div>
 </div>
 
-<!-- WORKSPACE -->
-<div id="workspace">
+<!-- WORKSPACE — the dashboard/editor view -->
+<div id="workspace" class="view">
 
   <!-- SIDEBAR -->
   <div id="sidebar">
@@ -295,6 +295,11 @@
   </div>
 
 </div><!-- /workspace -->
+
+<!-- SETTINGS VIEW — filled in by renderSettingsView(); a sibling of the
+     workspace so it wears the same app header and the editor is never torn
+     down behind it. -->
+<div id="view-settings" class="view hidden"></div>
 
 <!-- STATUS BAR -->
 <div id="sb">

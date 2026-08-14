@@ -156,6 +156,8 @@ const VERSIONS = [
       'Added: Settings \u2192 Data Management now offers Download LCARS for offline use \u2014 one self-contained file you can keep on your own machine and open with no internet at all. The app is built from three files now, and the download puts them back together for you',
       'Fixed: on a first visit the Delta Prime introduction could open on top of a page you had gone straight to, such as /settings, and hide it. It now waits until you are back on the dashboard',
       'Fixed: the downloaded offline copy still offered to sign you in or create an account, neither of which can work from a file on your own machine — the browser blocks it reaching the server. The offline copy now starts straight in offline mode with no sign-in prompt, and Settings and the Getting Started wizard point you at LCARS online instead, noting that a backup taken offline restores straight into it',
+      'Changed: Settings is now a page of its own rather than a tall pop-up window. It sits under the same header as the rest of LCARS, at its own address, and the sections are regrouped \u2014 your account first, then how it looks, then how the sim editor behaves, with your data, the danger zone and the version history below. Fonts, sizes, colours and the editor toggles are saved together from the bar at the foot of the page; everything else still applies the moment you click it',
+      'Fixed: on a narrow screen the header buttons were cut off with no way to reach them, so there was no way back out of Settings on a phone. The header now scrolls sideways and drops the STARBASE 118 WRITING TOOL strapline rather than clipping',
     ],
   },
 ];
@@ -1051,7 +1053,7 @@ async function eraseAllData() {
   S.docs = {}; S.missions = {}; S.scenes = {}; S.characters = {}; S.templates = [];
   persist();
   curId = null; curView = null; curViewId = null;
-  renderNav(); showDashboard();
+  renderNav(); showDashboard(); showView('dash');
   showToast('Everything erased');
   if (isCloud()) {
     await saveToCloud();
@@ -3239,8 +3241,11 @@ function setThemeFromSettings(t) {
 // Switching skin swaps which controls the panel shows, so re-render it in place
 function setStyleFromSettings(skin, el, ev) {
   setStyle({ skin }, el, ev);
-  const body = document.getElementById('mo-body');
-  if (body) { closeModal(); openSettings(); }
+  if (_routeView === 'settings') {
+    const y = document.getElementById('view-settings').scrollTop;
+    renderSettingsView();
+    document.getElementById('view-settings').scrollTop = y;
+  }
 }
 function toggleFmt(type) {
   fmts[type] = !fmts[type];
@@ -4509,10 +4514,8 @@ function delDoc(id){
 // MODAL
 // ================================================================
 function openModal(title, body, cb, opts={}) {
-  // Settings is the only modal with a URL; opening any other one from inside it
-  // (Snapshots, a confirm) leaves the /settings route behind.
-  if (!_openingSettings && _routeView === 'settings') syncRoute('dash');
-  _openingSettings = false;
+  // Modals no longer carry routes of their own — Settings and the Manifest are
+  // real views — so a confirm raised from either leaves the URL where it is.
   document.getElementById('mo-title').textContent = title;
   document.getElementById('mo-body').innerHTML = body;
   document.getElementById('mo').classList.remove('hidden');
@@ -4528,10 +4531,9 @@ function openModal(title, body, cb, opts={}) {
   // Style radio groups can appear in the intro modal or Settings — sync their state
   if (body.indexOf('sty-sw') !== -1) setTimeout(updateStyleMenu, 0);
 }
-function closeModal(fromRoute){
+function closeModal(){
   document.getElementById('mo').classList.add('hidden');
   modalCb=null;
-  if (!fromRoute && _routeView === 'settings') syncRoute('dash');
 }
 function doModal(){if(modalCb&&modalCb()===false)return;closeModal();}
 
@@ -4708,240 +4710,365 @@ function downloadOfflineCopy() {
   location.href = new URL('/api/download', location.origin).href;
 }
 
-function openSettings(fromRoute) {
-  if (!fromRoute) syncRoute('settings');
-  _openingSettings = true;
+// ================================================================
+// VIEWS
+// ================================================================
+// The dashboard/editor workspace, Settings and the Character Manifest are
+// sibling views under the one app header. Switching between them swaps which
+// is on screen and nothing else — the editor is never torn down, so an open
+// sim and its unsaved keystrokes survive a trip to Settings and back.
+//
+// Every view change goes through showView, which is also what keeps the URL
+// honest: it is the one place syncRoute is called from.
+const VIEW_IDS = { dash: 'workspace', settings: 'view-settings', manifest: 'char-manifest' };
+
+function showView(view, fromRoute) {
+  if (!VIEW_IDS[view]) view = 'dash';
+  if (view === 'settings') renderSettingsView();
+  else if (view === 'manifest') prepManifest();
+
+  document.getElementById('view-settings').classList.toggle('hidden', view !== 'settings');
+  // The manifest is still an overlay, so the workspace stays mounted beneath
+  // it and only Settings actually displaces it.
+  document.getElementById('workspace').classList.toggle('hidden', view === 'settings');
+  const cm = document.getElementById('char-manifest');
+  if (cm) cm.classList.toggle('hidden', view !== 'manifest');
+
+  _routeView = view;
+  updateViewButtons();
+  if (!fromRoute) syncRoute(view);
+  if (view === 'settings') document.getElementById('view-settings').scrollTop = 0;
+}
+
+// Header buttons double as the view indicator: the manifest button flips to
+// "Sim Editor" while the manifest is up, and Settings shows as active.
+function updateViewButtons() {
+  const mb = document.getElementById('btn-manifest-toggle');
+  if (mb) {
+    const on = _routeView === 'manifest';
+    mb.innerHTML = on ? ic('pencil') + ' Sim Editor' : ic('user') + ' Character Manifest';
+    mb.onclick = () => showView(on ? 'dash' : 'manifest');
+  }
+  const sb = document.getElementById('btn-settings');
+  if (sb) {
+    const on = _routeView === 'settings';
+    sb.classList.toggle('btn-p', on);
+    sb.classList.toggle('btn-s', !on);
+    sb.innerHTML = ic('settings') + (on ? ' Close Settings' : ' Settings');
+    sb.onclick = () => showView(on ? 'dash' : 'settings');
+  }
+}
+
+function openSettings(fromRoute) { showView('settings', fromRoute); }
+function closeSettings() { if (_routeView === 'settings') showView('dash'); }
+
+// ================================================================
+// SETTINGS VIEW
+// ================================================================
+// Regrouped on the way out of the modal: the things a writer changes often
+// (their account, how it looks, how the editor behaves) come first, with the
+// rarely-touched data, danger and version blocks below them.
+//
+// Most controls here act the moment they are clicked. Only the typed
+// preference fields need an explicit save, which is what the bar at the foot
+// of the page is for.
+function renderSettingsView() {
+  const el = document.getElementById('view-settings');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="set-wrap">
+      <div class="set-head">
+        <span class="set-title">SETTINGS</span>
+        <span class="set-sub">LCARS SB118 Writing Tool &middot; v${APP_VERSION}</span>
+      </div>
+      ${settingsAccountCard()}
+      ${settingsAppearanceCard()}
+      ${settingsEditorCard()}
+      ${settingsDataCard()}
+      ${settingsDangerCard()}
+      ${settingsAboutCard()}
+      <div class="set-bar">
+        <span class="set-note">Fonts, sizes, colours and the editor toggles above are saved together.</span>
+        <button class="btn btn-s" onclick="resetPrefsForm()">Reset to defaults</button>
+        <button class="btn btn-p" onclick="saveSettingsPrefs()">Save preferences</button>
+      </div>
+    </div>`;
+  // The Delta Prime radio groups render their own selected state.
+  setTimeout(updateStyleMenu, 0);
+}
+
+function settingsAccountCard() {
+  return `
+    <div class="set-card">
+      <div class="msec">YOUR ACCOUNT</div>
+      ${isCloud() ? `
+      <div class="set-block">
+        <div style="font-size:0.85rem;line-height:1.7">
+          Signed in as <strong>${esc(getAuth().writerId||'')}</strong>. Your work saves to your account a
+          few seconds after each change, and follows you to any device you sign in on.
+        </div>
+        <div class="set-actions" style="margin-top:10px">
+          <button class="btn btn-s" onclick="saveToCloud()">${ic('arrow-up')} Save now</button>
+          <button class="btn btn-s" onclick="cloudSignOut()">Sign out</button>
+        </div>
+        <div class="set-note"><span id="sync-status">${esc(syncStatus.msg||'')}</span></div>
+        <div class="set-note">Signing out leaves your work on this device untouched. Your online copy is unaffected.</div>
+      </div>
+      ` : isFileCopy() ? `
+      <div class="set-block">
+        <div style="font-size:0.85rem;line-height:1.7">
+          This is the <strong>offline copy</strong>, running from a file on this machine. It never touches
+          the network, and your sims live in this browser alone &mdash; clearing browser data will erase
+          them, so keep taking backups.
+        </div>
+        <div class="set-note">
+          Accounts are only available in LCARS online at
+          <a href="${NEW_HOME}" target="_blank" rel="noopener" style="color:var(--accent)">${NEW_HOME.replace(/^https?:\/\//,'').replace(/\/$/,'')}</a>.
+          A backup taken here restores straight into it.
+        </div>
+      </div>
+      ` : `
+      <div class="set-block">
+        <div style="font-size:0.85rem;line-height:1.7">
+          You are working <strong>offline on this device only</strong>. Nothing is sent anywhere, and your
+          sims live in this browser alone &mdash; clearing browser data will erase them, so keep taking backups.
+        </div>
+        <div class="set-actions" style="margin-top:10px">
+          <button class="btn btn-p" onclick="showAuthGate(true)">Set up an account</button>
+        </div>
+        <div class="set-note"><span id="sync-status"></span></div>
+        <div class="set-note">An account keeps your sims backed up automatically and available on any
+          device. Your work on this device will be carried across.</div>
+      </div>
+      `}
+    </div>`;
+}
+
+function settingsAppearanceCard() {
   const p = getPrefs();
   const theme = S.settings.theme || 'dark';
   const skin = getStyle().skin;
-  openModal('SETTINGS', `
-    <div class="msec">VERSION</div>
-    <div style="display:flex;align-items:center;gap:12px;margin-top:8px;margin-bottom:4px">
-      <span style="font-size:1.4rem;font-weight:bold;color:var(--accent)">v${APP_VERSION}</span>
-      <span style="font-size:0.73rem;color:var(--dim)">LCARS SB118 Writing Tool</span>
-      <button class="btn btn-s" style="margin-left:auto" onclick="document.getElementById('ver-hist').classList.toggle('hidden')">Changelog ${ic('chevron-down')}</button>
-    </div>
-    <div id="ver-hist" class="hidden" style="margin-top:8px;max-height:220px;overflow-y:auto;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px">
-      ${renderVersionHistory()}
-    </div>
+  return `
+    <div class="set-card">
+      <div class="msec">APPEARANCE</div>
 
-    <div class="msec" style="margin-top:18px">DATA MANAGEMENT</div>
-    <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
-      <div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-s" style="flex:1" onclick="exportData()">${ic('download')} Backup Data</button>
-          <button class="btn btn-s" style="flex:1" onclick="importData()">${ic('upload')} Restore Data</button>
+      <div class="set-block">
+        <div class="ml">VISUAL STYLE</div>
+        <div class="set-actions" style="margin-top:5px">
+          <button class="btn btn-s st-btn${skin==='prime'?' btn-p':''}" onclick="setStyleFromSettings('prime',this,event)">${ic('sparkles')} Delta Prime (${STYLE_VERSION})</button>
+          <button class="btn btn-s st-btn${skin==='classic'?' btn-p':''}" onclick="setStyleFromSettings('classic',this,event)">${ic('layout-grid')} Classic LCARS (4.21)</button>
         </div>
-        <div style="font-size:0.73rem;color:var(--dim);margin-top:5px">Saves or restores all your data — Sims, Character Manifest, and preferences. Use Backup regularly to keep a copy outside the browser. <strong>Restore replaces all current data.</strong></div>
+        ${skin==='prime' ? `
+        <div id="sty-settings" style="margin-top:12px">${styleControlsHtml()}</div>
+        <div class="set-note">
+          <strong style="color:var(--amber)">Delta Prime is new in ${STYLE_VERSION}</strong> and still being
+          tuned — Classic LCARS stays available for now, and feedback on either is welcome.
+        </div>` : `
+        <div class="ml" style="margin-top:12px">THEME</div>
+        <div class="set-actions" style="margin-top:5px">
+          <button class="btn btn-s st-btn${theme==='dark'?' btn-p':''}" data-theme="dark" onclick="setThemeFromSettings('dark')">${ic('moon')} Dark</button>
+          <button class="btn btn-s st-btn${theme==='light'?' btn-p':''}" data-theme="light" onclick="setThemeFromSettings('light')">${ic('sun')} Light</button>
+          <button class="btn btn-s st-btn${theme==='hc'?' btn-p':''}" data-theme="hc" onclick="setThemeFromSettings('hc')">${ic('contrast')} High Contrast</button>
+        </div>`}
       </div>
-      <div style="border-top:1px solid var(--border,#333);padding-top:12px">
-        <button class="btn btn-s" onclick="downloadOfflineCopy()">${ic('download')} Download LCARS for offline use</button>
-        <div style="font-size:0.73rem;color:var(--dim);margin-top:5px">One self-contained file you can keep on your own machine and open with no internet at all. Your sims live in that copy's own browser storage, so move work between it and this one with Backup and Restore.</div>
-      </div>
-    </div>
 
-    <div class="msec" style="margin-top:18px">DANGER ZONE</div>
-    <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px;padding:12px;border:1px solid var(--border);border-radius:6px">
-      <div>
-        <button class="btn btn-s" onclick="confirmEraseData()">${ic('trash')} Erase all my sims and characters</button>
-        <div style="font-size:0.73rem;color:var(--dim);margin-top:5px">Empties this copy of LCARS — every mission, scene, sim and character. ${isCloud() ? 'Your account stays, and the erase is synced, so it clears on your other devices too.' : 'Applies to this browser only.'} Cannot be undone. <strong>Take a backup first.</strong></div>
+      <div class="set-block">
+        <div class="ml">TEXT SIZE</div>
+        <div class="set-grid" style="margin-top:5px">
+          <div class="mf" style="margin:0">
+            <label class="ml" for="pf-ls">LINE SPACING</label>
+            <input class="mi" id="pf-ls" type="number" min="1" max="3" step="0.05" value="${p.lineSpacing}">
+          </div>
+          <div class="mf" style="margin:0">
+            <label class="ml" for="pf-efs">EDITOR FONT (pt)</label>
+            <input class="mi" id="pf-efs" type="number" min="8" max="24" step="1" value="${p.editorFontSize}">
+          </div>
+          <div class="mf" style="margin:0">
+            <label class="ml" for="pf-ufs">UI FONT (px)</label>
+            <input class="mi" id="pf-ufs" type="number" min="10" max="22" step="1" value="${p.uiFontSize}">
+          </div>
+        </div>
       </div>
-      ${isCloud() ? `
-      <div style="border-top:1px solid var(--border,#333);padding-top:12px">
-        <button class="btn btn-s" onclick="confirmDeleteAccount()">${ic('alert')} Delete my account and all data</button>
-        <div style="font-size:0.73rem;color:var(--dim);margin-top:5px">Removes your sims, characters and revision history from the server and wipes this device's copy. Your Writer ID stays registered as a login. Cannot be undone.</div>
-      </div>` : ''}
-    </div>
 
-    <div class="msec" style="margin-top:18px">YOUR ACCOUNT</div>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
-      ${isCloud() ? `
-      <div style="font-size:0.8rem;line-height:1.7">
-        Signed in as <strong>${getAuth().writerId||''}</strong>. Your work saves to your account a few seconds after each change, and follows you to any device you sign in on.
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <button class="btn btn-s" onclick="saveToCloud()">${ic('arrow-up')} Save now</button>
-        <button class="btn btn-s" onclick="cloudSignOut()">Sign out</button>
-        <span id="sync-status" style="font-size:0.73rem;color:var(--dim);margin-left:4px">${syncStatus.msg||''}</span>
-      </div>
-      <div style="font-size:0.71rem;color:var(--dim);line-height:1.5">
-        Signing out leaves your work on this device untouched. Your online copy is unaffected.
-      </div>
-      ` : isFileCopy() ? `
-      <div style="font-size:0.8rem;line-height:1.7">
-        This is the <strong>offline copy</strong>, running from a file on this machine. It never touches the network, and your sims live in this browser alone &mdash; clearing browser data will erase them, so keep taking backups.
-      </div>
-      <div style="font-size:0.71rem;color:var(--dim);line-height:1.5">
-        Accounts are only available in LCARS online at <a href="${NEW_HOME}" target="_blank" rel="noopener" style="color:var(--accent)">${NEW_HOME.replace(/^https?:\/\//,'').replace(/\/$/,'')}</a>. A backup taken here restores straight into it.
-      </div>
-      ` : `
-      <div style="font-size:0.8rem;line-height:1.7">
-        You are working <strong>offline on this device only</strong>. Nothing is sent anywhere, and your sims live in this browser alone &mdash; clearing browser data will erase them, so keep taking backups.
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <button class="btn btn-p" onclick="closeModal();showAuthGate(true)">Set up an account</button>
-        <span id="sync-status" style="font-size:0.73rem;color:var(--dim)"></span>
-      </div>
-      <div style="font-size:0.71rem;color:var(--dim);line-height:1.5">
-        An account keeps your sims backed up automatically and available on any device. Your work on this device will be carried across.
-      </div>
-      `}
-    </div>
-
-    <div class="msec" style="margin-top:18px">UI PREFERENCES</div>
-    <div style="margin-top:8px;margin-bottom:10px">
-      <div class="ml" style="margin-bottom:5px">VISUAL STYLE</div>
-      <div style="display:flex;gap:6px;margin-bottom:10px">
-        <button class="btn btn-s st-btn${skin==='prime'?' btn-p':''}" onclick="setStyleFromSettings('prime',this,event)" style="flex:1">${ic('sparkles')} Delta Prime (${STYLE_VERSION})</button>
-        <button class="btn btn-s st-btn${skin==='classic'?' btn-p':''}" onclick="setStyleFromSettings('classic',this,event)" style="flex:1">${ic('layout-grid')} Classic LCARS (4.21)</button>
-      </div>
-      ${skin==='prime' ? `
-      <div id="sty-settings" style="display:flex;flex-direction:column;gap:12px;margin-bottom:10px">
-        ${styleControlsHtml()}
-      </div>
-      <div style="font-size:0.67rem;color:var(--dim);line-height:1.5;margin-bottom:10px">
-        <strong style="color:var(--amber)">Delta Prime is new in ${STYLE_VERSION}</strong> and still
-        being tuned — Classic LCARS stays available for now, and feedback on either is welcome.
-      </div>` : `
-      <div class="ml" style="margin-bottom:5px">THEME</div>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-s st-btn${theme==='dark'?' btn-p':''}" data-theme="dark" onclick="setThemeFromSettings('dark')" style="flex:1"><svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg> Dark</button>
-        <button class="btn btn-s st-btn${theme==='light'?' btn-p':''}" data-theme="light" onclick="setThemeFromSettings('light')" style="flex:1"><svg class="ic" aria-hidden="true"><use href="#i-sun"/></svg> Light</button>
-        <button class="btn btn-s st-btn${theme==='hc'?' btn-p':''}" data-theme="hc" onclick="setThemeFromSettings('hc')" style="flex:1"><svg class="ic" aria-hidden="true"><use href="#i-contrast"/></svg> High Contrast</button>
-      </div>`}
-    </div>
-    <div class="mrow">
-      <div class="mf">
-        <label class="ml">LINE SPACING</label>
-        <input class="mi" id="pf-ls" type="number" min="1" max="3" step="0.05" value="${p.lineSpacing}">
-      </div>
-      <div class="mf">
-        <label class="ml">EDITOR FONT (pt)</label>
-        <input class="mi" id="pf-efs" type="number" min="8" max="24" step="1" value="${p.editorFontSize}">
-      </div>
-      <div class="mf">
-        <label class="ml">UI FONT (px)</label>
-        <input class="mi" id="pf-ufs" type="number" min="10" max="22" step="1" value="${p.uiFontSize}">
-      </div>
-    </div>
-
-    <div class="mrow" style="margin-top:8px">
-      <div class="mf" style="flex:2">
-        <label class="ml">UI FONT</label>
-        <select class="mi" id="pf-uifont">
-          <option value="">Default (system font)</option>
-          ${GOOGLE_FONTS.map(f=>`<option value="${f}"${p.uiFont===f?' selected':''}>${f}</option>`).join('')}
-        </select>
-      </div>
-      <div class="mf" style="flex:2">
-        <label class="ml">EDITOR FONT</label>
-        <select class="mi" id="pf-editorfont" ${p.editorFontSameAsUI?'disabled':''}>
-          <option value="">Default (system font)</option>
-          ${GOOGLE_FONTS.map(f=>`<option value="${f}"${(!p.editorFontSameAsUI&&p.editorFont===f)?' selected':''}>${f}</option>`).join('')}
-        </select>
-      </div>
-      <div class="mf" style="flex:1;display:flex;align-items:flex-end;padding-bottom:6px">
-        <label style="display:flex;align-items:center;gap:6px;font-size:0.73rem;color:var(--dim);cursor:pointer;white-space:nowrap">
-          <input type="checkbox" id="pf-ef-same" style="width:auto" ${p.editorFontSameAsUI?'checked':''} onchange="document.getElementById('pf-editorfont').disabled=this.checked;">
-          Same as UI
+      <div class="set-block">
+        <div class="ml">TYPEFACE</div>
+        <div class="set-grid" style="margin-top:5px">
+          <div class="mf" style="margin:0">
+            <label class="ml" for="pf-uifont">UI FONT</label>
+            <select class="mi" id="pf-uifont">
+              <option value="">Default (system font)</option>
+              ${GOOGLE_FONTS.map(f=>`<option value="${f}"${p.uiFont===f?' selected':''}>${f}</option>`).join('')}
+            </select>
+          </div>
+          <div class="mf" style="margin:0">
+            <label class="ml" for="pf-editorfont">EDITOR FONT</label>
+            <select class="mi" id="pf-editorfont" ${p.editorFontSameAsUI?'disabled':''}>
+              <option value="">Default (system font)</option>
+              ${GOOGLE_FONTS.map(f=>`<option value="${f}"${(!p.editorFontSameAsUI&&p.editorFont===f)?' selected':''}>${f}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:0.76rem;color:var(--dim);cursor:pointer;margin-top:9px">
+          <input type="checkbox" id="pf-ef-same" style="width:auto" ${p.editorFontSameAsUI?'checked':''}
+                 onchange="document.getElementById('pf-editorfont').disabled=this.checked;">
+          Use the UI font in the editor too
         </label>
       </div>
-    </div>
+    </div>`;
+}
 
-    <div class="msec" style="margin-top:18px">SIM EDITOR PREFERENCES</div>
+function settingsEditorCard() {
+  const p = getPrefs();
+  const aid = (id, cid, on, colour, title, code, note) => `
+    <div class="set-check">
+      <input type="checkbox" id="${id}" ${on?'checked':''}>
+      <div style="flex:1;min-width:0">
+        <div class="set-check-t">${title} &nbsp;<code>${code}</code>
+          <input class="mi-color-sm" id="${cid}" type="color" value="${colour}"></div>
+        <div class="set-note" style="margin-top:2px">${note}</div>
+      </div>
+    </div>`;
+  return `
+    <div class="set-card">
+      <div class="msec">SIM EDITOR</div>
 
-    <div class="msub">VISUAL AIDS</div>
-    <div style="font-size:0.73rem;color:var(--dim);margin-bottom:10px">Colour-highlight special lines in the editor. Toggle each aid on/off from the toolbar or here.</div>
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <input type="checkbox" id="pf-ao" ${p.actionOn!==false?'checked':''} style="width:auto;flex-shrink:0;margin-top:3px">
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:8px;font-size:0.73rem;font-weight:bold;color:var(--text)">
-            Action Lines &nbsp;<code>::text::</code>
-            <input class="mi-color-sm" id="pf-ac" type="color" value="${p.actionAccent}">
+      <div class="set-block">
+        <div class="ml">VISUAL AIDS</div>
+        <div class="set-note" style="margin-bottom:10px">Colour-highlight special lines in the editor.
+          Toggle each aid from the toolbar or here.</div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          ${aid('pf-ao','pf-ac',p.actionOn!==false,p.actionAccent,'Action Lines','::text::',
+                'Lines surrounded by <code>::</code> are highlighted as stage directions or action beats.')}
+          ${aid('pf-co','pf-cc',p.commsOn!==false,p.commsAccent,'Comms Lines','=/\\=text=/\\=',
+                'Lines surrounded by <code>=/\\=</code> are highlighted as communications or transmissions.')}
+          ${aid('pf-to','pf-tc',p.thoughtOn!==false,p.thoughtAccent,'Thought Lines','oO text Oo',
+                'Lines surrounded by <code>oO…Oo</code> are highlighted. Italicised when Auto-Formatting is enabled.')}
+        </div>
+      </div>
+
+      <div class="set-block">
+        <div class="ml">AUTO-FORMATTING</div>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
+          <div class="set-check">
+            <input type="checkbox" id="pf-abn" ${p.autoBoldNames?'checked':''}>
+            <div>
+              <div class="set-check-t">Bold Names</div>
+              <div class="set-note" style="margin-top:2px">Automatically bolds character names when detected
+                at the start of a line (e.g. <code>Name:</code>). Formatting persists in copy-paste.</div>
+            </div>
           </div>
-          <div style="font-size:0.73rem;color:var(--dim)">Lines surrounded by <code>::</code> are highlighted as stage directions or action beats.</div>
-        </div>
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <input type="checkbox" id="pf-co" ${p.commsOn!==false?'checked':''} style="width:auto;flex-shrink:0;margin-top:3px">
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:8px;font-size:0.73rem;font-weight:bold;color:var(--text)">
-            Comms Lines &nbsp;<code>=/\\=text=/\\=</code>
-            <input class="mi-color-sm" id="pf-cc" type="color" value="${p.commsAccent}">
+          <div class="set-check">
+            <input type="checkbox" id="pf-ti" ${p.thoughtItalic?'checked':''}>
+            <div>
+              <div class="set-check-t">Italicize Thoughts</div>
+              <div class="set-note" style="margin-top:2px">Automatically italicizes lines marked with
+                <code>oO…Oo</code>. Formatting persists in copy-paste.</div>
+            </div>
           </div>
-          <div style="font-size:0.73rem;color:var(--dim)">Lines surrounded by <code>=/\\=</code> are highlighted as communications or transmissions.</div>
         </div>
       </div>
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <input type="checkbox" id="pf-to" ${p.thoughtOn!==false?'checked':''} style="width:auto;flex-shrink:0;margin-top:3px">
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:8px;font-size:0.73rem;font-weight:bold;color:var(--text)">
-            Thought Lines &nbsp;<code>oO text Oo</code>
-            <input class="mi-color-sm" id="pf-tc" type="color" value="${p.thoughtAccent}">
-          </div>
-          <div style="font-size:0.73rem;color:var(--dim)">Lines surrounded by <code>oO…Oo</code> are highlighted. Italicised when Auto-Formatting is enabled.</div>
-        </div>
-      </div>
-    </div>
 
-    <div class="msub" style="margin-top:14px">TOOLBAR</div>
-    <div class="mrow" style="margin-top:6px">
-      <div class="mf">
-        <label class="ml">MARKER BUTTONS</label>
-        <select class="ms" id="pf-ml">
-          <option value="dropdown" ${p.markerLayout!=='buttons'?'selected':''}>Insert ▾ dropdown (compact)</option>
-          <option value="buttons"  ${p.markerLayout==='buttons'?'selected':''}>Individual buttons (expanded)</option>
-        </select>
+      <div class="set-block">
+        <div class="mf" style="margin:0;max-width:340px">
+          <label class="ml" for="pf-ml">MARKER BUTTONS</label>
+          <select class="ms" id="pf-ml">
+            <option value="dropdown" ${p.markerLayout!=='buttons'?'selected':''}>Insert ▾ dropdown (compact)</option>
+            <option value="buttons"  ${p.markerLayout==='buttons'?'selected':''}>Individual buttons (expanded)</option>
+          </select>
+        </div>
       </div>
-    </div>
+    </div>`;
+}
 
-    <div class="msub" style="margin-top:14px">AUTO-FORMATTING</div>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <input type="checkbox" id="pf-abn" ${p.autoBoldNames?'checked':''} style="width:auto;flex-shrink:0;margin-top:3px">
-        <div>
-          <div style="font-size:0.73rem;font-weight:bold;color:var(--text)">Bold Names</div>
-          <div style="font-size:0.73rem;color:var(--dim)">Automatically bolds character names when detected at the start of a line (e.g. <code>Name:</code>). Formatting persists in copy-paste.</div>
+function settingsDataCard() {
+  return `
+    <div class="set-card">
+      <div class="msec">YOUR DATA</div>
+      <div class="set-block">
+        <div class="set-actions">
+          <button class="btn btn-s" onclick="exportData()">${ic('download')} Backup Data</button>
+          <button class="btn btn-s" onclick="importData()">${ic('upload')} Restore Data</button>
+        </div>
+        <div class="set-note">Saves or restores all your data — sims, Character Manifest and preferences.
+          Use Backup regularly to keep a copy outside the browser.
+          <strong>Restore replaces all current data.</strong></div>
+      </div>
+      <div class="set-block">
+        <div class="set-actions">
+          <button class="btn btn-s" onclick="downloadOfflineCopy()">${ic('download')} Download LCARS for offline use</button>
+        </div>
+        <div class="set-note">One self-contained file you can keep on your own machine and open with no
+          internet at all. Your sims live in that copy's own browser storage, so move work between it and
+          this one with Backup and Restore.</div>
+      </div>
+    </div>`;
+}
+
+function settingsDangerCard() {
+  return `
+    <div class="set-card set-danger">
+      <div class="msec">DANGER ZONE</div>
+      <div class="set-block">
+        <div class="set-actions">
+          <button class="btn btn-s" onclick="confirmEraseData()">${ic('trash')} Erase all my sims and characters</button>
+        </div>
+        <div class="set-note">Empties this copy of LCARS — every mission, scene, sim and character.
+          ${isCloud() ? 'Your account stays, and the erase is synced, so it clears on your other devices too.'
+                      : 'Applies to this browser only.'}
+          Cannot be undone. <strong>Take a backup first.</strong></div>
+      </div>
+      ${isCloud() ? `
+      <div class="set-block">
+        <div class="set-actions">
+          <button class="btn btn-s" onclick="confirmDeleteAccount()">${ic('alert')} Delete my account and all data</button>
+        </div>
+        <div class="set-note">Removes your sims, characters and revision history from the server and wipes
+          this device's copy. Your Writer ID stays registered as a login. Cannot be undone.</div>
+      </div>` : ''}
+    </div>`;
+}
+
+function settingsAboutCard() {
+  return `
+    <div class="set-card">
+      <div class="msec">ABOUT</div>
+      <div class="set-block">
+        <div class="set-actions">
+          <span style="font-size:1.4rem;font-weight:bold;color:var(--accent);flex:0 0 auto">v${APP_VERSION}</span>
+          <button class="btn btn-s" style="flex:0 0 auto;min-width:0"
+                  onclick="document.getElementById('ver-hist').classList.toggle('hidden')">Changelog ${ic('chevron-down')}</button>
+        </div>
+        <div id="ver-hist" class="hidden" style="margin-top:10px;max-height:300px;overflow-y:auto;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px">
+          ${renderVersionHistory()}
         </div>
       </div>
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <input type="checkbox" id="pf-ti" ${p.thoughtItalic?'checked':''} style="width:auto;flex-shrink:0;margin-top:3px">
-        <div>
-          <div style="font-size:0.73rem;font-weight:bold;color:var(--text)">Italicize Thoughts</div>
-          <div style="font-size:0.73rem;color:var(--dim)">Automatically italicizes lines marked with <code>oO…Oo</code>. Formatting persists in copy-paste.</div>
-        </div>
-      </div>
-    </div>
-  `, () => {
-    const ls = parseFloat(document.getElementById('pf-ls').value);
-    const efs = parseInt(document.getElementById('pf-efs').value);
-    const ufs = parseInt(document.getElementById('pf-ufs').value);
-    const ac = document.getElementById('pf-ac').value;
-    const cc = document.getElementById('pf-cc').value;
-    const tc = document.getElementById('pf-tc').value;
-    const ao = document.getElementById('pf-ao').checked;
-    const co = document.getElementById('pf-co').checked;
-    const to_ = document.getElementById('pf-to').checked;
-    const abn = document.getElementById('pf-abn').checked;
-    const ti = document.getElementById('pf-ti').checked;
-    const ml = document.getElementById('pf-ml').value;
-    const uiFont = document.getElementById('pf-uifont').value.trim();
-    const efSame = document.getElementById('pf-ef-same').checked;
-    const editorFont = efSame ? '' : document.getElementById('pf-editorfont').value.trim();
-    if (isNaN(ls)||isNaN(efs)||isNaN(ufs)) { alert('Please enter valid numbers.'); return false; }
-    // Merge so toggles set outside this modal (boldLocations, italicOOC, etc.) are preserved
-    S.settings.prefs = Object.assign({}, S.settings.prefs, {
-      lineSpacing:ls, editorFontSize:efs, uiFontSize:ufs,
-      uiFont, editorFont, editorFontSameAsUI:efSame,
-      actionAccent:ac, commsAccent:cc, thoughtAccent:tc,
-      actionOn:ao, commsOn:co, thoughtOn:to_,
-      autoBoldNames:abn, thoughtItalic:ti, markerLayout:ml
-    });
-    applyPrefs();
-    persist();
-    if (curId) transformNow();
-  }, { ok:'Save', extra:[{label:'Reset to Defaults', cls:'btn-s', fn:'resetPrefsForm()'}] });
+    </div>`;
+}
+
+// Reads the preference fields out of the settings view and commits them.
+function saveSettingsPrefs() {
+  const g = id => document.getElementById(id);
+  if (!g('pf-ls')) return;
+  const ls = parseFloat(g('pf-ls').value);
+  const efs = parseInt(g('pf-efs').value);
+  const ufs = parseInt(g('pf-ufs').value);
+  if (isNaN(ls)||isNaN(efs)||isNaN(ufs)) { alert('Please enter valid numbers for the sizes.'); return; }
+  const efSame = g('pf-ef-same').checked;
+  // Merge, so toggles set outside this page (boldLocations, italicOOC, etc.) survive
+  S.settings.prefs = Object.assign({}, S.settings.prefs, {
+    lineSpacing: ls, editorFontSize: efs, uiFontSize: ufs,
+    uiFont: g('pf-uifont').value.trim(),
+    editorFont: efSame ? '' : g('pf-editorfont').value.trim(),
+    editorFontSameAsUI: efSame,
+    actionAccent: g('pf-ac').value, commsAccent: g('pf-cc').value, thoughtAccent: g('pf-tc').value,
+    actionOn: g('pf-ao').checked, commsOn: g('pf-co').checked, thoughtOn: g('pf-to').checked,
+    autoBoldNames: g('pf-abn').checked, thoughtItalic: g('pf-ti').checked,
+    markerLayout: g('pf-ml').value
+  });
+  applyPrefs();
+  persist();
+  if (curId) transformNow();
+  showToast('Preferences saved');
 }
 
 // ================================================================
@@ -5161,20 +5288,9 @@ function updateManifestThemeBtn() {
   if (btn) btn.innerHTML = ic(t === 'light' ? 'sun' : t === 'hc' ? 'contrast' : 'moon');
 }
 
-function _setManifestToggleBtn(manifestOpen) {
-  const btn = document.getElementById('btn-manifest-toggle');
-  if (!btn) return;
-  if (manifestOpen) {
-    btn.innerHTML = ic('pencil') + ' Sim Editor';
-    btn.onclick = () => closeManifest();
-  } else {
-    btn.innerHTML = ic('user') + ' Character Manifest';
-    btn.onclick = () => openManifest();
-  }
-}
-
-function openManifest(fromRoute) {
-  if (!fromRoute) syncRoute('manifest');
+// Everything the manifest needs before it is shown. Called by showView, which
+// owns the actual display and the URL.
+function prepManifest() {
   if (curId) flushSave(); // prune stale myChars before auto-seeding manifest
   if (!S.characters) S.characters = {};
   // Auto-seed from myChars (checks primary name + aliases)
@@ -5190,7 +5306,6 @@ function openManifest(fromRoute) {
   _srEditMode = false;
   _ribbonEditMode = false;
   renderManifestList();
-  document.getElementById('char-manifest').classList.remove('hidden');
   updateManifestThemeBtn();
   // Auto-open the alphabetically first Primary character
   const firstPrimary = Object.values(S.characters)
@@ -5199,10 +5314,8 @@ function openManifest(fromRoute) {
   if (firstPrimary) selectCharacter(firstPrimary.id);
 }
 
-function closeManifest(fromRoute) {
-  document.getElementById('char-manifest').classList.add('hidden');
-  if (!fromRoute && _routeView === 'manifest') syncRoute('dash');
-}
+function openManifest(fromRoute) { showView('manifest', fromRoute); }
+function closeManifest() { if (_routeView === 'manifest') showView('dash'); }
 
 function openManifestToChar(charId) {
   openManifest();
@@ -6418,7 +6531,6 @@ function deleteTemplate(i) {
 // before, and the routes degrade to the dashboard.
 const ROUTE_VIEWS = ['settings', 'manifest'];
 let _routeView = 'dash';
-let _openingSettings = false;
 
 // Returns {base, view} when the current URL is one this app can route, else
 // null (routing disabled).
@@ -6453,20 +6565,12 @@ function syncRoute(view, replace) {
   history[replace ? 'replaceState' : 'pushState']({ view }, '', url);
 }
 
-// Open the view a URL asks for. Never pushes history itself.
+// Open the view a URL asks for. Never pushes history itself — showView is told
+// the change came from the route, so it swaps the view without touching the
+// address bar the browser has already moved.
 function applyRoute(view) {
-  _routeView = view;
-  if (view === 'manifest') {
-    closeModal(true);
-    if (document.getElementById('char-manifest').classList.contains('hidden')) openManifest(true);
-  } else if (view === 'settings') {
-    closeManifest(true);
-    _openingSettings = true;
-    openSettings(true);
-  } else {
-    closeModal(true);
-    closeManifest(true);
-  }
+  closeModal();
+  showView(ROUTE_VIEWS.includes(view) ? view : 'dash', true);
 }
 
 function bootRoute() {
@@ -6532,7 +6636,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
   renderNav();
   showDashboard();
-  showMovedBanner();                    // only appears on the old GitHub Pages address
+  updateViewButtons();
+  showMovedBanner();                  // only appears on the old GitHub Pages address
   if (isFileCopy() && !getMode()) {
     setMode('local');                   // the offline copy has only one mode
     maybeShowStyleIntro();
