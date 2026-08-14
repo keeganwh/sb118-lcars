@@ -1487,6 +1487,8 @@ const VERSIONS = [
       'Changed: saves reach your account after ~5 seconds instead of ~60, and Ctrl+S still saves a snapshot and syncs immediately',
       'Fixed: restoring a backup did not save to your account — it saved on the device only and would not reach the server until your next edit. Restoring now uploads straight away, which matters most when moving your sims across from the old address',
       'Added: the old GitHub Pages address now shows a moving notice explaining the change, with Move My Stuff (sign in there and your sims and settings upload to your account, ready at the new address), a manual backup download, a link to the new site, and Remind Me Later — which returns on the next load rather than dismissing for good',
+      'Added: a Getting Started wizard on first run, with separate routes for writers new to LCARS and writers arriving from the old address — the latter covering what changed and how to bring sims across, including loading a backup file directly from the wizard. Dismiss it with "Don't show this again", or reopen it any time from Getting Started on the Dashboard',
+      'Added: a Getting Started wizard on first run, with separate routes for writers new to LCARS and writers arriving from the old address \u2014 the latter covering what changed and how to bring sims across, including loading a backup file directly from the wizard. Dismiss it with the \u201cDon\u2019t show this again\u201d button, or reopen it any time from Getting Started on the Dashboard',
       'Fixed: restoring a large backup froze the page for over a second — the whole dataset was being written and the sim tree rebuilt inside the click, with a blocking alert on the end. The work now yields a frame first and reports through a toast',
       'Note: if this browser and your account both hold sims, you are asked which copy to keep rather than one silently replacing the other',
     ],
@@ -2061,6 +2063,170 @@ function applyImport(mode) {
 }
 
 // ================================================================
+// GETTING STARTED WIZARD
+// ================================================================
+// Shown once after the first-run gate resolves, and reopenable any time from
+// the Dashboard. Two routes through it: writers new to LCARS entirely, and
+// writers arriving from the old GitHub Pages version who mainly need to know
+// what changed and how to bring their sims across.
+let _wizStep = 'welcome';
+
+function wizardSeen() { return !!(S.settings && S.settings.wizardDone); }
+
+function markWizardSeen() {
+  if (!S.settings) S.settings = {};
+  S.settings.wizardDone = true;
+  persist();
+  if (isCloud()) schedSync(2000);
+}
+
+function maybeShowWizard() {
+  if (wizardSeen()) return;
+  showWizard();
+}
+
+function showWizard() {
+  closeWizard();
+  const el = document.createElement('div');
+  el.id = 'wiz';
+  el.style.cssText = 'position:fixed;inset:0;z-index:8800;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,0.72);overflow:auto';
+  el.innerHTML = `
+    <div style="width:100%;max-width:560px;background:var(--panel,#1b1b1b);border:1px solid var(--border,#333);border-radius:10px;padding:26px 24px;max-height:88vh;overflow:auto">
+      <div id="wiz-body"></div>
+    </div>`;
+  document.body.appendChild(el);
+  wizGo('welcome');
+}
+
+function closeWizard() {
+  const el = document.getElementById('wiz');
+  if (el) el.remove();
+}
+
+// "Don't show again" is explicit and separate from simply closing, so a writer
+// who closes mid-way still gets the wizard back next time.
+function wizFinish(remember) {
+  if (remember) markWizardSeen();
+  closeWizard();
+}
+
+function wizFoot(backStep) {
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:20px;padding-top:14px;border-top:1px solid var(--border,#333)">
+      ${backStep ? `<button class="btn btn-s" onclick="wizGo('${backStep}')">Back</button>` : ''}
+      <div style="flex:1"></div>
+      <button class="btn btn-s" onclick="wizFinish(true)">Don't show this again</button>
+      <button class="btn btn-s" onclick="wizFinish(false)">Close</button>
+    </div>`;
+}
+
+function wizGo(step) {
+  _wizStep = step;
+  const b = document.getElementById('wiz-body');
+  if (!b) return;
+  b.innerHTML = WIZ[step] ? WIZ[step]() : WIZ.welcome();
+  b.parentElement.scrollTop = 0;
+}
+
+const WIZ = {
+  welcome: () => `
+    <div style="font-size:1.15rem;font-weight:700;margin-bottom:10px">Welcome to LCARS</div>
+    <p style="font-size:0.87rem;line-height:1.65;color:var(--dim);margin:0 0 8px">
+      LCARS is a writing tool for Starbase 118 — somewhere to draft your sims, keep them organised by mission and scene, and track your characters.
+    </p>
+    <p style="font-size:0.87rem;line-height:1.65;color:var(--dim);margin:0 0 18px">
+      Which of these sounds like you?
+    </p>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('new1')">I'm new to LCARS</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizGo('ret1')">I've used LCARS before</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizFinish(true)">Skip — let me get on with it</button>
+    </div>
+    <div style="font-size:0.72rem;color:var(--dim);margin-top:14px;line-height:1.5">
+      You can reopen this any time from the Dashboard.
+    </div>`,
+
+  // ---------- new writers ----------
+  new1: () => `
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">How your writing is organised</div>
+    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
+      <p style="margin:0 0 10px">Three levels, largest to smallest:</p>
+      <p style="margin:0 0 8px"><strong style="color:var(--text)">Missions</strong> — a storyline your ship is playing through.</p>
+      <p style="margin:0 0 8px"><strong style="color:var(--text)">Scenes</strong> — a thread within a mission. The bridge, sickbay, an away team.</p>
+      <p style="margin:0 0 8px"><strong style="color:var(--text)">Sims</strong> — the individual posts you write. These live inside a scene.</p>
+      <p style="margin:10px 0 0">Start a mission, add a scene, then write. You can always move a sim later if you put it in the wrong place.</p>
+    </div>
+    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('new2')">Next</button></div>
+    ${wizFoot('welcome')}`,
+
+  new2: () => `
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Writing a sim</div>
+    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
+      <p style="margin:0 0 10px">The editor formats sim conventions as you type:</p>
+      <p style="margin:0 0 6px"><code>::Action::</code> — an action beat</p>
+      <p style="margin:0 0 6px"><code>=/\\= Comms =/\\=</code> — over comms</p>
+      <p style="margin:0 0 6px"><code>oO Thoughts Oo</code> — internal thought</p>
+      <p style="margin:0 0 6px"><code>((Location))</code> and <code>((OOC))</code></p>
+      <p style="margin:10px 0 0">Character names bold themselves once LCARS knows who is in a scene. When you're done, the copy button puts the sim on your clipboard with formatting intact, ready to paste into email or Discord.</p>
+    </div>
+    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('acct')">Next</button></div>
+    ${wizFoot('new1')}`,
+
+  // ---------- returning writers ----------
+  ret1: () => `
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">What's changed</div>
+    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
+      <p style="margin:0 0 10px"><strong style="color:var(--text)">LCARS has a new home and accounts.</strong> Sign in with your Writer ID and your sims save automatically and follow you to any device — no export files, no tokens to set up.</p>
+      <p style="margin:0 0 10px"><strong style="color:var(--text)">Gist sync is gone.</strong> It capped out around 1 MB. Accounts replace it with no practical limit. Your old Gist is untouched and still on GitHub if you want the file.</p>
+      <p style="margin:0 0 10px"><strong style="color:var(--text)">The Google Docs importer is gone.</strong> It was clumsy; better ways to bring sims in are coming.</p>
+      <p style="margin:0"><strong style="color:var(--text)">You can still work offline</strong> if you'd rather not have an account — everything stays in this browser and nothing is sent anywhere.</p>
+    </div>
+    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('ret2')">Next — bringing my sims across</button></div>
+    ${wizFoot('welcome')}`,
+
+  ret2: () => `
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Bringing your sims across</div>
+    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
+      <p style="margin:0 0 10px">Your old sims are still on the address you used before. Browsers keep each web address's data separate, so they don't come across on their own.</p>
+      <p style="margin:0 0 10px"><strong style="color:var(--text)">The easy way:</strong> go back to the old address and click <em>Move My Stuff</em> in the notice at the bottom. Sign in there, your sims upload, and they'll be waiting when you sign in here.</p>
+      <p style="margin:0 0 10px"><strong style="color:var(--text)">Or with a backup file:</strong> if you've already downloaded one, load it now.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizImportBackup()">Load a backup file</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizGo('acct')">${isCloud() ? 'Next' : 'Next — set up an account'}</button>
+    </div>
+    ${wizFoot('ret1')}`,
+
+  // ---------- shared tail ----------
+  acct: () => isCloud() ? `
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">You're all set</div>
+    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
+      <p style="margin:0 0 10px">You're signed in as <strong style="color:var(--text)">${(getAuth().writerId)||''}</strong>. Your work saves to your account a few seconds after each change, and will be there on any device you sign in on.</p>
+      <p style="margin:0">A backup is still worth taking now and then — Settings → Backup Data.</p>
+    </div>
+    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true)">Start writing</button></div>
+    ${wizFoot(null)}` : `
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Keep your work safe</div>
+    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
+      <p style="margin:0 0 10px">You're working offline, so your sims live in this browser alone. Clearing your browser data would erase them.</p>
+      <p style="margin:0 0 10px">An account fixes that — it needs your SB118 Writer ID and a PIN of your choice, nothing else. Your work on this device comes across with you.</p>
+      <p style="margin:0">Prefer to stay offline? That's fine — just take backups from Settings regularly.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true);showAuthGate(true)">Set up an account</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizFinish(true)">Stay offline for now</button>
+    </div>
+    ${wizFoot(null)}`
+};
+
+// Reuses the normal restore path, so the file is validated and the
+// merge/overwrite choice is the same one Settings offers.
+function wizImportBackup() {
+  closeWizard();
+  markWizardSeen();
+  importData();
+}
+
+// ================================================================
 // MOVED NOTICE — old GitHub Pages address only
 // ================================================================
 // Pages and Vercel serve the same file from main, so this is keyed off the
@@ -2166,6 +2332,7 @@ function gateChoice(fromSettings) {
 function gateUseOffline() {
   setMode('local');
   gateClose();
+  maybeShowWizard();
 }
 
 function gateForm(kind) {
@@ -2221,6 +2388,7 @@ async function gateSubmit(kind) {
     gateClose();
     await cloudBoot();
     showToast('Signed in as ' + normalizeWriterId(wid));
+    maybeShowWizard();
   } catch(e) {
     msg.style.color = 'var(--red,#c66)';
     msg.textContent = e.message || 'Something went wrong. Please try again.';
@@ -2360,6 +2528,11 @@ function renderDashboard() {
         <div class="da-icon">${ic('user')}</div>
         <div class="da-label">Character Manifest</div>
         <div class="da-hint">View and manage your characters</div>
+      </button>
+      <button class="dash-action" onclick="showWizard()">
+        <div class="da-icon">${ic('sparkles')}</div>
+        <div class="da-label">Getting Started</div>
+        <div class="da-hint">A quick tour, and how to bring old sims across</div>
       </button>
       <button class="dash-action" onclick="window.open('LCARS-Guide-v2.html','_blank')">
         <div class="da-icon">${ic('book-open')}</div>
@@ -7151,10 +7324,11 @@ document.addEventListener('DOMContentLoaded',()=>{
   showDashboard();
   showMovedBanner();                    // only appears on the old GitHub Pages address
   if (!getMode()) {
-    showAuthGate(false);                // first visit — offer account or offline
+    showAuthGate(false);                // first visit — the wizard follows once resolved
   } else {
     if (isCloud()) cloudBoot();         // signed in — pull the server copy
     maybeShowStyleIntro();              // held back behind the gate on a first visit
+    maybeShowWizard();
   }
 });
 </script>
