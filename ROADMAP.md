@@ -1,152 +1,124 @@
 # LCARS SB118 Writing Tool — Roadmap
 
-_Outstanding work only, grouped in phases. Current version: **4.22**._
+_Outstanding work only, in the user's priority order. Current version: **4.22** (unreleased changes pending)._
 
-Each item has a **Done when…** so any session can pick it up and run without asking. Check items off (`- [x]`) as they ship, and delete them once they're rolled into a released version's changelog. This is a living doc — add new outstanding work here rather than in scattered notes.
+Each item has a **Done when…** so any session can pick it up and run without asking. Check items off (`- [x]`) as they ship, and delete them once they're rolled into a released version's changelog.
 
-> **Planned 2026-08-14.** A major platform shift was scoped this session: move off GitHub Pages + Gist onto Vercel + Supabase, with real logins keyed to Writer IDs, automatic cloud sync, Joint Posts, and a Google Groups browser extension. The phases below replace the old Phase 1 Gist-ceiling work — the ceiling stops existing once data moves to a database. Full plan detail lives in `memory/session_lcars_2026-08-platform-plan.md`.
+> **Context.** The platform shift shipped 2026-08-14: Vercel hosting, Supabase accounts keyed to Writer IDs, automatic sync, an offline path, an onboarding wizard and a migration flow off GitHub Pages. What shipped, why, and the landmines are in `memory/session_lcars_2026-08-platform-plan.md` — **read that first.**
 
----
-
-## Phase 1 — Hosting move (do first, low risk)
-
-- [x] **Deploy from Vercel instead of GitHub Pages.** — _done 2026-08-14._
-      Live at **https://sb118-lcars.vercel.app/**. `vercel.json` rewrites `/` → `/LCARS.html` and `/guide` → the user guide; `LCARS.html` is served `must-revalidate` so deploys reach users on next load. `LCARS-prototype.html` removed from the repo (was being served publicly, nothing referenced it).
-
-- [ ] **Grace period on GitHub Pages.**
-      Pages is still live and still auto-deploys from `main`. Add a banner on the Pages build pointing at the Vercel URL, then retire Pages once writers have moved.
-      _Done when: Pages either shows the banner or is switched off, and no one is landing on the old URL unaware._
-
-- [ ] **Custom domain (optional).**
-      Can be added in Vercel settings at any time without redoing anything.
-      _Done when: decided — a domain is pointed at the deployment, or this is explicitly dropped in favour of the `.vercel.app` subdomain._
-
-> **Origin change caveat:** `localStorage` is per-origin, so data on the Pages URL does **not** appear on the Vercel URL. Until Phase 2 lands, moving between them needs a Backup Data export + Import, or a Gist pull. Phase 2 removes this problem permanently.
+Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same `main` with a moving notice.
 
 ---
 
-## Phase 2 — Accounts and cloud data
+## Session 1 — Foundation: split the file
 
-Branch `claude/cloud-sync`. **Built and testing; not yet merged to `main`.**
+Not a tidy-up done first — it is what `/settings` and `/s/<token>` are built on. Multiple pages cannot share 7,500 lines without it.
 
-- [x] **Supabase schema + row-level security.** — `supabase/schema.sql`, run 2026-08-14.
-- [x] **Auth: Writer ID + PIN.** Account email derived as `<writerid>@lcars.local`, so signing in needs no server lookup. Optional recovery email stored.
-- [x] **Replace the Gist sync layer.** `saveToCloud`/`loadFromCloud` over plain fetch — no CDN client, so the file stays single and dependency-free. `schedSync` kept its name and signature. PAT and Gist ID fields removed.
-- [x] **Offline / no-account path.** First-run gate offers an account or offline-on-this-device. Every network call gated on `isCloud()`.
-- [x] **Snapshots moved out of the synced payload** into their own table, fetched on demand, with a one-time backfill of existing local history.
-- [x] **Migration.** Restoring a backup now uploads immediately.
-- [x] **Removals.** Google Docs / Markdown importer, Gist PAT UI.
+- [ ] **Split `LCARS.html` into `LCARS.html` + `lcars.css` + `lcars.js`.**
+      Relative paths, so the app still runs on GitHub Pages and from a local folder. No behaviour change of any kind.
+      _Done when: the app loads from three files with no visible difference, and a full browser pass (gate, wizard, editor, manifest, settings, sync) shows no console errors._
 
-- [ ] **Cross-device verification.** _Deferred — no second device to hand._ Incognito sign-in confirmed data is served from the account rather than local storage, which covers the core promise. Still unverified: snapshot history fetched on a genuinely different device.
-      _Done when: a sim written on device A shows its full snapshot history on device B._
+- [ ] **Keep the offline download a single file.**
+      A Vercel serverless route that inlines the three back together on demand, so "download and run offline" still means one file. The Settings download button points at it.
+      _Done when: the downloaded file opens from disk with the network off and works fully._
 
-- [ ] **Read-only share links — sims only.**
-      `share_token` on a doc plus a `/s/<token>` route. Scenes explicitly out of scope.
-      _Done when: a share URL opens in a logged-out private window, renders the sim, and nothing is editable._
+> **Landmine:** structural edits to this file have already silently deleted an entire module once — a syntax check cannot see a valid block going missing. Verify in the headless browser after every step (Playwright at `/opt/node22/lib/node_modules/playwright`; watch `pageerror`).
+
+---
+
+## Session 2 — Settings page and account management
+
+- [ ] **Move Settings out of the modal to `/settings`.**
+      The panel is overstuffed. Regroup it while moving. Build it responsive from the start so the later mobile session does not have to redo it.
+      _Done when: settings is its own page, every existing setting still works, and it is usable on a phone._
+
+- [ ] **Account management.**
+      Change PIN, update or add a recovery email, see which Writer ID you are signed in as, sign out, delete account. Gathers the scattered account bits into one place.
+      _Done when: a writer can change their PIN and recovery email without leaving LCARS._
+
+---
+
+## Session 3 — Server functions (one Edge Function, two features)
+
+Both are blocked on the same thing: the `service_role` key, which must never be in a page served to writers. Do them together.
 
 - [ ] **Self-serve PIN reset.**
-      Currently a forgotten PIN is reset by hand from the Supabase dashboard, because the auth email is synthetic and cannot receive mail. Needs an Edge Function plus an email sender, keyed off `writers.recovery_email`.
+      Distinct from the recovery email we already store — that is currently just text for identification, nothing sends to it. Needs the function plus an email sender, keyed off `writers.recovery_email`.
       _Done when: a writer who gave a recovery email can reset their own PIN without the maintainer._
 
-- [ ] **Retire the GitHub Pages address.**
-      Pages now shows a dismissible notice pointing at the Vercel URL. Switch Pages off once writers have moved.
-      _Done when: Pages is disabled and nobody is landing on the old URL._
-
-**Dropped: Google / Discord sign-in.** Writer ID + PIN is sufficient, and the fleet's own SSO is the likely long-term route — building OAuth now would mean building it twice.
+- [ ] **True account deletion.**
+      Today "delete account" removes every data row but leaves the login registered, because the anon key cannot delete an auth user. The function closes that gap.
+      _Done when: deleting an account also removes the login, freeing the Writer ID to be registered again._
 
 ---
 
-## Phase 2.5 — Onboarding and the guide
+## Session 4 — Read-only share links
 
-Needed before this is shared with anyone else.
+- [ ] **Shareable sim links — sims only.**
+      `share_token` on a doc plus a `/s/<token>` route. Scenes explicitly out of scope. Responsive from the start — these will be opened on phones constantly.
+      _Done when: a share URL opens in a logged-out private window, renders the sim, and nothing is editable._
 
-- [ ] **Intro wizard on first run.**
-      Three audiences: writers new to LCARS entirely, existing writers meeting the online version for the first time (what changed, what an account gets them, that their old data needs a backup and restore), and anyone who wants to skip straight in.
-      _Done when: a first-time visitor reaches a written sim without asking anyone how, and the skip option is always one click away._
+---
 
-- [ ] **Rewrite the user guide.**
-      `LCARS-Guide-v2.html` predates accounts, the Delta Prime skin and the importer removal. Starting fresh is likely cleaner than patching it.
+## Session 5 — Version cut and guide rewrite
+
+- [ ] **Cut a release.** A large pending changelog block has built up under 4.22. **Ask the user before cutting** — version bumps are theirs to trigger.
+- [ ] **Rewrite the guide.**
+      `LCARS-Guide-v2.html` predates accounts, Delta Prime and the importer removal. Start fresh and fundamentally rethink the format rather than patching.
       _Done when: the guide matches the shipped app, with no references to Gist, PATs or the Markdown importer._
 
 ---
 
-## Phase 2.6 — Mobile
+## Next priority
 
-Flagged as important, not urgent. Needs the user's testing and feedback to drive it.
+- [ ] **Google Groups extension.**
+      New `extension/` directory, MV3, content script scoped to `groups.google.com`, porting the existing dev-console script into a "Send to LCARS" button. Writes to Supabase as an inbox row so LCARS need not be open. Loaded unpacked.
+      _Done when: a real thread can be grabbed and appears in the LCARS inbox with formatting intact._
+      _An iframe cannot work — Google sends `X-Frame-Options`. A bookmarklet is fragile against their CSP._
 
-- [ ] **Make the app usable on a phone.**
-      The layout assumes a wide screen with two resizable sidebars, and the editor toolbar is dense. Expect real work in the sidebars, the toolbar and the editor itself.
+- [ ] **Mobile optimisation.**
+      Deliberately after the feature reworks so it covers them. New pages built in sessions 2 and 4 should already be responsive, leaving the editor, toolbar and the two resizable sidebars as the real work.
       _Done when: a sim can be read, written and copied out on a phone without pinch-zooming._
 
----
-
-## Phase 3 — Joint Posts (depends on Phase 2)
-
-- [ ] **New sim class: JP, turn-based with live presence.**
-      Owner creates a JP, invites writers by Writer ID, they accept, it appears in their sidebar. One writer holds a soft edit lock at a time; others see "X is writing…" and receive changes on save, via Supabase Realtime. New tables `jp_members`, `jp_lock`, `invitations`; docs gain `docType: 'sim' | 'jp'`; RLS widens to "own rows OR rows you're a member of."
-      _Done when: two browsers with two Writer IDs can invite, accept, hand the lock back and forth without clobbering each other, and a non-member cannot load the doc._
-
-- [ ] **Explicitly NOT building: simultaneous typing.**
-      Two cursors in one paragraph needs CRDT/OT layered onto a hand-rolled `contenteditable` — the largest and riskiest piece of work available. Revisit only if turn-based proves insufficient in practice.
+- [ ] **Joint Posts.**
+      Turn-based with live presence: invite by Writer ID, accept, one soft edit lock at a time, others see "X is writing…" via Supabase Realtime. Tables `jp_members`, `jp_lock`, `invitations`; docs gain `docType`; RLS widens to "own rows OR rows you're a member of."
+      _Done when: two browsers with two Writer IDs can invite, accept and hand the lock back and forth without clobbering each other, and a non-member cannot load the doc._
+      _Explicitly NOT building: simultaneous typing. CRDT/OT on a hand-rolled `contenteditable` is the largest and riskiest work available, for something PBEM does not need._
 
 ---
 
-## Phase 4 — Character wiki import (independent — can run early)
+## Low priority
 
-Currently one-way: three generators emit MediaWiki markup, nothing reads it.
+- [ ] **Reconcile prompt — add an "I'm not sure" option.**
+      When this browser and the account both hold sims, offer a third choice that merges the two (union of missions, scenes and docs) rather than picking a winner. Safest default for anyone unsure.
+      _Done when: choosing it keeps every sim from both copies._
 
-- [ ] **Parse wikitext back in.**
-      `parseServiceRecordWikitext()` and `parseRibbonsWikitext()` as inverses of the existing `copySRWikitext` / `copyRibbonsWikitext` / `copyMissionLogWikitext`. Fetch by URL via the MediaWiki API (`?action=raw`) through a small Vercel serverless proxy for CORS; also accept pasted wikitext. Match ribbon names against the existing `RIBBON_CATALOG` / `buildRibbonLookup`; surface unmatched names for manual pairing rather than guessing a filename. Import preview → confirm → merge, never blind overwrite.
-      _Done when: a known character's wiki page imports with service record and ribbons matching the page, and exporting back produces equivalent wikitext._
-
-- [ ] **Fix the array editors while in here.**
-      Switch the service-record, ribbon and alias editors from index-addressed inline handlers to the stable `id`s the rows already carry. Fix `moveRibbon`, which reorders the raw array while the view may be sorted, so display and stored order can diverge.
-      _Done when: deleting or reordering a row mid-edit no longer mis-targets a neighbouring row._
-
----
-
-## Phase 5 — Google Groups extension (self-contained, own session)
-
-- [ ] **Small MV3 browser extension.**
-      New `extension/` directory. Content script scoped to `groups.google.com`, porting the existing dev-console script into a "Send to LCARS" button on a thread. Extracts author, date, subject, body; writes to Supabase as an inbox row so LCARS need not be open. LCARS grows an "Incoming sims" tray. Loaded unpacked — no store submission.
-      _Done when: a real thread can be grabbed and appears in the LCARS inbox with formatting intact._
-      _Note: an iframe cannot work — Google sends `X-Frame-Options` on Groups. A bookmarklet is fragile against their CSP. The extension is the only durable approach._
+- [ ] **Character wiki import.**
+      `parseServiceRecordWikitext()` / `parseRibbonsWikitext()` as inverses of the existing `copySRWikitext` / `copyRibbonsWikitext` / `copyMissionLogWikitext`. Fetch by URL via the MediaWiki API through a serverless proxy for CORS; also accept pasted wikitext. Match against `RIBBON_CATALOG` / `buildRibbonLookup`, surfacing unmatched names rather than guessing filenames. Preview → confirm → merge, never blind overwrite.
+      _Done when: a known character's wiki page imports with service record and ribbons matching the page._
+      _While in here: the service-record, ribbon and alias editors are index-addressed in inline handlers despite rows carrying stable `id`s, and `moveRibbon` reorders the raw array while the view may be sorted._
 
 ---
 
-## Phase 6 — Backlog / later
+## Remind me later
 
-- [ ] **Split `LCARS.html` into `LCARS.html` + `lcars.css` + `lcars.js`.**
-      Vercel serves static siblings with no build step. **Catch:** the offline path promises one downloadable file, so this needs a serverless route that inlines the three back together on demand. Do this *after* Phases 1–2 — the gain is developer velocity, not user-facing function.
-      _Done when: the site loads from three files and the offline download is still a single working file._
-
-- [ ] **Snapshot diffs — only if still needed.**
-      Moving snapshots into their own table (Phase 2) takes them out of the hot path and captures most of the benefit. Diffs shrink storage further but add a failure mode where one corrupted diff breaks reconstruction.
-      _Done when: a decision is recorded here — implement or explicitly defer, with measured sizes as the reason._
-
-- [ ] **Multi-sim parsing integration** _(friend's side project)._
-      Copy/paste multiple sims, parse the components, recombine into one document. Tested as integrating well with LCARS. Overlaps conceptually with Joint Posts — compare notes before building either.
-      _Done when: the side-developed approach is ready to integrate, then wired into the editor._
-
-- [ ] **Delta Prime follow-ups.**
-      - [ ] Gather feedback on Delta Prime vs Classic, then decide whether Classic stays supported long-term or is retired.
-      - [ ] Test Epic mood on integrated graphics before considering it as a default — `backdrop-filter` on region surfaces is the one real performance risk (StyleHandoff §7).
-
-- [ ] _Add real feature requests here as they come up._ Keep each one to a one-line description plus a **Done when…** so it's pickup-ready.
+- [ ] **Cross-device snapshot check.** Probably works; fix surgically if not. _Done when: a sim written on device A shows its full snapshot history on device B._
+- [ ] **Retire GitHub Pages.** No harm in it running while it actively forwards people to Vercel. _Done when: Pages is switched off._
+- [ ] **Sim-parsing integration** _(friend's side project)._ Copy/paste multiple sims, parse the components, recombine. Overlaps conceptually with Joint Posts — compare notes before building either.
 
 ---
 
-## Superseded
+## Decided against
 
-The old Phase 1 (data-size indicator, solving the 1 MB Gist ceiling, hardening the three-tier pull fallback) is **dropped, not forgotten** — moving to a database removes the ceiling entirely rather than working around it. If Phase 2 stalls or is abandoned, restore those items from git history; they were the correct fix for the Gist architecture.
-
-Documentation (old Phase 2) is complete: `ROADMAP.md`, `TECH_STACK.md`, `USER_PROTOCOLS.md`, `CLAUDE.md` all current.
+- **Snapshot diffs.** Dropped 2026-08-14. The benefit disappeared when snapshots moved out of the synced payload — they are no longer re-uploaded on every save, and the table has no practical size limit at this scale. Diffs would add a failure mode (one corrupt diff breaks the reconstruction chain) to solve a problem that no longer exists.
+- **Custom domain.** Not happening; the `.vercel.app` subdomain stands.
+- **Google / Discord sign-in.** Writer ID + PIN is sufficient, and the fleet's own SSO is the likely long-term route — building OAuth now would mean building it twice.
 
 ---
 
 ## How to use this file
 
-1. Work top-down by phase; Phase 1 first. Phase 4 is independent and can jump the queue.
+1. Work top-down. Sessions 1–5 are ordered by dependency as well as priority.
 2. When you finish an item, check it off in the same commit as the code change.
-3. When a version is cut ("save new version X.Y"), move the shipped items' descriptions into `CHANGELOG.md` and delete them here.
+3. When a version is cut, move the shipped items' descriptions into `CHANGELOG.md` and delete them here.
 4. Never let an item sit without a **Done when…** — if you can't write one, it's not ready to be on the roadmap.
