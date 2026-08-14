@@ -1479,6 +1479,7 @@ const VERSIONS = [
     date: '2026-08-14',
     changes: [
       'Removed: the "Import Sims" Markdown/Google Docs importer in Settings — exporting a Doc to Markdown and re-importing it was clunky, and better ways to bring sims in are being built. Backup and Restore are unaffected',
+      'Changed: Writer ID entry now checks the real ten-character format (ship letter, stardate year and month, two initials, academy digit) and the example shown is a placeholder, not a real writer',
       'Added: accounts. Sign in with your Writer ID and a PIN, and your sims save to your account automatically and follow you to any device — no tokens, no export files. An optional recovery email can be given when creating the account',
       'Added: a first-run choice between signing in and working offline on one device only. Offline sends nothing anywhere; you can switch to an account later from Settings, and your existing work is carried across',
       'Changed: cloud sync now uses a proper database instead of a GitHub Gist. The Gist was capped near 1 MB and this data was close to it; that ceiling is gone. The Personal Access Token and Gist ID fields are removed — nothing to set up any more',
@@ -2069,13 +2070,15 @@ function getAuth() { try { return JSON.parse(localStorage.getItem(AUTH_KEY) || '
 function saveAuth(a) { try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e) {} }
 function clearAuth() { try { localStorage.removeItem(AUTH_KEY); } catch(e) {} }
 
-// Writer IDs look like A239809JP3 — a ship prefix, a joining date, a suffix.
-// Validation is deliberately loose: the shape varies, and locking a real writer
-// out is far worse than accepting a typo.
+// A writer ID is ten characters: first letter of the writer's first ship, the
+// four-digit stardate year, the two-digit month, the character's first and last
+// initials (last becomes 1 for a single-named character), then the academy list
+// digit. e.g. A239809JP3.
+// The two initial positions are left loose rather than pinned to letters, since
+// that is where the format's documented exceptions live.
 function normalizeWriterId(s) { return (s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
 function validWriterId(s) {
-  const w = normalizeWriterId(s);
-  return w.length >= 6 && w.length <= 20 && /[A-Z]/.test(w) && /[0-9]/.test(w);
+  return /^[A-Z]\d{6}[A-Z0-9]{2}\d$/.test(normalizeWriterId(s));
 }
 // The auth account's email is derived from the Writer ID, so signing in needs no
 // server-side lookup. It is a synthetic address and never receives mail.
@@ -2321,7 +2324,7 @@ function gateForm(kind) {
     </div>
     <div class="mf" style="margin-bottom:10px">
       <label class="ml">WRITER ID</label>
-      <input class="mi" id="gate-wid" type="text" placeholder="A239809JP3" autocomplete="username" spellcheck="false" style="text-transform:uppercase">
+      <input class="mi" id="gate-wid" type="text" placeholder="A239809JP3" maxlength="10" autocomplete="username" spellcheck="false" style="text-transform:uppercase">
     </div>
     <div class="mf" style="margin-bottom:10px">
       <label class="ml">PIN <span style="font-weight:normal;opacity:0.6">(at least 6 characters)</span></label>
@@ -2354,7 +2357,7 @@ async function gateSubmit(kind) {
   const pin = document.getElementById('gate-pin').value || '';
   const email = (document.getElementById('gate-email') || {}).value || '';
 
-  if (!validWriterId(wid)) { msg.textContent = 'That does not look like a Writer ID — it should be letters and numbers, like A239809JP3.'; return; }
+  if (!validWriterId(wid)) { msg.textContent = 'That does not look like a Writer ID — it should be ten characters, like A239809JP3.'; return; }
   if (pin.length < 6) { msg.textContent = 'Your PIN needs to be at least 6 characters.'; return; }
 
   msg.style.color = 'var(--dim)';
