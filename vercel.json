@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/", "destination": "/LCARS.html" },
+    { "source": "/guide", "destination": "/LCARS-Guide-v2.html" }
+  ],
+  "headers": [
+    {
+      "source": "/LCARS.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    }
+  ]
+}
