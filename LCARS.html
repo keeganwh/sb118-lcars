@@ -1479,6 +1479,11 @@ const VERSIONS = [
     date: '2026-08-14',
     changes: [
       'Removed: the "Import Sims" Markdown/Google Docs importer in Settings — exporting a Doc to Markdown and re-importing it was clunky, and better ways to bring sims in are being built. Backup and Restore are unaffected',
+      'Added: accounts. Sign in with your Writer ID and a PIN, and your sims save to your account automatically and follow you to any device — no tokens, no export files. An optional recovery email can be given when creating the account',
+      'Added: a first-run choice between signing in and working offline on one device only. Offline sends nothing anywhere; you can switch to an account later from Settings, and your existing work is carried across',
+      'Changed: cloud sync now uses a proper database instead of a GitHub Gist. The Gist was capped near 1 MB and this data was close to it; that ceiling is gone. The Personal Access Token and Gist ID fields are removed — nothing to set up any more',
+      'Changed: saves reach your account after ~5 seconds instead of ~60, and Ctrl+S still saves a snapshot and syncs immediately',
+      'Note: if this browser and your account both hold sims, you are asked which copy to keep rather than one silently replacing the other',
     ],
   },
 ];
@@ -2040,134 +2045,332 @@ function applyImport(mode) {
 }
 
 // ================================================================
-// GIST SYNC
+// CLOUD SYNC (Supabase)
 // ================================================================
-const SYNC_KEY = 'lcars_sync_v1';
-const GIST_FILE = 'lcars-data.json';
-let syncTimer = null;
-let syncStatus = { state: 'idle', msg: '' }; // 'idle' | 'ok' | 'error'
+// Talks to Supabase over plain fetch rather than their CDN client, so the app
+// stays a single dependency-free file and still works with no network at all.
+// Two independent ideas live here:
+//   * mode  — 'cloud' (signed in, data on the server) or 'local' (offline, this
+//             browser only). Every network call is gated on mode === 'cloud'.
+//   * auth  — the Supabase session, refreshed on demand when a call 401s.
+const SUPA_URL  = 'https://nyjpqaelilrqzmnangft.supabase.co';
+const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55anBxYWVsaWxycXptbmFuZ2Z0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NzMwMDIsImV4cCI6MjEwMjI0OTAwMn0.uYUMt49TBW3S_LLse5ZreDQgfL74frlf01jSoHa1qkU';
+const AUTH_KEY  = 'lcars_auth_v1';
+const MODE_KEY  = 'lcars_mode_v1';
 
-function getSyncConfig() {
-  try { return JSON.parse(localStorage.getItem(SYNC_KEY)||'{}'); } catch(e) { return {}; }
+let syncTimer = null;
+let syncStatus = { state: 'idle', msg: '' }; // 'idle' | 'syncing' | 'ok' | 'error'
+
+function getMode() { try { return localStorage.getItem(MODE_KEY) || ''; } catch(e) { return ''; } }
+function setMode(m) { try { localStorage.setItem(MODE_KEY, m); } catch(e) {} }
+function isCloud() { return getMode() === 'cloud'; }
+
+function getAuth() { try { return JSON.parse(localStorage.getItem(AUTH_KEY) || '{}'); } catch(e) { return {}; } }
+function saveAuth(a) { try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e) {} }
+function clearAuth() { try { localStorage.removeItem(AUTH_KEY); } catch(e) {} }
+
+// Writer IDs look like A239809JP3 — a ship prefix, a joining date, a suffix.
+// Validation is deliberately loose: the shape varies, and locking a real writer
+// out is far worse than accepting a typo.
+function normalizeWriterId(s) { return (s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+function validWriterId(s) {
+  const w = normalizeWriterId(s);
+  return w.length >= 6 && w.length <= 20 && /[A-Z]/.test(w) && /[0-9]/.test(w);
 }
-function saveSyncConfig(obj) {
-  try { localStorage.setItem(SYNC_KEY, JSON.stringify(obj)); } catch(e) {}
-}
+// The auth account's email is derived from the Writer ID, so signing in needs no
+// server-side lookup. It is a synthetic address and never receives mail.
+function writerEmail(wid) { return normalizeWriterId(wid).toLowerCase() + '@lcars.local'; }
 
 function setSyncStatus(state, msg) {
   syncStatus = { state, msg };
   const el = document.getElementById('sync-status');
   if (el) {
-    el.textContent = msg;
-    el.style.color = state === 'error' ? 'var(--red,#f55)' : state === 'ok' ? 'var(--green,#4c4)' : 'var(--dim)';
+    el.textContent = msg || '';
+    el.style.color = state === 'error' ? 'var(--red,#c66)' : state === 'ok' ? 'var(--dim)' : 'var(--dim)';
   }
 }
 
-async function pushToGist() {
-  const cfg = getSyncConfig();
-  if (!cfg.pat) return;
-  const now = Date.now();
-  // Store data directly (not double-serialized) to minimize Gist file size
-  const body = { files: { [GIST_FILE]: { content: JSON.stringify({ data: S, savedAt: now }) } } };
+function supaErr(j, fallback) {
+  return (j && (j.error_description || j.msg || j.message || j.error)) || fallback;
+}
+
+async function refreshSession() {
+  const a = getAuth();
+  if (!a.refresh_token) return false;
   try {
-    setSyncStatus('idle', 'Syncing…');
-    let url, method;
-    if (cfg.gistId) {
-      url = `https://api.github.com/gists/${cfg.gistId}`;
-      method = 'PATCH';
-    } else {
-      url = 'https://api.github.com/gists';
-      method = 'POST';
-      body.description = 'LCARS SB118 sync data';
-      body.public = false;
-    }
-    const res = await fetch(url, {
-      method,
-      headers: { Authorization: `token ${cfg.pat}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+    const r = await fetch(SUPA_URL + '/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST',
+      headers: { 'apikey': SUPA_ANON, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: a.refresh_token })
     });
-    if (!res.ok) { const t = await res.text(); throw new Error(`${res.status}: ${t.slice(0,120)}`); }
-    const json = await res.json();
-    saveSyncConfig({ ...cfg, gistId: json.id, lastPushed: now });
-    const el = document.getElementById('sync-gist-id');
-    if (el) el.value = json.id;
-    setSyncStatus('ok', 'Synced ' + new Date(now).toLocaleTimeString());
-  } catch(e) {
-    setSyncStatus('error', 'Sync failed: ' + e.message);
-  }
+    if (!r.ok) return false;
+    const j = await r.json();
+    saveAuth({ ...a, access_token: j.access_token, refresh_token: j.refresh_token || a.refresh_token,
+               uid: (j.user && j.user.id) || a.uid, expires_at: Date.now() + (j.expires_in || 3600) * 1000 });
+    return true;
+  } catch(e) { return false; }
 }
 
-async function pullFromGist(silent) {
-  const cfg = getSyncConfig();
-  if (!cfg.pat || !cfg.gistId) { if (!silent) alert('No Gist configured. Push first or enter a Gist ID.'); return; }
+// Authenticated call against the Supabase REST/Auth API. Retries once through a
+// token refresh when the access token has expired.
+async function supaFetch(path, opts = {}, retry = true) {
+  const a = getAuth();
+  const headers = Object.assign({ 'apikey': SUPA_ANON, 'Content-Type': 'application/json' }, opts.headers || {});
+  if (a.access_token) headers['Authorization'] = 'Bearer ' + a.access_token;
+  const res = await fetch(SUPA_URL + path, Object.assign({}, opts, { headers }));
+  if (res.status === 401 && retry && a.refresh_token) {
+    if (await refreshSession()) return supaFetch(path, opts, false);
+  }
+  return res;
+}
+
+async function cloudSignUp(wid, pin, recoveryEmail) {
+  const w = normalizeWriterId(wid);
+  const r = await fetch(SUPA_URL + '/auth/v1/signup', {
+    method: 'POST',
+    headers: { 'apikey': SUPA_ANON, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: writerEmail(w), password: pin })
+  });
+  const j = await r.json();
+  if (!r.ok) {
+    if (/already registered/i.test(supaErr(j, ''))) throw new Error('That Writer ID already has an account. Try signing in instead.');
+    throw new Error(supaErr(j, 'Could not create the account.'));
+  }
+  if (!j.access_token) throw new Error('Account created, but no session came back. Check that "Confirm email" is turned off in Supabase → Authentication → Sign In / Providers → Email.');
+  saveAuth({ access_token: j.access_token, refresh_token: j.refresh_token, uid: j.user.id,
+             writerId: w, expires_at: Date.now() + (j.expires_in || 3600) * 1000 });
+  await supaFetch('/rest/v1/writers', {
+    method: 'POST',
+    headers: { 'Prefer': 'resolution=merge-duplicates' },
+    body: JSON.stringify({ id: j.user.id, writer_id: w, recovery_email: (recoveryEmail || '').trim() || null })
+  });
+  setMode('cloud');
+  return w;
+}
+
+async function cloudSignIn(wid, pin) {
+  const w = normalizeWriterId(wid);
+  const r = await fetch(SUPA_URL + '/auth/v1/token?grant_type=password', {
+    method: 'POST',
+    headers: { 'apikey': SUPA_ANON, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: writerEmail(w), password: pin })
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(/invalid/i.test(supaErr(j, '')) ? 'Writer ID or PIN not recognised.' : supaErr(j, 'Could not sign in.'));
+  saveAuth({ access_token: j.access_token, refresh_token: j.refresh_token, uid: j.user.id,
+             writerId: w, expires_at: Date.now() + (j.expires_in || 3600) * 1000 });
+  setMode('cloud');
+  return w;
+}
+
+function cloudSignOut() {
+  clearAuth();
+  setMode('');
+  location.reload();
+}
+
+// Push the whole state. localStorage keeps its own copy either way, so a failed
+// push is a warning rather than data loss.
+async function saveToCloud() {
+  if (!isCloud()) return;
+  const a = getAuth();
+  if (!a.uid) return;
+  setSyncStatus('syncing', 'Saving…');
   try {
-    if (!silent) setSyncStatus('idle', 'Pulling…');
-    const res = await fetch(`https://api.github.com/gists/${cfg.gistId}`, {
-      headers: { Authorization: `token ${cfg.pat}` }
+    const r = await supaFetch('/rest/v1/state', {
+      method: 'POST',
+      headers: { 'Prefer': 'resolution=merge-duplicates' },
+      body: JSON.stringify({ writer_uid: a.uid, payload: S, updated_at: new Date().toISOString() })
     });
-    if (!res.ok) throw new Error(`${res.status}`);
-    const json = await res.json();
-    const fileEntry = json.files?.[GIST_FILE];
-    if (!fileEntry) throw new Error('No LCARS data found in Gist');
-    // Prefer raw_url for full content (API field truncates at ~1 MB).
-    // raw_url goes to gist.githubusercontent.com; sending Authorization triggers a CORS
-    // preflight that some browsers/networks block. Fall-back chain:
-    //   1. raw_url with auth (best, works when CORS preflight is allowed)
-    //   2. raw_url without auth (no preflight needed; works if GitHub session cookie present)
-    //   3. API content field (always available but truncated at ~1 MB)
-    let raw;
-    let rawOk = false;
-    for (const opts of [
-      { headers: { Authorization: `token ${cfg.pat}` } },
-      {}
-    ]) {
-      try {
-        const rawRes = await fetch(fileEntry.raw_url, opts);
-        if (rawRes.ok) { raw = await rawRes.text(); rawOk = true; break; }
-      } catch(_) { /* try next */ }
-    }
-    if (!rawOk) {
-      if (!fileEntry.content) throw new Error('Could not fetch Gist content (network or CORS error)');
-      raw = fileEntry.content; // may be truncated for large datasets
-    }
-    let wrapper;
-    try { wrapper = JSON.parse(raw); } catch(je) {
-      throw new Error(!rawOk
-        ? 'Data too large for direct API fetch (~1 MB limit). Push from your other device first, or try again — raw fetch may work once network/CORS resolves.'
-        : 'JSON parse error: ' + je.message);
-    }
-    if (!wrapper.data) throw new Error('Invalid Gist data');
-    const remoteAt = wrapper.savedAt || 0;
-    const localAt = cfg.lastPushed || 0;
-    if (silent && remoteAt <= localAt) return; // remote not newer, skip
-    // Support both old format (data is a JSON string) and new format (data is an object)
-    const data = typeof wrapper.data === 'string' ? JSON.parse(wrapper.data) : wrapper.data;
-    if (!data.docs || !data.missions) throw new Error('Invalid data structure');
-    Object.assign(S, data);
-    persist();
-    saveSyncConfig({ ...cfg, lastPushed: remoteAt });
-    curId = null; curView = null; curViewId = null;
-    setTheme(S.settings.theme||'dark', true);
-    applyStyle();
-    applyPrefs();
-    renderNav();
-    showDashboard();
-    if (!silent) setSyncStatus('ok', 'Pulled ' + new Date(remoteAt).toLocaleTimeString());
+    if (!r.ok) throw new Error((await r.text()).slice(0, 160));
+    setSyncStatus('ok', 'Saved ' + new Date().toLocaleTimeString());
   } catch(e) {
-    if (!silent) setSyncStatus('error', 'Pull failed: ' + e.message);
+    setSyncStatus('error', 'Not saved — kept on this device. ' + (e.message || ''));
   }
 }
 
+async function loadFromCloud() {
+  const a = getAuth();
+  if (!a.uid) return null;
+  const r = await supaFetch('/rest/v1/state?writer_uid=eq.' + encodeURIComponent(a.uid) + '&select=payload,updated_at');
+  if (!r.ok) throw new Error('Could not reach your saved data.');
+  const rows = await r.json();
+  return rows && rows[0] ? rows[0] : null;
+}
+
+// Debounced auto-save. Name and signature are unchanged from the Gist era so
+// every existing call site still works.
 function schedSync(delay) {
-  if (syncTimer) clearTimeout(syncTimer);
-  syncTimer = setTimeout(pushToGist, delay || 60000);
+  if (!isCloud()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(saveToCloud, delay || 5000);
 }
 
-function saveSyncFields() {
-  const pat = (document.getElementById('sync-pat')?.value || '').trim();
-  const gistId = (document.getElementById('sync-gist-id')?.value || '').trim();
-  const cfg = getSyncConfig();
-  saveSyncConfig({ ...cfg, pat: pat || cfg.pat, gistId: gistId || cfg.gistId });
+function hasLocalData() {
+  return !!(S && S.docs && Object.keys(S.docs).length);
+}
+
+// Boot path for a signed-in writer: pull the server copy, and reconcile if this
+// browser also has local work.
+async function cloudBoot() {
+  if (!isCloud()) return;
+  setSyncStatus('syncing', 'Loading…');
+  let row;
+  try { row = await loadFromCloud(); }
+  catch(e) { setSyncStatus('error', 'Working offline — could not reach the server.'); return; }
+
+  if (!row) {                       // nothing on the server yet
+    if (hasLocalData()) { await saveToCloud(); }
+    else setSyncStatus('ok', '');
+    return;
+  }
+  const remote = row.payload || {};
+  const remoteDocs = Object.keys(remote.docs || {}).length;
+
+  if (!hasLocalData()) { adoptCloudState(remote); setSyncStatus('ok', ''); return; }
+
+  // Both sides have data. Same account on a second device is the normal case, so
+  // prefer the server, but never silently discard local work.
+  const localDocs = Object.keys(S.docs || {}).length;
+  if (remoteDocs >= localDocs) { adoptCloudState(remote); setSyncStatus('ok', ''); return; }
+
+  openModal('Which copy is right?',
+    `<div style="font-size:0.85rem;line-height:1.6">
+      <p>This browser has <strong>${localDocs} sim(s)</strong>, but your account holds <strong>${remoteDocs}</strong>.</p>
+      <p>Keeping this device's copy will replace what is stored online. Backup Data first if you are unsure.</p>
+     </div>`,
+    null,
+    { noCancel: true, extra: [
+      { label: 'Use my account\'s copy', cls: 'btn-p', fn: 'adoptCloudFromPrompt()' },
+      { label: 'Keep this device\'s copy', fn: 'closeModal();saveToCloud()' }
+    ] });
+  _pendingCloudState = remote;
+}
+
+let _pendingCloudState = null;
+function adoptCloudFromPrompt() {
+  if (_pendingCloudState) adoptCloudState(_pendingCloudState);
+  _pendingCloudState = null;
+  closeModal();
+}
+
+function adoptCloudState(remote) {
+  if (!remote || !remote.docs) return;
+  Object.assign(S, remote);
+  persist();
+  curId = null; curView = null; curViewId = null;
+  setTheme(S.settings.theme || 'dark', true);
+  applyStyle(); applyPrefs(); renderNav(); showDashboard();
+}
+
+// ================================================================
+// AUTH GATE — first-run choice, sign in / create account
+// ================================================================
+// Shown once on a fresh browser. Everything here is optional: choosing
+// "Use offline" sets mode to 'local' and the app never touches the network.
+let _gateEl = null;
+
+function gateClose() {
+  if (_gateEl) { _gateEl.remove(); _gateEl = null; }
+}
+
+function showAuthGate(fromSettings) {
+  gateClose();
+  const el = document.createElement('div');
+  _gateEl = el;
+  el.id = 'auth-gate';
+  el.style.cssText = 'position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--bg,#111);overflow:auto';
+  el.innerHTML = `
+    <div style="width:100%;max-width:440px;background:var(--panel,#1b1b1b);border:1px solid var(--border,#333);border-radius:10px;padding:26px 24px">
+      <div style="font-size:1.15rem;font-weight:700;letter-spacing:0.04em;margin-bottom:6px">LCARS</div>
+      <div id="gate-body"></div>
+    </div>`;
+  document.body.appendChild(el);
+  gateChoice(!!fromSettings);
+}
+
+function gateChoice(fromSettings) {
+  document.getElementById('gate-body').innerHTML = `
+    <div style="font-size:0.85rem;color:var(--dim);line-height:1.65;margin-bottom:18px">
+      ${fromSettings
+        ? 'Set up an account and your sims on this device will be carried across, then kept in step on every device you sign in on.'
+        : 'Sign in to keep your sims backed up and available on any device &mdash; or work offline in this browser alone.'}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="gateForm('in')">Sign in with your Writer ID</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateForm('up')">Create an account</button>
+      ${fromSettings
+        ? `<button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateClose()">Not now</button>`
+        : `<button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateUseOffline()">Use offline on this device only</button>`}
+    </div>
+    ${fromSettings ? '' : `<div style="font-size:0.71rem;color:var(--dim);line-height:1.55;margin-top:14px">
+      Offline keeps everything in this browser and sends nothing anywhere. Clearing your browser data will erase it, so take backups. You can switch to an account later from Settings.
+    </div>`}`;
+}
+
+function gateUseOffline() {
+  setMode('local');
+  gateClose();
+}
+
+function gateForm(kind) {
+  const up = kind === 'up';
+  document.getElementById('gate-body').innerHTML = `
+    <div style="font-size:0.85rem;color:var(--dim);line-height:1.6;margin-bottom:14px">
+      ${up ? 'Your Writer ID identifies you; the PIN keeps your work private.' : 'Welcome back.'}
+    </div>
+    <div class="mf" style="margin-bottom:10px">
+      <label class="ml">WRITER ID</label>
+      <input class="mi" id="gate-wid" type="text" placeholder="A239809JP3" autocomplete="username" spellcheck="false" style="text-transform:uppercase">
+    </div>
+    <div class="mf" style="margin-bottom:10px">
+      <label class="ml">PIN <span style="font-weight:normal;opacity:0.6">(at least 6 characters)</span></label>
+      <input class="mi" id="gate-pin" type="password" autocomplete="${up ? 'new-password' : 'current-password'}">
+    </div>
+    ${up ? `<div class="mf" style="margin-bottom:10px">
+      <label class="ml">RECOVERY EMAIL <span style="font-weight:normal;opacity:0.6">(optional)</span></label>
+      <input class="mi" id="gate-email" type="email" autocomplete="email" placeholder="so you can be identified if you forget your PIN">
+    </div>` : ''}
+    <div id="gate-msg" style="font-size:0.76rem;line-height:1.5;min-height:1.1em;margin:6px 0 12px;color:var(--red,#c66)"></div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-p" id="gate-go" style="width:100%;justify-content:center" onclick="gateSubmit('${kind}')">${up ? 'Create account' : 'Sign in'}</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateChoice(${!!getMode()})">Back</button>
+    </div>
+    ${up ? `<div style="font-size:0.71rem;color:var(--dim);line-height:1.55;margin-top:14px">
+      A forgotten PIN cannot be reset automatically yet &mdash; ask the tool's maintainer to reset it for you. Keep a backup either way.
+    </div>` : ''}`;
+  const wid = document.getElementById('gate-wid');
+  wid.focus();
+  ['gate-wid','gate-pin','gate-email'].forEach(id => {
+    const n = document.getElementById(id);
+    if (n) n.addEventListener('keydown', e => { if (e.key === 'Enter') gateSubmit(kind); });
+  });
+}
+
+async function gateSubmit(kind) {
+  const msg = document.getElementById('gate-msg');
+  const btn = document.getElementById('gate-go');
+  const wid = (document.getElementById('gate-wid').value || '').trim();
+  const pin = document.getElementById('gate-pin').value || '';
+  const email = (document.getElementById('gate-email') || {}).value || '';
+
+  if (!validWriterId(wid)) { msg.textContent = 'That does not look like a Writer ID — it should be letters and numbers, like A239809JP3.'; return; }
+  if (pin.length < 6) { msg.textContent = 'Your PIN needs to be at least 6 characters.'; return; }
+
+  msg.style.color = 'var(--dim)';
+  msg.textContent = kind === 'up' ? 'Creating your account…' : 'Signing in…';
+  btn.disabled = true;
+  try {
+    if (kind === 'up') await cloudSignUp(wid, pin, email);
+    else await cloudSignIn(wid, pin);
+    gateClose();
+    await cloudBoot();
+    showToast('Signed in as ' + normalizeWriterId(wid));
+  } catch(e) {
+    msg.style.color = 'var(--red,#c66)';
+    msg.textContent = e.message || 'Something went wrong. Please try again.';
+    btn.disabled = false;
+  }
 }
 
 // ================================================================
@@ -3226,11 +3429,10 @@ function manualSaveAndSync() {
     if (doc.snapshots.length > 10) doc.snapshots.shift();
     persist();
   }
-  const cfg = getSyncConfig();
-  if (cfg.pat) {
+  if (isCloud()) {
     if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
-    pushToGist();
-    showToast('Snapshot saved · syncing to Gist');
+    saveToCloud();
+    showToast('Snapshot saved · saving to your account');
   } else {
     showToast('Snapshot saved');
   }
@@ -5382,31 +5584,32 @@ function openSettings() {
       </div>
     </div>
 
-    <div class="msec" style="margin-top:18px">CLOUD SYNC</div>
+    <div class="msec" style="margin-top:18px">YOUR ACCOUNT</div>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
-      <div style="font-size:0.73rem;color:var(--dim);line-height:1.6">
-        Sync your data to a private GitHub Gist so it's available on any device. Requires a GitHub account and a Personal Access Token with <strong>gist</strong> scope only.<br>
-        <span style="opacity:0.7">Data auto-syncs ~60 seconds after each save. On page load, if the Gist is newer than local data it will auto-pull.</span>
+      ${isCloud() ? `
+      <div style="font-size:0.8rem;line-height:1.7">
+        Signed in as <strong>${getAuth().writerId||''}</strong>. Your work saves to your account a few seconds after each change, and follows you to any device you sign in on.
       </div>
-      <div class="mrow">
-        <div class="mf" style="flex:2">
-          <label class="ml">GITHUB PERSONAL ACCESS TOKEN</label>
-          <input class="mi" id="sync-pat" type="password" placeholder="ghp_…" value="${getSyncConfig().pat||''}" autocomplete="off">
-        </div>
-        <div class="mf" style="flex:1">
-          <label class="ml">GIST ID <span style="font-weight:normal;opacity:0.6">(auto-fills on first push)</span></label>
-          <input class="mi" id="sync-gist-id" type="text" placeholder="auto" value="${getSyncConfig().gistId||''}">
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn btn-s" onclick="saveSyncFields();pushToGist()">${ic('arrow-up')} Push Now</button>
-        <button class="btn btn-s" onclick="saveSyncFields();pullFromGist(false)">${ic('arrow-down')} Pull Now</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-s" onclick="saveToCloud()">${ic('arrow-up')} Save now</button>
+        <button class="btn btn-s" onclick="cloudSignOut()">Sign out</button>
         <span id="sync-status" style="font-size:0.73rem;color:var(--dim);margin-left:4px">${syncStatus.msg||''}</span>
       </div>
       <div style="font-size:0.71rem;color:var(--dim);line-height:1.5">
-        To create a token: <em>github.com → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token → tick <strong>gist</strong> only</em>.
-        The token is stored only in your browser's localStorage — never sent anywhere except api.github.com.
+        Signing out leaves your work on this device untouched. Your online copy is unaffected.
       </div>
+      ` : `
+      <div style="font-size:0.8rem;line-height:1.7">
+        You are working <strong>offline on this device only</strong>. Nothing is sent anywhere, and your sims live in this browser alone &mdash; clearing browser data will erase them, so keep taking backups.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-p" onclick="closeModal();showAuthGate(true)">Set up an account</button>
+        <span id="sync-status" style="font-size:0.73rem;color:var(--dim)"></span>
+      </div>
+      <div style="font-size:0.71rem;color:var(--dim);line-height:1.5">
+        An account keeps your sims backed up automatically and available on any device. Your work on this device will be carried across.
+      </div>
+      `}
     </div>
 
     <div class="msec" style="margin-top:18px">UI PREFERENCES</div>
@@ -7075,8 +7278,12 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
   renderNav();
   showDashboard();
-  pullFromGist(true); // silent auto-pull: only applies if Gist is newer than local data
-  maybeShowStyleIntro();
+  if (!getMode()) {
+    showAuthGate(false);                // first visit — offer account or offline
+  } else {
+    if (isCloud()) cloudBoot();         // signed in — pull the server copy
+    maybeShowStyleIntro();              // held back behind the gate on a first visit
+  }
 });
 </script>
 </body>
