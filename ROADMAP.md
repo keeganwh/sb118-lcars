@@ -25,37 +25,58 @@ Each item has a **Done when…** so any session can pick it up and run without a
 
 ---
 
-## Phase 2 — Accounts and cloud data (the main work)
+## Phase 2 — Accounts and cloud data
 
-Branch `claude/cloud-sync`. Large and multi-commit — do not develop this on `main`.
+Branch `claude/cloud-sync`. **Built and testing; not yet merged to `main`.**
 
-- [ ] **Supabase schema + row-level security.**
-      Tables: `writers`, `state` (the JSON payload), `snapshots` (extracted from inside each doc). Character pictures move from base64 `pictureDataUrl` into Supabase Storage. RLS so a writer reads/writes only their own rows.
-      _Done when: a writer's data round-trips through the database and a second writer's session cannot read it._
+- [x] **Supabase schema + row-level security.** — `supabase/schema.sql`, run 2026-08-14.
+- [x] **Auth: Writer ID + PIN.** Account email derived as `<writerid>@lcars.local`, so signing in needs no server lookup. Optional recovery email stored.
+- [x] **Replace the Gist sync layer.** `saveToCloud`/`loadFromCloud` over plain fetch — no CDN client, so the file stays single and dependency-free. `schedSync` kept its name and signature. PAT and Gist ID fields removed.
+- [x] **Offline / no-account path.** First-run gate offers an account or offline-on-this-device. Every network call gated on `isCloud()`.
+- [x] **Snapshots moved out of the synced payload** into their own table, fetched on demand, with a one-time backfill of existing local history.
+- [x] **Migration.** Restoring a backup now uploads immediately.
+- [x] **Removals.** Google Docs / Markdown importer, Gist PAT UI.
 
-- [ ] **Auth: Writer ID + PIN, plus Google/Discord.**
-      Writer ID path via synthetic email (`<writerid>@lcars.local`) so standard session machinery is reused. OAuth providers enabled in Supabase; first OAuth login prompts once for the Writer ID.
-      _Done when: signing in on a fresh browser by either route restores the writer's sims with no tokens, files, or manual steps._
-
-- [ ] **Replace the Gist sync layer.**
-      `pushToGist`/`pullFromGist` → `saveToCloud`/`loadFromCloud`, preserving existing call sites (`flushSave`, `setStatus`, Ctrl+S, boot). Debounce tightens 60 s → ~5 s. The three-tier pull fallback is deleted — it only ever worked around Gist CORS and truncation. `persist()` keeps writing `localStorage` as an offline cache, reconciled by `updated_at`.
-      _Done when: edits appear on a second device within seconds, and pulling the plug mid-session loses nothing._
-
-- [ ] **One-time migration.**
-      On first login, if `lcars_v1` exists locally and the cloud is empty, upload and confirm. Also accept a `.lcars` file via the existing `onImportFile`.
-      _Done when: the real ~913 KB dataset migrates with nothing truncated._
-
-- [ ] **Offline / no-account path.**
-      First screen offers *Sign in* or *Use offline*. Offline downloads `LCARS.html` and runs local — no account, no network calls, export/import only. Gated by `S.settings.mode = 'local' | 'cloud'`.
-      _Done when: the downloaded file opens from disk with the network off, edits and exports normally, and logs no errors from absent cloud calls._
-
-- [ ] **Removals.**
-      Delete the Google Docs / Markdown importer (hidden input, `markdownToHtml` through `createImportedSim`, and the Settings entry) — keep the shared `cleanPasteHTML`. Delete the Gist PAT field and its instructions. **Keep** `exportData`/import as a manual escape hatch, demoted in the UI.
-      _Done when: no PAT or Google Docs copy remains anywhere in the UI, and manual backup still works._
+- [ ] **Cross-device verification.** _Deferred — no second device to hand._ Incognito sign-in confirmed data is served from the account rather than local storage, which covers the core promise. Still unverified: snapshot history fetched on a genuinely different device.
+      _Done when: a sim written on device A shows its full snapshot history on device B._
 
 - [ ] **Read-only share links — sims only.**
-      `share_token` on a doc plus a `/s/<token>` route. Scenes are explicitly out of scope.
+      `share_token` on a doc plus a `/s/<token>` route. Scenes explicitly out of scope.
       _Done when: a share URL opens in a logged-out private window, renders the sim, and nothing is editable._
+
+- [ ] **Self-serve PIN reset.**
+      Currently a forgotten PIN is reset by hand from the Supabase dashboard, because the auth email is synthetic and cannot receive mail. Needs an Edge Function plus an email sender, keyed off `writers.recovery_email`.
+      _Done when: a writer who gave a recovery email can reset their own PIN without the maintainer._
+
+- [ ] **Retire the GitHub Pages address.**
+      Pages now shows a dismissible notice pointing at the Vercel URL. Switch Pages off once writers have moved.
+      _Done when: Pages is disabled and nobody is landing on the old URL._
+
+**Dropped: Google / Discord sign-in.** Writer ID + PIN is sufficient, and the fleet's own SSO is the likely long-term route — building OAuth now would mean building it twice.
+
+---
+
+## Phase 2.5 — Onboarding and the guide
+
+Needed before this is shared with anyone else.
+
+- [ ] **Intro wizard on first run.**
+      Three audiences: writers new to LCARS entirely, existing writers meeting the online version for the first time (what changed, what an account gets them, that their old data needs a backup and restore), and anyone who wants to skip straight in.
+      _Done when: a first-time visitor reaches a written sim without asking anyone how, and the skip option is always one click away._
+
+- [ ] **Rewrite the user guide.**
+      `LCARS-Guide-v2.html` predates accounts, the Delta Prime skin and the importer removal. Starting fresh is likely cleaner than patching it.
+      _Done when: the guide matches the shipped app, with no references to Gist, PATs or the Markdown importer._
+
+---
+
+## Phase 2.6 — Mobile
+
+Flagged as important, not urgent. Needs the user's testing and feedback to drive it.
+
+- [ ] **Make the app usable on a phone.**
+      The layout assumes a wide screen with two resizable sidebars, and the editor toolbar is dense. Expect real work in the sidebars, the toolbar and the editor itself.
+      _Done when: a sim can be read, written and copied out on a phone without pinch-zooming._
 
 ---
 
