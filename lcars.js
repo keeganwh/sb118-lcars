@@ -155,6 +155,7 @@ const VERSIONS = [
       'Added: Settings and the Character Manifest now have their own web addresses — /settings and /manifest. The back and forward buttons move between them, and a link straight to one opens it. They are still part of the same page, so opening the Manifest mid-sim leaves your unsaved typing exactly where it was',
       'Added: Settings \u2192 Data Management now offers Download LCARS for offline use \u2014 one self-contained file you can keep on your own machine and open with no internet at all. The app is built from three files now, and the download puts them back together for you',
       'Fixed: on a first visit the Delta Prime introduction could open on top of a page you had gone straight to, such as /settings, and hide it. It now waits until you are back on the dashboard',
+      'Fixed: the downloaded offline copy still offered to sign you in or create an account, neither of which can work from a file on your own machine — the browser blocks it reaching the server. The offline copy now starts straight in offline mode with no sign-in prompt, and Settings and the Getting Started wizard point you at LCARS online instead, noting that a backup taken offline restores straight into it',
     ],
   },
 ];
@@ -749,6 +750,11 @@ function getMode() { try { return localStorage.getItem(MODE_KEY) || ''; } catch(
 function setMode(m) { try { localStorage.setItem(MODE_KEY, m); } catch(e) {} }
 function isCloud() { return getMode() === 'cloud'; }
 
+// The downloaded offline copy runs from file://, where the browser sends a null
+// Origin and every cross-origin request is refused — an account genuinely cannot
+// work there, so this copy never offers one.
+function isFileCopy() { return location.protocol === 'file:'; }
+
 function getAuth() { try { return JSON.parse(localStorage.getItem(AUTH_KEY) || '{}'); } catch(e) { return {}; } }
 function saveAuth(a) { try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e) {} }
 function clearAuth() { try { localStorage.removeItem(AUTH_KEY); } catch(e) {} }
@@ -1204,10 +1210,12 @@ const WIZ = {
   ret1: () => `
     <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">What's changed</div>
     <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
-      <p style="margin:0 0 10px"><strong style="color:var(--text)">LCARS has a new home and accounts.</strong> Sign in with your Writer ID and your sims save automatically and follow you to any device — no export files, no tokens to set up.</p>
+      <p style="margin:0 0 10px"><strong style="color:var(--text)">LCARS has a new home and accounts.</strong> ${isFileCopy()
+        ? `Online at <strong style="color:var(--text)">${NEW_HOME.replace(/^https?:\/\//,'').replace(/\/$/,'')}</strong> you can sign in with your Writer ID and have your sims save automatically to every device. This offline copy keeps everything in this browser instead.`
+        : 'Sign in with your Writer ID and your sims save automatically and follow you to any device — no export files, no tokens to set up.'}</p>
       <p style="margin:0 0 10px"><strong style="color:var(--text)">Gist sync is gone.</strong> It capped out around 1 MB. Accounts replace it with no practical limit. Your old Gist is untouched and still on GitHub if you want the file.</p>
       <p style="margin:0 0 10px"><strong style="color:var(--text)">The Google Docs importer is gone.</strong> It was clumsy; better ways to bring sims in are coming.</p>
-      <p style="margin:0"><strong style="color:var(--text)">You can still work offline</strong> if you'd rather not have an account — everything stays in this browser and nothing is sent anywhere.</p>
+      ${isFileCopy() ? '' : `<p style="margin:0"><strong style="color:var(--text)">You can still work offline</strong> if you'd rather not have an account — everything stays in this browser and nothing is sent anywhere.</p>`}
     </div>
     <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('ret2')">Next — bringing my sims across</button></div>
     ${wizFoot('welcome')}`,
@@ -1216,12 +1224,13 @@ const WIZ = {
     <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Bringing your sims across</div>
     <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
       <p style="margin:0 0 10px">Your old sims are still on the address you used before. Browsers keep each web address's data separate, so they don't come across on their own.</p>
-      <p style="margin:0 0 10px"><strong style="color:var(--text)">The easy way:</strong> go back to the old address and click <em>Move My Stuff</em> in the notice at the bottom. Sign in there, your sims upload, and they'll be waiting when you sign in here.</p>
-      <p style="margin:0 0 10px"><strong style="color:var(--text)">Or with a backup file:</strong> if you've already downloaded one, load it now.</p>
+      ${isFileCopy() ? `<p style="margin:0 0 10px"><strong style="color:var(--text)">With a backup file:</strong> take a backup from the copy that has your sims, then load it here. This offline copy has no network access, so a backup file is the only way in or out.</p>`
+      : `<p style="margin:0 0 10px"><strong style="color:var(--text)">The easy way:</strong> go back to the old address and click <em>Move My Stuff</em> in the notice at the bottom. Sign in there, your sims upload, and they'll be waiting when you sign in here.</p>
+      <p style="margin:0 0 10px"><strong style="color:var(--text)">Or with a backup file:</strong> if you've already downloaded one, load it now.</p>`}
     </div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
       <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizImportBackup()">Load a backup file</button>
-      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizGo('acct')">${isCloud() ? 'Next' : 'Next — set up an account'}</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizGo('acct')">${isCloud() || isFileCopy() ? 'Next' : 'Next — set up an account'}</button>
     </div>
     ${wizFoot('ret1')}`,
 
@@ -1231,6 +1240,14 @@ const WIZ = {
     <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
       <p style="margin:0 0 10px">You're signed in as <strong style="color:var(--text)">${(getAuth().writerId)||''}</strong>. Your work saves to your account a few seconds after each change, and will be there on any device you sign in on.</p>
       <p style="margin:0">A backup is still worth taking now and then — Settings → Backup Data.</p>
+    </div>
+    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true)">Start writing</button></div>
+    ${wizFoot(null)}` : isFileCopy() ? `
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Keep your work safe</div>
+    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
+      <p style="margin:0 0 10px">This is the offline copy of LCARS, running from a file on your own machine. It never touches the network, so your sims live in this browser alone — clearing your browser data would erase them.</p>
+      <p style="margin:0 0 10px">Take a backup regularly from Settings → Backup Data, and keep it somewhere safe.</p>
+      <p style="margin:0">If you'd rather have your sims backed up automatically and available on every device, use LCARS online at <strong style="color:var(--text)">${NEW_HOME.replace(/^https?:\/\//,'').replace(/\/$/,'')}</strong> — a backup from here restores straight into it.</p>
     </div>
     <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true)">Start writing</button></div>
     ${wizFoot(null)}` : `
@@ -1325,6 +1342,7 @@ function gateClose() {
 }
 
 function showAuthGate(fromSettings) {
+  if (isFileCopy()) return;   // accounts cannot reach the server from a file
   gateClose();
   const el = document.createElement('div');
   _gateEl = el;
@@ -4749,6 +4767,13 @@ function openSettings(fromRoute) {
       <div style="font-size:0.71rem;color:var(--dim);line-height:1.5">
         Signing out leaves your work on this device untouched. Your online copy is unaffected.
       </div>
+      ` : isFileCopy() ? `
+      <div style="font-size:0.8rem;line-height:1.7">
+        This is the <strong>offline copy</strong>, running from a file on this machine. It never touches the network, and your sims live in this browser alone &mdash; clearing browser data will erase them, so keep taking backups.
+      </div>
+      <div style="font-size:0.71rem;color:var(--dim);line-height:1.5">
+        Accounts are only available in LCARS online at <a href="${NEW_HOME}" target="_blank" rel="noopener" style="color:var(--accent)">${NEW_HOME.replace(/^https?:\/\//,'').replace(/\/$/,'')}</a>. A backup taken here restores straight into it.
+      </div>
       ` : `
       <div style="font-size:0.8rem;line-height:1.7">
         You are working <strong>offline on this device only</strong>. Nothing is sent anywhere, and your sims live in this browser alone &mdash; clearing browser data will erase them, so keep taking backups.
@@ -6508,7 +6533,11 @@ document.addEventListener('DOMContentLoaded',()=>{
   renderNav();
   showDashboard();
   showMovedBanner();                    // only appears on the old GitHub Pages address
-  if (!getMode()) {
+  if (isFileCopy() && !getMode()) {
+    setMode('local');                   // the offline copy has only one mode
+    maybeShowStyleIntro();
+    maybeShowWizard();
+  } else if (!getMode()) {
     showAuthGate(false);                // first visit — the wizard follows once resolved
   } else {
     if (isCloud()) cloudBoot();         // signed in — pull the server copy
