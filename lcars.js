@@ -152,6 +152,7 @@ const VERSIONS = [
       'Fixed: restoring a large backup froze the page for over a second — the whole dataset was being written and the sim tree rebuilt inside the click, with a blocking alert on the end. The work now yields a frame first and reports through a toast',
       'Note: if this browser and your account both hold sims, you are asked which copy to keep rather than one silently replacing the other',
       'Changed: the app is now three files — LCARS.html, lcars.css and lcars.js — instead of one. Nothing looks or behaves differently; it is groundwork so Settings and the Character Manifest can become pages of their own. Offline downloads are still a single self-contained file',
+      'Added: Settings and the Character Manifest now have their own web addresses — /settings and /manifest. The back and forward buttons move between them, and a link straight to one opens it. They are still part of the same page, so opening the Manifest mid-sim leaves your unsaved typing exactly where it was',
     ],
   },
 ];
@@ -4486,6 +4487,10 @@ function delDoc(id){
 // MODAL
 // ================================================================
 function openModal(title, body, cb, opts={}) {
+  // Settings is the only modal with a URL; opening any other one from inside it
+  // (Snapshots, a confirm) leaves the /settings route behind.
+  if (!_openingSettings && _routeView === 'settings') syncRoute('dash');
+  _openingSettings = false;
   document.getElementById('mo-title').textContent = title;
   document.getElementById('mo-body').innerHTML = body;
   document.getElementById('mo').classList.remove('hidden');
@@ -4501,7 +4506,11 @@ function openModal(title, body, cb, opts={}) {
   // Style radio groups can appear in the intro modal or Settings — sync their state
   if (body.indexOf('sty-sw') !== -1) setTimeout(updateStyleMenu, 0);
 }
-function closeModal(){document.getElementById('mo').classList.add('hidden');modalCb=null;}
+function closeModal(fromRoute){
+  document.getElementById('mo').classList.add('hidden');
+  modalCb=null;
+  if (!fromRoute && _routeView === 'settings') syncRoute('dash');
+}
 function doModal(){if(modalCb&&modalCb()===false)return;closeModal();}
 
 // ================================================================
@@ -4666,7 +4675,9 @@ function renderVersionHistory() {
   }).join('');
 }
 
-function openSettings() {
+function openSettings(fromRoute) {
+  if (!fromRoute) syncRoute('settings');
+  _openingSettings = true;
   const p = getPrefs();
   const theme = S.settings.theme || 'dark';
   const skin = getStyle().skin;
@@ -4907,7 +4918,7 @@ document.addEventListener('keydown',e=>{
   const inEditor=e.target.id==='editor';
   if(e.key==='Escape'){
     closeModal();hideCtx();
-    document.getElementById('char-manifest').classList.add('hidden');
+    closeManifest();
     return;
   }
   if(e.key==='Enter'&&!document.getElementById('mo').classList.contains('hidden')){
@@ -5111,14 +5122,15 @@ function _setManifestToggleBtn(manifestOpen) {
   if (!btn) return;
   if (manifestOpen) {
     btn.innerHTML = ic('pencil') + ' Sim Editor';
-    btn.onclick = closeManifest;
+    btn.onclick = () => closeManifest();
   } else {
     btn.innerHTML = ic('user') + ' Character Manifest';
-    btn.onclick = openManifest;
+    btn.onclick = () => openManifest();
   }
 }
 
-function openManifest() {
+function openManifest(fromRoute) {
+  if (!fromRoute) syncRoute('manifest');
   if (curId) flushSave(); // prune stale myChars before auto-seeding manifest
   if (!S.characters) S.characters = {};
   // Auto-seed from myChars (checks primary name + aliases)
@@ -5143,8 +5155,9 @@ function openManifest() {
   if (firstPrimary) selectCharacter(firstPrimary.id);
 }
 
-function closeManifest() {
+function closeManifest(fromRoute) {
   document.getElementById('char-manifest').classList.add('hidden');
+  if (!fromRoute && _routeView === 'manifest') syncRoute('dash');
 }
 
 function openManifestToChar(charId) {
@@ -6348,6 +6361,82 @@ function deleteTemplate(i) {
 }
 
 // ================================================================
+// ROUTING (History API)
+// ================================================================
+// Settings and the Character Manifest get real URLs — /settings and
+// /manifest — while staying views inside the one app, so navigating to them
+// mid-sim never tears the editor down or re-runs the auth gate.
+//
+// Routing only engages when the app is served from a clean path (Vercel,
+// which rewrites /settings and /manifest to LCARS.html). Opened as a file, or
+// served as .../LCARS.html on GitHub Pages where there are no rewrites, there
+// is no path to push to — ROUTES stays off, every view opens exactly as it did
+// before, and the routes degrade to the dashboard.
+const ROUTE_VIEWS = ['settings', 'manifest'];
+let _routeView = 'dash';
+let _openingSettings = false;
+
+// Returns {base, view} when the current URL is one this app can route, else
+// null (routing disabled).
+function routeContext() {
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') return null;
+  if (/\.github\.io$/i.test(location.hostname)) return null;   // Pages has no rewrites
+  const m = location.pathname.match(/^(.*\/)([^\/]*)$/);
+  if (!m) return null;
+  const dir = m[1], last = m[2];
+  if (/\.html?$/i.test(last)) return null;          // served as a named file
+  if (last === '') return { base: dir, view: 'dash' };
+  if (ROUTE_VIEWS.includes(last)) return { base: dir, view: last };
+  return null;                                      // some other deep path
+}
+
+function routingOn() { return routeContext() !== null; }
+
+function routeUrl(view) {
+  const ctx = routeContext();
+  if (!ctx) return null;
+  return ctx.base + (view === 'dash' ? '' : view);
+}
+
+// Record a view change in the URL without re-opening anything. Called by the
+// open/close functions themselves, so every route in the app — button, link,
+// keyboard — keeps the address bar honest.
+function syncRoute(view, replace) {
+  _routeView = view;
+  const url = routeUrl(view);
+  if (!url) return;
+  if (location.pathname === url && !replace) return;
+  history[replace ? 'replaceState' : 'pushState']({ view }, '', url);
+}
+
+// Open the view a URL asks for. Never pushes history itself.
+function applyRoute(view) {
+  _routeView = view;
+  if (view === 'manifest') {
+    closeModal(true);
+    if (document.getElementById('char-manifest').classList.contains('hidden')) openManifest(true);
+  } else if (view === 'settings') {
+    closeManifest(true);
+    _openingSettings = true;
+    openSettings(true);
+  } else {
+    closeModal(true);
+    closeManifest(true);
+  }
+}
+
+function bootRoute() {
+  const ctx = routeContext();
+  if (!ctx) return;                                  // no routing here
+  history.replaceState({ view: ctx.view }, '', routeUrl(ctx.view));
+  window.addEventListener('popstate', e => {
+    const c = routeContext();
+    applyRoute((e.state && e.state.view) || (c && c.view) || 'dash');
+  });
+  if (ctx.view !== 'dash') applyRoute(ctx.view);
+}
+
+// ================================================================
 // INIT
 // ================================================================
 document.addEventListener('DOMContentLoaded',()=>{
@@ -6407,4 +6496,6 @@ document.addEventListener('DOMContentLoaded',()=>{
     maybeShowStyleIntro();              // held back behind the gate on a first visit
     maybeShowWizard();
   }
+
+  bootRoute();
 });

@@ -2,11 +2,13 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     { "source": "/", "destination": "/LCARS.html" },
+    { "source": "/settings", "destination": "/LCARS.html" },
+    { "source": "/manifest", "destination": "/LCARS.html" },
     { "source": "/guide", "destination": "/LCARS-Guide-v2.html" }
   ],
   "headers": [
     {
-      "source": "/LCARS.html",
+      "source": "/(LCARS.html|lcars.css|lcars.js)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]
