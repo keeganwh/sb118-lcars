@@ -10,13 +10,28 @@ Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same 
 
 ---
 
-## Session 1 — Foundation: split the file
+## Session 1 — Foundation: split the file and add routing
 
-Not a tidy-up done first — it is what `/settings` and `/s/<token>` are built on. Multiple pages cannot share 7,500 lines without it.
+Not a tidy-up done first — it is what `/settings`, `/manifest` and `/s/<token>` are built on. Multiple views cannot share 7,500 lines without it.
+
+**Decided architecture** (settled 2026-08-14, do not re-litigate):
+
+| File | Role |
+|---|---|
+| `lcars.css` / `lcars.js` | shared by every page |
+| `LCARS.html` | the app — dashboard, editor, **settings**, **manifest**, each with its own URL |
+| `share.html` | minimal read-only sim viewer for `/s/<token>` — no auth, no editor |
+| `guide.html` | standalone, rewritten in session 5 |
+
+Settings and Manifest become **routed views inside the one app**, not separate HTML files. They get real URLs, are bookmarkable and work with the back button, but the app shell is not torn down — so popping open the Manifest mid-sim leaves the editor and its unsaved keystrokes intact, and the auth gate does not re-run on every navigation. Share links are the opposite case: a genuinely separate minimal page, so someone clicking a link does not download the whole application.
 
 - [ ] **Split `LCARS.html` into `LCARS.html` + `lcars.css` + `lcars.js`.**
       Relative paths, so the app still runs on GitHub Pages and from a local folder. No behaviour change of any kind.
       _Done when: the app loads from three files with no visible difference, and a full browser pass (gate, wizard, editor, manifest, settings, sync) shows no console errors._
+
+- [ ] **Add History API routing.**
+      `/` dashboard, `/settings`, `/manifest`. Back and forward work; a direct hit on `/settings` loads straight there. `vercel.json` rewrites the routes to `LCARS.html`; on GitHub Pages, which has no rewrites, the app still works from the root and the routes degrade to the dashboard.
+      _Done when: each view has its own URL, the back button moves between them, and reloading on any of them lands in the right place._
 
 - [ ] **Keep the offline download a single file.**
       A Vercel serverless route that inlines the three back together on demand, so "download and run offline" still means one file. The Settings download button points at it.
@@ -28,9 +43,13 @@ Not a tidy-up done first — it is what `/settings` and `/s/<token>` are built o
 
 ## Session 2 — Settings page and account management
 
-- [ ] **Move Settings out of the modal to `/settings`.**
+- [ ] **Move Settings out of the modal to the `/settings` view.**
       The panel is overstuffed. Regroup it while moving. Build it responsive from the start so the later mobile session does not have to redo it.
-      _Done when: settings is its own page, every existing setting still works, and it is usable on a phone._
+      _Done when: settings is its own view with its own URL, every existing setting still works, and it is usable on a phone._
+
+- [ ] **Make the Manifest a full view rather than an overlay.**
+      Same treatment: its own URL at `/manifest`, responsive from the start. The open sim must survive navigating to it and back.
+      _Done when: the Manifest has its own URL, and opening it mid-sim leaves the editor exactly as it was._
 
 - [ ] **Account management.**
       Change PIN, update or add a recovery email, see which Writer ID you are signed in as, sign out, delete account. Gathers the scattered account bits into one place.
@@ -55,7 +74,7 @@ Both are blocked on the same thing: the `service_role` key, which must never be 
 ## Session 4 — Read-only share links
 
 - [ ] **Shareable sim links — sims only.**
-      `share_token` on a doc plus a `/s/<token>` route. Scenes explicitly out of scope. Responsive from the start — these will be opened on phones constantly.
+      `share_token` on a doc plus a `/s/<token>` route served by `share.html` — a minimal page with no auth and no editor, so a share link does not drag the whole app down with it. Scenes explicitly out of scope. Responsive from the start — these will be opened on phones constantly.
       _Done when: a share URL opens in a logged-out private window, renders the sim, and nothing is editable._
 
 ---
