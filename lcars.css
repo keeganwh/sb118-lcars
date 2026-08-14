@@ -316,6 +316,10 @@ body.hc #cp{border-left:3px solid var(--blue)}
 .set-check input[type=checkbox]{width:auto;flex-shrink:0;margin-top:3px}
 .set-check-t{display:flex;align-items:center;gap:8px;font-size:0.78rem;font-weight:bold;color:var(--text)}
 .set-danger{border-color:var(--red,#a44)}
+/* Which account you are actually in is the first thing this page should answer */
+.set-writerid{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.set-writerid-lbl{font-size:0.67rem;letter-spacing:2px;color:var(--dim)}
+.set-writerid-val{font-size:1.25rem;font-weight:bold;letter-spacing:2px;color:var(--amber)}
 /* The preference fields are the only settings that need an explicit save, so
    the bar rides the bottom of the page rather than the bottom of the screen. */
 .set-bar{position:sticky;bottom:0;background:var(--panel);border:1px solid var(--border);

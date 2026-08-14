@@ -160,6 +160,10 @@ const VERSIONS = [
       'Fixed: on a narrow screen the header buttons were cut off with no way to reach them, so there was no way back out of Settings on a phone. The header now scrolls sideways and drops the STARBASE 118 WRITING TOOL strapline rather than clipping',
       'Changed: the Character Manifest is a page of the app now rather than a screen that covered it. It carried a second row of Sim Editor, theme and Settings buttons of its own, which made it read as a separate application; it now sits under the same header as everything else, and that header stays put while you are in it. Opening it mid-sim still leaves your unsaved typing exactly where it was',
       'Changed: the Character Manifest works on a phone \u2014 the character list and the profile stack into one scrolling column instead of being squeezed side by side',
+      'Added: account management in Settings. Change your PIN without leaving LCARS \u2014 you enter your current one, then the new one twice. Add, change or remove your recovery email. The Writer ID you are signed in as is now shown plainly at the top of the page rather than buried in a sentence',
+      'Changed: everything to do with your account is now in one place at the top of Settings \u2014 who you are signed in as, saving now, signing out, your PIN, your recovery email and closing the account. Deleting your account moved there from the Danger Zone, which now covers erasing your sims and characters only',
+      'Fixed: the version number in Settings and the link to LCARS online were asking for a colour that was never defined, so they came out in ordinary body text instead of the accent colour',
+      'Note: a forgotten PIN still has to be reset by the maintainer, and deleting your account still leaves the Writer ID registered as a login. Both need a server-side key that cannot safely live in the page, and are being done properly next',
     ],
   },
 ];
@@ -862,6 +866,60 @@ function cloudSignOut() {
   clearAuth();
   setMode('');
   location.reload();
+}
+
+// ── Account management ────────────────────────────────────────────────────
+// The signed-in-already surface only. Resetting a forgotten PIN and removing
+// the login itself both need the service_role key, which must never appear in
+// a page served to writers — those stay manual until there is a server
+// function to do them (see ROADMAP session 3).
+
+// recovery_email is stored for identification, not used to send anything yet.
+async function fetchRecoveryEmail() {
+  const a = getAuth();
+  if (!a.uid) return null;
+  const r = await supaFetch('/rest/v1/writers?select=recovery_email&id=eq.' + encodeURIComponent(a.uid));
+  if (!r.ok) throw new Error('Could not read your account details.');
+  const rows = await r.json();
+  return (rows[0] && rows[0].recovery_email) || '';
+}
+
+async function saveRecoveryEmail(email) {
+  const a = getAuth();
+  if (!a.uid) throw new Error('You are not signed in.');
+  const v = (email || '').trim();
+  if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new Error('That does not look like an email address.');
+  const r = await supaFetch('/rest/v1/writers?id=eq.' + encodeURIComponent(a.uid), {
+    method: 'PATCH',
+    headers: { 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ recovery_email: v || null })
+  });
+  if (!r.ok) throw new Error(supaErr(await r.json().catch(()=>null), 'Could not save your recovery email.'));
+  return v;
+}
+
+// The current PIN is checked by signing in with it rather than trusted from
+// the session: it gives a clear error when it is wrong, and it hands back a
+// fresh token for the change itself.
+async function changePin(currentPin, newPin) {
+  const a = getAuth();
+  if (!a.writerId) throw new Error('You are not signed in.');
+  if ((newPin || '').length < 6) throw new Error('The new PIN must be at least 6 characters.');
+  if (currentPin === newPin) throw new Error('That is already your PIN.');
+
+  const chk = await fetch(SUPA_URL + '/auth/v1/token?grant_type=password', {
+    method: 'POST',
+    headers: { 'apikey': SUPA_ANON, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: writerEmail(a.writerId), password: currentPin })
+  });
+  const cj = await chk.json();
+  if (!chk.ok) throw new Error('That is not your current PIN.');
+  saveAuth({ ...a, access_token: cj.access_token, refresh_token: cj.refresh_token || a.refresh_token,
+             expires_at: Date.now() + (cj.expires_in || 3600) * 1000 });
+
+  const r = await supaFetch('/auth/v1/user', { method: 'PUT', body: JSON.stringify({ password: newPin }) });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(supaErr(j, 'Could not change your PIN.'));
 }
 
 // Snapshots are ten full copies of a sim's HTML apiece. Kept in the main payload
@@ -4796,6 +4854,7 @@ function renderSettingsView() {
     </div>`;
   // The Delta Prime radio groups render their own selected state.
   setTimeout(updateStyleMenu, 0);
+  if (isCloud()) loadRecoveryEmail();
 }
 
 function settingsAccountCard() {
@@ -4804,16 +4863,49 @@ function settingsAccountCard() {
       <div class="msec">YOUR ACCOUNT</div>
       ${isCloud() ? `
       <div class="set-block">
-        <div style="font-size:0.85rem;line-height:1.7">
-          Signed in as <strong>${esc(getAuth().writerId||'')}</strong>. Your work saves to your account a
-          few seconds after each change, and follows you to any device you sign in on.
+        <div class="set-writerid">
+          <span class="set-writerid-lbl">SIGNED IN AS</span>
+          <span class="set-writerid-val">${esc(getAuth().writerId||'')}</span>
         </div>
+        <div class="set-note">Your work saves to your account a few seconds after each change, and follows
+          you to any device you sign in on.</div>
         <div class="set-actions" style="margin-top:10px">
           <button class="btn btn-s" onclick="saveToCloud()">${ic('arrow-up')} Save now</button>
           <button class="btn btn-s" onclick="cloudSignOut()">Sign out</button>
         </div>
         <div class="set-note"><span id="sync-status">${esc(syncStatus.msg||'')}</span></div>
         <div class="set-note">Signing out leaves your work on this device untouched. Your online copy is unaffected.</div>
+      </div>
+
+      <div class="set-block">
+        <div class="ml">YOUR PIN</div>
+        <div class="set-actions" style="margin-top:5px">
+          <button class="btn btn-s" onclick="showChangePin()">Change PIN</button>
+        </div>
+        <div class="set-note">You will need your current PIN. A <em>forgotten</em> PIN still has to be reset
+          by the tool's maintainer — the address your account is registered under is not one that can
+          receive mail.</div>
+      </div>
+
+      <div class="set-block">
+        <div class="ml" id="acct-rec-lbl">RECOVERY EMAIL</div>
+        <div class="set-actions" style="margin-top:5px">
+          <input class="mi" id="acct-rec" type="email" style="flex:2 1 220px" placeholder="Loading…" disabled
+                 autocomplete="email" spellcheck="false">
+          <button class="btn btn-s" id="acct-rec-save" style="flex:0 1 auto;min-width:120px"
+                  onclick="saveRecoveryEmailFromSettings()" disabled>Save email</button>
+        </div>
+        <div class="set-note" id="acct-rec-msg">So you can be identified if you forget your PIN. Nothing is
+          sent to it — it is held for support only. Leave it empty to remove it.</div>
+      </div>
+
+      <div class="set-block">
+        <div class="ml">CLOSING YOUR ACCOUNT</div>
+        <div class="set-actions" style="margin-top:5px">
+          <button class="btn btn-s" onclick="confirmDeleteAccount()">${ic('alert')} Delete my account and all data</button>
+        </div>
+        <div class="set-note">Removes your sims, characters and revision history from the server and wipes
+          this device's copy. Your Writer ID stays registered as a login. Cannot be undone.</div>
       </div>
       ` : isFileCopy() ? `
       <div class="set-block">
@@ -4824,7 +4916,7 @@ function settingsAccountCard() {
         </div>
         <div class="set-note">
           Accounts are only available in LCARS online at
-          <a href="${NEW_HOME}" target="_blank" rel="noopener" style="color:var(--accent)">${NEW_HOME.replace(/^https?:\/\//,'').replace(/\/$/,'')}</a>.
+          <a href="${NEW_HOME}" target="_blank" rel="noopener" style="color:var(--amber)">${NEW_HOME.replace(/^https?:\/\//,'').replace(/\/$/,'')}</a>.
           A backup taken here restores straight into it.
         </div>
       </div>
@@ -5019,14 +5111,70 @@ function settingsDangerCard() {
           Cannot be undone. <strong>Take a backup first.</strong></div>
       </div>
       ${isCloud() ? `
-      <div class="set-block">
-        <div class="set-actions">
-          <button class="btn btn-s" onclick="confirmDeleteAccount()">${ic('alert')} Delete my account and all data</button>
-        </div>
-        <div class="set-note">Removes your sims, characters and revision history from the server and wipes
-          this device's copy. Your Writer ID stays registered as a login. Cannot be undone.</div>
-      </div>` : ''}
+      <div class="set-note">Closing the account itself lives with the rest of your account settings, at the
+        top of this page.</div>` : ''}
     </div>`;
+}
+
+// ── Account controls ──────────────────────────────────────────────────────
+// The recovery email is the one field here that has to be read back from the
+// server, so the input renders disabled and fills itself in.
+function loadRecoveryEmail() {
+  const inp = document.getElementById('acct-rec');
+  if (!inp) return;
+  fetchRecoveryEmail().then(v => {
+    const el = document.getElementById('acct-rec');
+    if (!el) return;                       // navigated away while it was in flight
+    el.value = v || '';
+    el.placeholder = 'you@example.com';
+    el.disabled = false;
+    const b = document.getElementById('acct-rec-save');
+    if (b) b.disabled = false;
+  }).catch(() => {
+    const el = document.getElementById('acct-rec');
+    if (!el) return;
+    el.placeholder = 'Could not be loaded';
+    const m = document.getElementById('acct-rec-msg');
+    if (m) m.innerHTML = '<span style="color:var(--red,#c66)">Could not reach the server to read your ' +
+      'recovery email. Check your connection and reopen Settings.</span>';
+  });
+}
+
+function saveRecoveryEmailFromSettings() {
+  const inp = document.getElementById('acct-rec');
+  const btn = document.getElementById('acct-rec-save');
+  if (!inp) return;
+  btn.disabled = true;
+  saveRecoveryEmail(inp.value)
+    .then(v => showToast(v ? 'Recovery email saved' : 'Recovery email removed'))
+    .catch(e => alert(e.message))
+    .finally(() => { const b = document.getElementById('acct-rec-save'); if (b) b.disabled = false; });
+}
+
+function showChangePin() {
+  openModal('CHANGE YOUR PIN', `
+    <div class="mf"><label class="ml">CURRENT PIN</label>
+      <input class="mi" id="pin-old" type="password" autocomplete="current-password"></div>
+    <div class="mf"><label class="ml">NEW PIN <span style="font-weight:normal;opacity:0.6">(at least 6 characters)</span></label>
+      <input class="mi" id="pin-new" type="password" autocomplete="new-password"></div>
+    <div class="mf"><label class="ml">NEW PIN AGAIN</label>
+      <input class="mi" id="pin-new2" type="password" autocomplete="new-password"></div>
+    <div id="pin-msg" style="font-size:0.76rem;line-height:1.5;min-height:1.1em;color:var(--red,#c66)"></div>
+    <div class="set-note">Your sims are not affected. You stay signed in on this device; other devices
+      will ask for the new PIN next time they sign in.</div>
+  `, () => {
+    const msg = document.getElementById('pin-msg');
+    const oldP = document.getElementById('pin-old').value;
+    const newP = document.getElementById('pin-new').value;
+    const new2 = document.getElementById('pin-new2').value;
+    if (newP !== new2) { msg.textContent = 'The two new PINs do not match.'; return false; }
+    msg.style.color = 'var(--dim)';
+    msg.textContent = 'Changing…';
+    changePin(oldP, newP)
+      .then(() => { closeModal(); showToast('PIN changed'); })
+      .catch(e => { msg.style.color = 'var(--red,#c66)'; msg.textContent = e.message; });
+    return false;                          // the modal closes on success, not on click
+  }, { ok: 'Change PIN' });
 }
 
 function settingsAboutCard() {
@@ -5035,7 +5183,7 @@ function settingsAboutCard() {
       <div class="msec">ABOUT</div>
       <div class="set-block">
         <div class="set-actions">
-          <span style="font-size:1.4rem;font-weight:bold;color:var(--accent);flex:0 0 auto">v${APP_VERSION}</span>
+          <span style="font-size:1.4rem;font-weight:bold;color:var(--amber);flex:0 0 auto">v${APP_VERSION}</span>
           <button class="btn btn-s" style="flex:0 0 auto;min-width:0"
                   onclick="document.getElementById('ver-hist').classList.toggle('hidden')">Changelog ${ic('chevron-down')}</button>
         </div>

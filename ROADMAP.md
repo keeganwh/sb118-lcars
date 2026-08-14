@@ -52,7 +52,7 @@ Settings and Manifest become **routed views inside the one app**, not separate H
       It currently carries a header of its own — a second Sim Editor / Settings bar inside `#char-manifest` — so it looks like a different application. It should sit under the same app header as every other view.
       _Done when: the Manifest has its own URL, wears the same header as the rest of the app, and opening it mid-sim leaves the editor exactly as it was._
 
-- [ ] **Account management.**
+- [x] **Account management.**
       Change PIN, update or add a recovery email, see which Writer ID you are signed in as, sign out, delete account. Gathers the scattered account bits into one place.
       _Done when: a writer can change their PIN and recovery email without leaving LCARS._
 
