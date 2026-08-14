@@ -1492,6 +1492,7 @@ const VERSIONS = [
       'Changed: the Dashboard\u2019s Ready to get started? cards now sit in two rows \u2014 making things on the first, learning about them on the second',
       'Fixed: the Danger Zone heading was tinted red and became unreadable against the red duty post accent; it now uses the normal text colour',
       'Fixed: reopening the Getting Started wizard from the Dashboard left no way out except Skip, which also stopped it appearing again \u2014 there is now a close button on every step',
+      'Fixed: Move My Stuff on the old address uploaded your sims but then left you sitting on the old site. It now confirms the move and forwards you to the new address, with the option to stay. If the upload did not complete it says so and offers to retry or download a backup rather than sending you on',
       'Fixed: restoring a large backup froze the page for over a second — the whole dataset was being written and the sim tree rebuilt inside the click, with a blocking alert on the end. The work now yields a frame first and reports through a toast',
       'Note: if this browser and your account both hold sims, you are asked which copy to keep rather than one silently replacing the other',
     ],
@@ -2735,6 +2736,41 @@ function gateForm(kind) {
   });
 }
 
+// Shown after signing in from the old GitHub Pages address. cloudBoot() has
+// already pushed this browser's sims up, so the only thing left is to move the
+// writer across. Auto-forwards on the real old address; on a ?moved=1 preview it
+// waits for the click so the preview is not navigated away from.
+function showTransferDone() {
+  gateClose();
+  const ok = syncStatus.state !== 'error';
+  const el = document.createElement('div');
+  _gateEl = el;
+  el.id = 'auth-gate';
+  el.style.cssText = 'position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--bg,#111);overflow:auto';
+  el.innerHTML = `
+    <div style="width:100%;max-width:440px;background:var(--panel,#1b1b1b);border:1px solid var(--border,#333);border-radius:10px;padding:26px 24px">
+      <div style="font-size:1.15rem;font-weight:700;margin-bottom:10px">${ok ? 'Your sims are on your account' : 'Signed in — but the upload did not finish'}</div>
+      <p style="font-size:0.87rem;line-height:1.65;color:var(--dim);margin:0 0 8px">
+        ${ok
+          ? 'Everything in this browser has been saved to your account. Carry on at the new address — sign in there with the same Writer ID and PIN and it will all be waiting.'
+          : 'Your account is set up, but this browser\'s sims could not be uploaded just now. Stay here and try again in a moment, or download a backup and restore it at the new address.'}
+      </p>
+      <p style="font-size:0.75rem;color:var(--dim);margin:0 0 16px">This old address stays available, but it will not receive new features.</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <a class="btn btn-p" href="${NEW_HOME}" style="width:100%;justify-content:center;text-decoration:none">Go to the new address</a>
+        ${ok ? '' : `<button class="btn btn-s" style="width:100%;justify-content:center" onclick="saveToCloud().then(showTransferDone)">Try the upload again</button>
+        <button class="btn btn-s" style="width:100%;justify-content:center" onclick="exportData()">Download a backup</button>`}
+        <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateClose()">Stay here for now</button>
+      </div>
+      ${ok && /github\.io$/i.test(location.hostname)
+        ? '<div style="font-size:0.72rem;color:var(--dim);margin-top:12px">Taking you there automatically…</div>' : ''}
+    </div>`;
+  document.body.appendChild(el);
+  if (ok && /github\.io$/i.test(location.hostname)) {
+    setTimeout(() => { if (document.getElementById('auth-gate')) location.href = NEW_HOME; }, 3000);
+  }
+}
+
 async function gateSubmit(kind) {
   const msg = document.getElementById('gate-msg');
   const btn = document.getElementById('gate-go');
@@ -2754,6 +2790,9 @@ async function gateSubmit(kind) {
     gateClose();
     await cloudBoot();
     showToast('Signed in as ' + normalizeWriterId(wid));
+    // Signing in from the old address is a migration, not a destination — the
+    // sims are on the account now, so send them where they should be writing.
+    if (movedBannerApplies()) { showTransferDone(); return; }
     maybeShowWizard();
   } catch(e) {
     msg.style.color = 'var(--red,#c66)';
