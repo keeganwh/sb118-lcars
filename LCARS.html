@@ -1486,7 +1486,7 @@ const VERSIONS = [
       'Changed: cloud sync now uses a proper database instead of a GitHub Gist. The Gist was capped near 1 MB and this data was close to it; that ceiling is gone. The Personal Access Token and Gist ID fields are removed — nothing to set up any more',
       'Changed: saves reach your account after ~5 seconds instead of ~60, and Ctrl+S still saves a snapshot and syncs immediately',
       'Fixed: restoring a backup did not save to your account — it saved on the device only and would not reach the server until your next edit. Restoring now uploads straight away, which matters most when moving your sims across from the old address',
-      'Added: the old GitHub Pages address now shows a notice pointing at the new one, with a one-click way to move your sims across — sign in from the old address and your work uploads to your account, then sign in at the new address and it is there. A backup download and a note about Gist sync are offered alongside',
+      'Added: the old GitHub Pages address now shows a moving notice explaining the change, with Move My Stuff (sign in there and your sims and settings upload to your account, ready at the new address), a manual backup download, a link to the new site, and Remind Me Later — which returns on the next load rather than dismissing for good',
       'Fixed: restoring a large backup froze the page for over a second — the whole dataset was being written and the sim tree rebuilt inside the click, with a blocking alert on the end. The work now yields a frame first and reports through a toast',
       'Note: if this browser and your account both hold sims, you are asked which copy to keep rather than one silently replacing the other',
     ],
@@ -2076,41 +2076,44 @@ function movedBannerApplies() {
 
 function showMovedBanner() {
   if (!movedBannerApplies()) return;
-  try { if (localStorage.getItem('lcars_moved_ack')) return; } catch(e) {}
   const b = document.createElement('div');
   b.id = 'moved-banner';
-  b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:8500;padding:14px 16px;background:var(--panel,#1b1b1b);border-top:2px solid var(--accent,#f80);font-size:0.82rem;line-height:1.55;max-height:60vh;overflow:auto';
+  b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:8500;padding:16px;background:var(--panel,#1b1b1b);border-top:2px solid var(--accent,#f80);font-size:0.84rem;line-height:1.6;max-height:65vh;overflow:auto';
   b.innerHTML = `
-    <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;max-width:1100px;margin:0 auto">
-      <div style="flex:1;min-width:260px">
-        <strong>LCARS has moved to <a href="${NEW_HOME}" style="color:var(--accent,#f80)">sb118-lcars.vercel.app</a>.</strong>
-        This address still works, but sims saved here live in this browser only — browsers keep each web address's data separate, so they will not appear at the new address on their own.
-        <div style="opacity:0.8;margin-top:6px">
-          The easiest way across: <strong>sign in here</strong> and your sims upload to your account, then sign in at the new address and they are simply there.
-        </div>
+    <div style="max-width:840px;margin:0 auto">
+      <div style="font-size:0.95rem;font-weight:700;margin-bottom:8px">
+        LCARS is moving to a new host. The new URL is
+        <a href="${NEW_HOME}" style="color:var(--accent,#f80)">sb118-lcars.vercel.app</a>.
       </div>
+      <p style="margin:0 0 8px">
+        If you're seeing this note, you're still using the GitHub Pages version. This page still works, but your sims and settings live in the browser's local storage, making them more prone to loss and harder to sync across devices.
+      </p>
+      <p style="margin:0 0 8px">
+        We strongly recommend migrating to the new site and bringing your sims and settings with you. The easiest way is to click <strong>Move My Stuff</strong> and set up an account — it just needs your SB118 Writer ID and a PIN of your choice. You can also download a manual backup and import it after creating an account if you prefer.
+      </p>
+      <p style="margin:0 0 14px;font-size:0.75rem;color:var(--dim)">
+        <em>Note: this new version discontinues and replaces Gist Sync, which had very limited space. The new site backs everything up securely on its own database. Your existing Gist is untouched and still accessible at <a href="https://gist.github.com" target="_blank" rel="noopener" style="color:var(--dim);text-decoration:underline">gist.github.com</a>.</em>
+      </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button class="btn btn-p" onclick="movedTransfer()">Move my sims</button>
-        <button class="btn btn-s" onclick="exportData()">Download a backup</button>
-        <a class="btn btn-s" href="${NEW_HOME}" style="text-decoration:none">New address</a>
-        <button class="btn btn-s" onclick="ackMoved()">Not now</button>
+        <button class="btn btn-p" onclick="movedTransfer()">Move My Stuff</button>
+        <button class="btn btn-s" onclick="exportData()">Manual Backup Download</button>
+        <a class="btn btn-s" href="${NEW_HOME}" style="text-decoration:none">Visit the New Site</a>
+        <button class="btn btn-s" onclick="ackMoved()">Remind Me Later</button>
       </div>
-    </div>
-    <div style="max-width:1100px;margin:10px auto 0;font-size:0.73rem;color:var(--dim);line-height:1.5">
-      <strong>Using Gist sync?</strong> LCARS no longer syncs to GitHub Gists — accounts replace it and have no size limit. Your existing Gist is untouched and still readable at <a href="https://gist.github.com" target="_blank" rel="noopener" style="color:var(--dim);text-decoration:underline">gist.github.com</a> if you want the file, but moving your sims across gives you the same syncing and more.
     </div>`;
   document.body.appendChild(b);
 }
 
-// Sign in from the old address: cloudBoot() uploads whatever this browser holds,
-// so signing in again at the new address brings it all down.
+// Signing in from the old address uploads whatever this browser holds, so
+// signing in again at the new address brings it all down.
 function movedTransfer() {
   ackMoved();
   showAuthGate(true);
 }
 
+// Deliberately not remembered — the banner returns on the next page load until
+// the writer has actually moved.
 function ackMoved() {
-  try { localStorage.setItem('lcars_moved_ack', '1'); } catch(e) {}
   const b = document.getElementById('moved-banner');
   if (b) b.remove();
 }
