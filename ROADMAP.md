@@ -25,15 +25,15 @@ Not a tidy-up done first — it is what `/settings`, `/manifest` and `/s/<token>
 
 Settings and Manifest become **routed views inside the one app**, not separate HTML files. They get real URLs, are bookmarkable and work with the back button, but the app shell is not torn down — so popping open the Manifest mid-sim leaves the editor and its unsaved keystrokes intact, and the auth gate does not re-run on every navigation. Share links are the opposite case: a genuinely separate minimal page, so someone clicking a link does not download the whole application.
 
-- [ ] **Split `LCARS.html` into `LCARS.html` + `lcars.css` + `lcars.js`.**
+- [x] **Split `LCARS.html` into `LCARS.html` + `lcars.css` + `lcars.js`.**
       Relative paths, so the app still runs on GitHub Pages and from a local folder. No behaviour change of any kind.
       _Done when: the app loads from three files with no visible difference, and a full browser pass (gate, wizard, editor, manifest, settings, sync) shows no console errors._
 
-- [ ] **Add History API routing.**
+- [x] **Add History API routing.**
       `/` dashboard, `/settings`, `/manifest`. Back and forward work; a direct hit on `/settings` loads straight there. `vercel.json` rewrites the routes to `LCARS.html`; on GitHub Pages, which has no rewrites, the app still works from the root and the routes degrade to the dashboard.
       _Done when: each view has its own URL, the back button moves between them, and reloading on any of them lands in the right place._
 
-- [ ] **Keep the offline download a single file.**
+- [x] **Keep the offline download a single file.**
       A Vercel serverless route that inlines the three back together on demand, so "download and run offline" still means one file. The Settings download button points at it.
       _Done when: the downloaded file opens from disk with the network off and works fully._
 
