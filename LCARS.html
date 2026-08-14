@@ -1486,7 +1486,8 @@ const VERSIONS = [
       'Changed: cloud sync now uses a proper database instead of a GitHub Gist. The Gist was capped near 1 MB and this data was close to it; that ceiling is gone. The Personal Access Token and Gist ID fields are removed — nothing to set up any more',
       'Changed: saves reach your account after ~5 seconds instead of ~60, and Ctrl+S still saves a snapshot and syncs immediately',
       'Fixed: restoring a backup did not save to your account — it saved on the device only and would not reach the server until your next edit. Restoring now uploads straight away, which matters most when moving your sims across from the old address',
-      'Added: the old GitHub Pages address now shows a notice pointing at the new one, with a reminder to back up first since sims saved there stay in that browser',
+      'Added: the old GitHub Pages address now shows a notice pointing at the new one, with a one-click way to move your sims across — sign in from the old address and your work uploads to your account, then sign in at the new address and it is there. A backup download and a note about Gist sync are offered alongside',
+      'Fixed: restoring a large backup froze the page for over a second — the whole dataset was being written and the sim tree rebuilt inside the click, with a blocking alert on the end. The work now yields a frame first and reports through a toast',
       'Note: if this browser and your account both hold sims, you are asked which copy to keep rather than one silently replacing the other',
     ],
   },
@@ -2022,7 +2023,7 @@ function onImportFile(e) {
         <strong style="color:var(--text)">Merge</strong> adds imported items alongside existing data.
       </p>`,
       () => applyImport('merge'),
-      { ok: 'Merge', extra: [{label:ic('alert') + ' Overwrite', cls:'btn-s', fn:"applyImport('overwrite');closeModal()"}] }
+      { ok: 'Merge', extra: [{label:ic('alert') + ' Overwrite', cls:'btn-s', fn:"applyImport('overwrite')"}] }
     );
   };
   reader.readAsText(file);
@@ -2031,307 +2032,32 @@ function onImportFile(e) {
 function applyImport(mode) {
   const data = _pendingImport; _pendingImport = null;
   if (!data) return;
-  if (mode === 'overwrite') {
-    Object.assign(S, data);
-  } else {
-    Object.assign(S.missions, data.missions||{});
-    Object.assign(S.scenes, data.scenes||{});
-    Object.assign(S.docs, data.docs||{});
-  }
-  persist();
-  curId = null; curView = null; curViewId = null;
-  setTheme(S.settings.theme||'dark', true);
-  applyStyle();
-  applyPrefs();
-  renderNav();
-  showDashboard();
-  // Restoring a backup is exactly when data most needs to reach the account —
-  // without this it would sit locally until the next edit, or be lost with the tab.
-  if (isCloud()) { saveToCloud(); backfillSnapshots(); }
-  alert('Import complete.' + (isCloud() ? '\n\nSaving to your account now.' : ''));
-}
-
-// ================================================================
-// CLOUD SYNC (Supabase)
-// ================================================================
-// Talks to Supabase over plain fetch rather than their CDN client, so the app
-// stays a single dependency-free file and still works with no network at all.
-// Two independent ideas live here:
-//   * mode  — 'cloud' (signed in, data on the server) or 'local' (offline, this
-//             browser only). Every network call is gated on mode === 'cloud'.
-//   * auth  — the Supabase session, refreshed on demand when a call 401s.
-const SUPA_URL  = 'https://nyjpqaelilrqzmnangft.supabase.co';
-const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55anBxYWVsaWxycXptbmFuZ2Z0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NzMwMDIsImV4cCI6MjEwMjI0OTAwMn0.uYUMt49TBW3S_LLse5ZreDQgfL74frlf01jSoHa1qkU';
-const AUTH_KEY  = 'lcars_auth_v1';
-const MODE_KEY  = 'lcars_mode_v1';
-
-let syncTimer = null;
-let syncStatus = { state: 'idle', msg: '' }; // 'idle' | 'syncing' | 'ok' | 'error'
-
-function getMode() { try { return localStorage.getItem(MODE_KEY) || ''; } catch(e) { return ''; } }
-function setMode(m) { try { localStorage.setItem(MODE_KEY, m); } catch(e) {} }
-function isCloud() { return getMode() === 'cloud'; }
-
-function getAuth() { try { return JSON.parse(localStorage.getItem(AUTH_KEY) || '{}'); } catch(e) { return {}; } }
-function saveAuth(a) { try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e) {} }
-function clearAuth() { try { localStorage.removeItem(AUTH_KEY); } catch(e) {} }
-
-// A writer ID is ten characters: first letter of the writer's first ship, the
-// four-digit stardate year, the two-digit month, the character's first and last
-// initials (last becomes 1 for a single-named character), then the academy list
-// digit. e.g. A239809JP3.
-// The two initial positions are left loose rather than pinned to letters, since
-// that is where the format's documented exceptions live.
-function normalizeWriterId(s) { return (s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
-function validWriterId(s) {
-  return /^[A-Z]\d{6}[A-Z0-9]{2}\d$/.test(normalizeWriterId(s));
-}
-// The auth account's email is derived from the Writer ID, so signing in needs no
-// server-side lookup. It is a synthetic address and never receives mail.
-function writerEmail(wid) { return normalizeWriterId(wid).toLowerCase() + '@lcars.local'; }
-
-function setSyncStatus(state, msg) {
-  syncStatus = { state, msg };
-  const el = document.getElementById('sync-status');
-  if (el) {
-    el.textContent = msg || '';
-    el.style.color = state === 'error' ? 'var(--red,#c66)' : state === 'ok' ? 'var(--dim)' : 'var(--dim)';
-  }
-}
-
-function supaErr(j, fallback) {
-  return (j && (j.error_description || j.msg || j.message || j.error)) || fallback;
-}
-
-async function refreshSession() {
-  const a = getAuth();
-  if (!a.refresh_token) return false;
-  try {
-    const r = await fetch(SUPA_URL + '/auth/v1/token?grant_type=refresh_token', {
-      method: 'POST',
-      headers: { 'apikey': SUPA_ANON, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: a.refresh_token })
-    });
-    if (!r.ok) return false;
-    const j = await r.json();
-    saveAuth({ ...a, access_token: j.access_token, refresh_token: j.refresh_token || a.refresh_token,
-               uid: (j.user && j.user.id) || a.uid, expires_at: Date.now() + (j.expires_in || 3600) * 1000 });
-    return true;
-  } catch(e) { return false; }
-}
-
-// Authenticated call against the Supabase REST/Auth API. Retries once through a
-// token refresh when the access token has expired.
-async function supaFetch(path, opts = {}, retry = true) {
-  const a = getAuth();
-  const headers = Object.assign({ 'apikey': SUPA_ANON, 'Content-Type': 'application/json' }, opts.headers || {});
-  if (a.access_token) headers['Authorization'] = 'Bearer ' + a.access_token;
-  const res = await fetch(SUPA_URL + path, Object.assign({}, opts, { headers }));
-  if (res.status === 401 && retry && a.refresh_token) {
-    if (await refreshSession()) return supaFetch(path, opts, false);
-  }
-  return res;
-}
-
-async function cloudSignUp(wid, pin, recoveryEmail) {
-  const w = normalizeWriterId(wid);
-  const r = await fetch(SUPA_URL + '/auth/v1/signup', {
-    method: 'POST',
-    headers: { 'apikey': SUPA_ANON, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: writerEmail(w), password: pin })
-  });
-  const j = await r.json();
-  if (!r.ok) {
-    if (/already registered/i.test(supaErr(j, ''))) throw new Error('That Writer ID already has an account. Try signing in instead.');
-    throw new Error(supaErr(j, 'Could not create the account.'));
-  }
-  if (!j.access_token) throw new Error('Account created, but no session came back. Check that "Confirm email" is turned off in Supabase → Authentication → Sign In / Providers → Email.');
-  saveAuth({ access_token: j.access_token, refresh_token: j.refresh_token, uid: j.user.id,
-             writerId: w, expires_at: Date.now() + (j.expires_in || 3600) * 1000 });
-  await supaFetch('/rest/v1/writers', {
-    method: 'POST',
-    headers: { 'Prefer': 'resolution=merge-duplicates' },
-    body: JSON.stringify({ id: j.user.id, writer_id: w, recovery_email: (recoveryEmail || '').trim() || null })
-  });
-  setMode('cloud');
-  return w;
-}
-
-async function cloudSignIn(wid, pin) {
-  const w = normalizeWriterId(wid);
-  const r = await fetch(SUPA_URL + '/auth/v1/token?grant_type=password', {
-    method: 'POST',
-    headers: { 'apikey': SUPA_ANON, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: writerEmail(w), password: pin })
-  });
-  const j = await r.json();
-  if (!r.ok) throw new Error(/invalid/i.test(supaErr(j, '')) ? 'Writer ID or PIN not recognised.' : supaErr(j, 'Could not sign in.'));
-  saveAuth({ access_token: j.access_token, refresh_token: j.refresh_token, uid: j.user.id,
-             writerId: w, expires_at: Date.now() + (j.expires_in || 3600) * 1000 });
-  setMode('cloud');
-  return w;
-}
-
-function cloudSignOut() {
-  clearAuth();
-  setMode('');
-  location.reload();
-}
-
-// Snapshots are ten full copies of a sim's HTML apiece. Kept in the main payload
-// they dominated its size and were re-uploaded on every single save, so they go
-// to their own table and are fetched only when the history modal is opened.
-// doc.snapshots stays as the local copy — offline mode needs it, and restoring
-// from it is instant.
-function cloudPayload() {
-  const docs = {};
-  for (const k in (S.docs || {})) {
-    const { snapshots, ...rest } = S.docs[k];
-    docs[k] = rest;
-  }
-  return { ...S, docs };
-}
-
-async function pushSnapshot(docId, snap) {
-  if (!isCloud()) return;
-  const a = getAuth();
-  if (!a.uid) return;
-  try {
-    const r = await supaFetch('/rest/v1/snapshots', {
-      method: 'POST',
-      body: JSON.stringify({ writer_uid: a.uid, doc_id: docId, html: snap.content,
-                             word_count: snap.wordCount, created_at: new Date(snap.savedAt).toISOString() })
-    });
-    if (r.ok) await pruneSnapshots(docId);
-  } catch(e) { /* local copy still holds it */ }
-}
-
-// Keep the server to the same ten-per-sim cap as local.
-async function pruneSnapshots(docId) {
-  const a = getAuth();
-  const q = '/rest/v1/snapshots?writer_uid=eq.' + encodeURIComponent(a.uid) +
-            '&doc_id=eq.' + encodeURIComponent(docId);
-  const r = await supaFetch(q + '&select=id&order=created_at.desc&limit=200&offset=10');
-  if (!r.ok) return;
-  const old = await r.json();
-  for (const row of old) await supaFetch('/rest/v1/snapshots?id=eq.' + row.id, { method: 'DELETE' });
-}
-
-async function fetchSnapshots(docId) {
-  const a = getAuth();
-  if (!a.uid) return null;
-  const r = await supaFetch('/rest/v1/snapshots?writer_uid=eq.' + encodeURIComponent(a.uid) +
-                            '&doc_id=eq.' + encodeURIComponent(docId) +
-                            '&select=html,word_count,created_at&order=created_at.asc');
-  if (!r.ok) return null;
-  const rows = await r.json();
-  return rows.map(x => ({ content: x.html, wordCount: x.word_count, savedAt: new Date(x.created_at).getTime() }));
-}
-
-// One-off: lift snapshots that already existed locally up to the server, so a
-// writer's existing history follows them to a new device.
-async function backfillSnapshots() {
-  if (!isCloud() || S._snapBackfill) return;
-  for (const id in (S.docs || {})) {
-    for (const snap of (S.docs[id].snapshots || [])) await pushSnapshot(id, snap);
-  }
-  S._snapBackfill = true;
-  persist();
-}
-
-// Push the whole state. localStorage keeps its own copy either way, so a failed
-// push is a warning rather than data loss.
-async function saveToCloud() {
-  if (!isCloud()) return;
-  const a = getAuth();
-  if (!a.uid) return;
-  setSyncStatus('syncing', 'Saving…');
-  try {
-    const r = await supaFetch('/rest/v1/state', {
-      method: 'POST',
-      headers: { 'Prefer': 'resolution=merge-duplicates' },
-      body: JSON.stringify({ writer_uid: a.uid, payload: cloudPayload(), updated_at: new Date().toISOString() })
-    });
-    if (!r.ok) throw new Error((await r.text()).slice(0, 160));
-    setSyncStatus('ok', 'Saved ' + new Date().toLocaleTimeString());
-  } catch(e) {
-    setSyncStatus('error', 'Not saved — kept on this device. ' + (e.message || ''));
-  }
-}
-
-async function loadFromCloud() {
-  const a = getAuth();
-  if (!a.uid) return null;
-  const r = await supaFetch('/rest/v1/state?writer_uid=eq.' + encodeURIComponent(a.uid) + '&select=payload,updated_at');
-  if (!r.ok) throw new Error('Could not reach your saved data.');
-  const rows = await r.json();
-  return rows && rows[0] ? rows[0] : null;
-}
-
-// Debounced auto-save. Name and signature are unchanged from the Gist era so
-// every existing call site still works.
-function schedSync(delay) {
-  if (!isCloud()) return;
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(saveToCloud, delay || 5000);
-}
-
-function hasLocalData() {
-  return !!(S && S.docs && Object.keys(S.docs).length);
-}
-
-// Boot path for a signed-in writer: pull the server copy, and reconcile if this
-// browser also has local work.
-async function cloudBoot() {
-  if (!isCloud()) return;
-  setSyncStatus('syncing', 'Loading…');
-  let row;
-  try { row = await loadFromCloud(); }
-  catch(e) { setSyncStatus('error', 'Working offline — could not reach the server.'); return; }
-
-  if (!row) {                       // nothing on the server yet
-    if (hasLocalData()) { await saveToCloud(); await backfillSnapshots(); }
-    else setSyncStatus('ok', '');
-    return;
-  }
-  const remote = row.payload || {};
-  const remoteDocs = Object.keys(remote.docs || {}).length;
-
-  if (!hasLocalData()) { adoptCloudState(remote); setSyncStatus('ok', ''); return; }
-  backfillSnapshots();              // lift any pre-existing local history up once
-
-  // Both sides have data. Same account on a second device is the normal case, so
-  // prefer the server, but never silently discard local work.
-  const localDocs = Object.keys(S.docs || {}).length;
-  if (remoteDocs >= localDocs) { adoptCloudState(remote); setSyncStatus('ok', ''); return; }
-
-  openModal('Which copy is right?',
-    `<div style="font-size:0.85rem;line-height:1.6">
-      <p>This browser has <strong>${localDocs} sim(s)</strong>, but your account holds <strong>${remoteDocs}</strong>.</p>
-      <p>Keeping this device's copy will replace what is stored online. Backup Data first if you are unsure.</p>
-     </div>`,
-    null,
-    { noCancel: true, extra: [
-      { label: 'Use my account\'s copy', cls: 'btn-p', fn: 'adoptCloudFromPrompt()' },
-      { label: 'Keep this device\'s copy', fn: 'closeModal();saveToCloud()' }
-    ] });
-  _pendingCloudState = remote;
-}
-
-let _pendingCloudState = null;
-function adoptCloudFromPrompt() {
-  if (_pendingCloudState) adoptCloudState(_pendingCloudState);
-  _pendingCloudState = null;
   closeModal();
-}
-
-function adoptCloudState(remote) {
-  if (!remote || !remote.docs) return;
-  Object.assign(S, remote);
-  persist();
-  curId = null; curView = null; curViewId = null;
-  setTheme(S.settings.theme || 'dark', true);
-  applyStyle(); applyPrefs(); renderNav(); showDashboard();
+  showToast('Restoring…');
+  // Yield a frame before the heavy part. persist() stringifies the entire
+  // dataset and renderNav rebuilds the whole tree; on a large backup that is
+  // over a second of blocked main thread, which reads as the page having frozen.
+  setTimeout(() => {
+    if (mode === 'overwrite') {
+      Object.assign(S, data);
+    } else {
+      Object.assign(S.missions, data.missions||{});
+      Object.assign(S.scenes, data.scenes||{});
+      Object.assign(S.docs, data.docs||{});
+    }
+    persist();
+    curId = null; curView = null; curViewId = null;
+    setTheme(S.settings.theme||'dark', true);
+    applyStyle();
+    applyPrefs();
+    renderNav();
+    showDashboard();
+    showToast(isCloud() ? 'Import complete · saving to your account' : 'Import complete');
+    // Restoring a backup is exactly when data most needs to reach the account —
+    // without this it would sit locally until the next edit, or be lost with the
+    // tab. Deferred again so the restored view paints first.
+    if (isCloud()) setTimeout(() => { saveToCloud(); backfillSnapshots(); }, 50);
+  }, 30);
 }
 
 // ================================================================
@@ -2342,26 +2068,51 @@ function adoptCloudState(remote) {
 // follow the move, hence the nudge to back up first.
 const NEW_HOME = 'https://sb118-lcars.vercel.app/';
 
+// Add ?moved=1 to any address to preview this banner.
+function movedBannerApplies() {
+  try { if (new URLSearchParams(location.search).get('moved')) return true; } catch(e) {}
+  return /github\.io$/i.test(location.hostname);
+}
+
 function showMovedBanner() {
-  if (!/github\.io$/i.test(location.hostname)) return;
+  if (!movedBannerApplies()) return;
   try { if (localStorage.getItem('lcars_moved_ack')) return; } catch(e) {}
   const b = document.createElement('div');
-  b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:8500;padding:12px 16px;background:var(--panel,#1b1b1b);border-top:2px solid var(--accent,#f80);display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:0.82rem;line-height:1.5';
+  b.id = 'moved-banner';
+  b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:8500;padding:14px 16px;background:var(--panel,#1b1b1b);border-top:2px solid var(--accent,#f80);font-size:0.82rem;line-height:1.55;max-height:60vh;overflow:auto';
   b.innerHTML = `
-    <div style="flex:1;min-width:240px">
-      <strong>LCARS has moved.</strong> This address still works for now, but new work should happen at
-      <a href="${NEW_HOME}" style="color:var(--accent,#f80)">sb118-lcars.vercel.app</a>,
-      where your sims save to an account and follow you between devices.
-      <span style="opacity:0.75">Sims saved here stay in this browser — use Settings → Backup Data, then Restore on the new address.</span>
+    <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;max-width:1100px;margin:0 auto">
+      <div style="flex:1;min-width:260px">
+        <strong>LCARS has moved to <a href="${NEW_HOME}" style="color:var(--accent,#f80)">sb118-lcars.vercel.app</a>.</strong>
+        This address still works, but sims saved here live in this browser only — browsers keep each web address's data separate, so they will not appear at the new address on their own.
+        <div style="opacity:0.8;margin-top:6px">
+          The easiest way across: <strong>sign in here</strong> and your sims upload to your account, then sign in at the new address and they are simply there.
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-p" onclick="movedTransfer()">Move my sims</button>
+        <button class="btn btn-s" onclick="exportData()">Download a backup</button>
+        <a class="btn btn-s" href="${NEW_HOME}" style="text-decoration:none">New address</a>
+        <button class="btn btn-s" onclick="ackMoved()">Not now</button>
+      </div>
     </div>
-    <a class="btn btn-p" href="${NEW_HOME}" style="text-decoration:none">Go to the new address</a>
-    <button class="btn btn-s" onclick="ackMoved(this)">Not now</button>`;
+    <div style="max-width:1100px;margin:10px auto 0;font-size:0.73rem;color:var(--dim);line-height:1.5">
+      <strong>Using Gist sync?</strong> LCARS no longer syncs to GitHub Gists — accounts replace it and have no size limit. Your existing Gist is untouched and still readable at <a href="https://gist.github.com" target="_blank" rel="noopener" style="color:var(--dim);text-decoration:underline">gist.github.com</a> if you want the file, but moving your sims across gives you the same syncing and more.
+    </div>`;
   document.body.appendChild(b);
 }
 
-function ackMoved(el) {
+// Sign in from the old address: cloudBoot() uploads whatever this browser holds,
+// so signing in again at the new address brings it all down.
+function movedTransfer() {
+  ackMoved();
+  showAuthGate(true);
+}
+
+function ackMoved() {
   try { localStorage.setItem('lcars_moved_ack', '1'); } catch(e) {}
-  const b = el.closest('div'); if (b) b.remove();
+  const b = document.getElementById('moved-banner');
+  if (b) b.remove();
 }
 
 // ================================================================
