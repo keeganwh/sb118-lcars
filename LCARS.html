@@ -1485,6 +1485,8 @@ const VERSIONS = [
       'Added: a first-run choice between signing in and working offline on one device only. Offline sends nothing anywhere; you can switch to an account later from Settings, and your existing work is carried across',
       'Changed: cloud sync now uses a proper database instead of a GitHub Gist. The Gist was capped near 1 MB and this data was close to it; that ceiling is gone. The Personal Access Token and Gist ID fields are removed — nothing to set up any more',
       'Changed: saves reach your account after ~5 seconds instead of ~60, and Ctrl+S still saves a snapshot and syncs immediately',
+      'Fixed: restoring a backup did not save to your account — it saved on the device only and would not reach the server until your next edit. Restoring now uploads straight away, which matters most when moving your sims across from the old address',
+      'Added: the old GitHub Pages address now shows a notice pointing at the new one, with a reminder to back up first since sims saved there stay in that browser',
       'Note: if this browser and your account both hold sims, you are asked which copy to keep rather than one silently replacing the other',
     ],
   },
@@ -2043,7 +2045,10 @@ function applyImport(mode) {
   applyPrefs();
   renderNav();
   showDashboard();
-  alert('Import complete.');
+  // Restoring a backup is exactly when data most needs to reach the account —
+  // without this it would sit locally until the next edit, or be lost with the tab.
+  if (isCloud()) { saveToCloud(); backfillSnapshots(); }
+  alert('Import complete.' + (isCloud() ? '\n\nSaving to your account now.' : ''));
 }
 
 // ================================================================
@@ -2327,6 +2332,36 @@ function adoptCloudState(remote) {
   curId = null; curView = null; curViewId = null;
   setTheme(S.settings.theme || 'dark', true);
   applyStyle(); applyPrefs(); renderNav(); showDashboard();
+}
+
+// ================================================================
+// MOVED NOTICE — old GitHub Pages address only
+// ================================================================
+// Pages and Vercel serve the same file from main, so this is keyed off the
+// hostname. Sims saved on the Pages address stay in that browser and do not
+// follow the move, hence the nudge to back up first.
+const NEW_HOME = 'https://sb118-lcars.vercel.app/';
+
+function showMovedBanner() {
+  if (!/github\.io$/i.test(location.hostname)) return;
+  try { if (localStorage.getItem('lcars_moved_ack')) return; } catch(e) {}
+  const b = document.createElement('div');
+  b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:8500;padding:12px 16px;background:var(--panel,#1b1b1b);border-top:2px solid var(--accent,#f80);display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:0.82rem;line-height:1.5';
+  b.innerHTML = `
+    <div style="flex:1;min-width:240px">
+      <strong>LCARS has moved.</strong> This address still works for now, but new work should happen at
+      <a href="${NEW_HOME}" style="color:var(--accent,#f80)">sb118-lcars.vercel.app</a>,
+      where your sims save to an account and follow you between devices.
+      <span style="opacity:0.75">Sims saved here stay in this browser — use Settings → Backup Data, then Restore on the new address.</span>
+    </div>
+    <a class="btn btn-p" href="${NEW_HOME}" style="text-decoration:none">Go to the new address</a>
+    <button class="btn btn-s" onclick="ackMoved(this)">Not now</button>`;
+  document.body.appendChild(b);
+}
+
+function ackMoved(el) {
+  try { localStorage.setItem('lcars_moved_ack', '1'); } catch(e) {}
+  const b = el.closest('div'); if (b) b.remove();
 }
 
 // ================================================================
@@ -7360,6 +7395,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
   renderNav();
   showDashboard();
+  showMovedBanner();                    // only appears on the old GitHub Pages address
   if (!getMode()) {
     showAuthGate(false);                // first visit — offer account or offline
   } else {
