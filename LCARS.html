@@ -1336,7 +1336,6 @@ body.hc #cp{border-left:3px solid var(--blue)}
 
 <!-- hidden file input for import -->
 <input type="file" id="import-file" accept=".lcars,.json" style="display:none" onchange="onImportFile(event)">
-<input type="file" id="md-import-file" accept=".md,.markdown,.txt" style="display:none" onchange="onMdImportFile(event)">
 
 <!-- CONTEXT MENU -->
 <div id="ctx" class="hidden"></div>
@@ -1474,6 +1473,13 @@ const VERSIONS = [
       'Fixed: the Sim Details panel\'s open/close chevron pointed the wrong way — it now mirrors the left sidebar, pointing right to collapse the panel rightwards and left to reopen it',
       'Fixed: modal text was hard to read in Epic — dialogs were being frosted like region surfaces, and a 55% panel over the dimmed backdrop mixed down to a murky grey. Modals are now solid in Epic; blur stays on regions only, per the style guide',
     ]
+  },
+  {
+    version: 'pending',
+    date: '2026-08-14',
+    changes: [
+      'Removed: the "Import Sims" Markdown/Google Docs importer in Settings — exporting a Doc to Markdown and re-importing it was clunky, and better ways to bring sims in are being built. Backup and Restore are unaffected',
+    ],
   },
 ];
 function loadState() {
@@ -2162,287 +2168,6 @@ function saveSyncFields() {
   const gistId = (document.getElementById('sync-gist-id')?.value || '').trim();
   const cfg = getSyncConfig();
   saveSyncConfig({ ...cfg, pat: pat || cfg.pat, gistId: gistId || cfg.gistId });
-}
-
-// ================================================================
-// MARKDOWN IMPORT
-// ================================================================
-
-// Convert minimal Markdown to HTML (headings, bold, italic, strikethrough, links, line breaks)
-function markdownToHtml(md) {
-  // Escape HTML entities in text first
-  let html = md
-    // Headings (must be done before inline processing)
-    .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    // Bold+italic ***
-    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-    // Bold ** or __
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/__(.+?)__/g, '<strong>$1</strong>')
-    // Italic * or _
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/_([^_]+?)_/g, '<em>$1</em>')
-    // Strikethrough ~~
-    .replace(/~~(.+?)~~/g, '<s>$1</s>')
-    // Links [text](url)
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-    // Horizontal rules
-    .replace(/^(?:---|\*\*\*|___)\s*$/gm, '<hr>')
-    // Blank lines → paragraph breaks (wrap non-heading lines in divs)
-    ;
-
-  // Split into lines and wrap non-heading/non-hr lines in <div>
-  const lines = html.split('\n');
-  const result = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/^<h[1-6]>|^<hr>/.test(line)) {
-      result.push(line);
-    } else if (line.trim() === '') {
-      result.push('<div><br></div>');
-    } else {
-      result.push(`<div>${line}</div>`);
-    }
-  }
-  return result.join('');
-}
-
-// Split HTML (after markdownToHtml) at a given heading tag into sim segments
-function splitMarkdownBySims(html, headingTag) {
-  const tmp = document.createElement('div');
-  tmp.innerHTML = html;
-  const headings = tmp.querySelectorAll(headingTag);
-  if (!headings.length) return [{title:'', content:html}];
-
-  const segments = [];
-  headings.forEach((h, idx) => {
-    const title = h.innerText || h.textContent || '';
-    const content = [];
-    let sibling = h.nextSibling;
-    while (sibling) {
-      const next = sibling.nextSibling;
-      if (sibling.nodeType === 1 && sibling.tagName.toLowerCase() === headingTag) break;
-      content.push(sibling.nodeType === 1 ? sibling.outerHTML : sibling.textContent);
-      sibling = next;
-    }
-    segments.push({title: title.trim(), content: content.join('')});
-  });
-  return segments;
-}
-
-// Count headings at each level to auto-detect the split level
-function detectPrimaryHeadingLevel(html) {
-  const tmp = document.createElement('div');
-  tmp.innerHTML = html;
-  const counts = {h1:0, h2:0, h3:0};
-  ['h1','h2','h3'].forEach(tag => { counts[tag] = tmp.querySelectorAll(tag).length; });
-  if (counts.h1 >= counts.h2 && counts.h1 >= counts.h3 && counts.h1 > 0) return 'h1';
-  if (counts.h2 >= counts.h3 && counts.h2 > 0) return 'h2';
-  if (counts.h3 > 0) return 'h3';
-  return 'h1';
-}
-
-let _mdImportData = null; // {parsedHtml, segments, filename}
-
-function openMarkdownImport() {
-  document.getElementById('md-import-file').value = '';
-  document.getElementById('md-import-file').click();
-}
-
-function onMdImportFile(e) {
-  const file = e.target.files[0]; if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const md = ev.target.result;
-    const parsedHtml = markdownToHtml(md);
-    const detectedLevel = detectPrimaryHeadingLevel(parsedHtml);
-    _mdImportData = {parsedHtml, filename: file.name, detectedLevel};
-    showMdImportModal();
-  };
-  reader.readAsText(file);
-}
-
-function showMdImportModal() {
-  if (!_mdImportData) return;
-  const {parsedHtml, filename, detectedLevel} = _mdImportData;
-
-  // Build mission/scene selectors
-  const missionOpts = Object.values(S.missions)
-    .filter(m => m.status !== 'archived')
-    .sort((a,b) => a.name.localeCompare(b.name))
-    .map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('') +
-    '<option value="__new_mission__">+ Create new mission…</option>';
-  const sceneOpts = '<option value="">— No scene (direct under mission) —</option>' +
-    Object.values(S.scenes)
-      .filter(sc => sc.status !== 'archived')
-      .sort((a,b) => a.name.localeCompare(b.name))
-      .map(sc => `<option value="${sc.id}">${esc(sc.name)}</option>`).join('') +
-    '<option value="__new_scene__">+ Create new scene…</option>';
-
-  const levelOpts = ['h1','h2','h3']
-    .map(h => `<option value="${h}" ${detectedLevel===h?'selected':''}>${h.toUpperCase()} (Heading ${h[1]})</option>`).join('');
-
-  openModal('IMPORT FROM MARKDOWN', `
-    <div style="font-size:0.8rem;color:var(--dim);margin-bottom:12px">File: <strong style="color:var(--text)">${esc(filename)}</strong></div>
-
-    <details style="margin-bottom:12px;font-size:0.73rem;color:var(--dim);cursor:pointer">
-      <summary style="color:var(--amber);font-size:0.73rem;letter-spacing:.5px;cursor:pointer">How to export from Google Docs</summary>
-      <div style="padding:8px 0 4px;line-height:1.7">
-        In Google Docs: <strong>File → Download → Markdown (.md)</strong><br>
-        Use <strong>Heading 1</strong> style to separate individual sims within the document.<br>
-        Heading 1 → H1 · Heading 2 → H2 · Heading 3 → H3
-      </div>
-    </details>
-
-    <div class="mf">
-      <label class="ml">DESTINATION MISSION</label>
-      <select class="mi" id="mi-mission" onchange="onMdMissionChange(this)">${missionOpts || '<option value="__new_mission__">+ Create new mission…</option>'}</select>
-    </div>
-    <div class="mf">
-      <label class="ml">DESTINATION SCENE (optional)</label>
-      <select class="mi" id="mi-scene" onchange="onMdSceneChange(this)">${sceneOpts}</select>
-    </div>
-    <div class="mf" style="display:flex;align-items:center;gap:10px">
-      <input type="checkbox" id="mi-multi" style="width:auto" onchange="onMdMultiChange()">
-      <label class="ml" style="margin:0;cursor:pointer" for="mi-multi">Document contains multiple sims (split by headings)</label>
-    </div>
-    <div id="mi-split-row" class="mf hidden">
-      <label class="ml">SPLIT AT HEADING LEVEL</label>
-      <select class="mi" id="mi-level" onchange="onMdLevelChange()">${levelOpts}</select>
-    </div>
-    <div id="mi-single-title" class="mf">
-      <label class="ml">SIM TITLE</label>
-      <input class="mi" id="mi-title" placeholder="Enter sim title…">
-    </div>
-    <div id="mi-preview" class="hidden" style="margin-top:10px;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:6px 10px"></div>
-  `, () => doMdImport(), {ok:'Import'});
-
-  // Auto-update scene list when mission changes
-  onMdMissionChange();
-}
-
-function onMdMissionChange(sel) {
-  if (sel && sel.value === '__new_mission__') {
-    const name = prompt('Mission name:','');
-    if (!name) { sel.value = Object.keys(S.missions)[0] || ''; return; }
-    const year = prompt('Year (e.g. 2401):','2401') || '2401';
-    mkMission(name.trim(), year.trim());
-    const newId = Object.keys(S.missions).slice(-1)[0];
-    const newOpts = Object.values(S.missions).filter(m => m.status !== 'archived')
-      .sort((a,b) => a.name.localeCompare(b.name))
-      .map(m => `<option value="${m.id}" ${m.id===newId?'selected':''}>${esc(m.name)}</option>`).join('')
-      + '<option value="__new_mission__">+ Create new mission…</option>';
-    sel.innerHTML = newOpts;
-    sel.value = newId;
-  }
-  const mId = document.getElementById('mi-mission')?.value;
-  const scSel = document.getElementById('mi-scene'); if (!scSel) return;
-  const scenes = Object.values(S.scenes).filter(sc => sc.missionId === mId && sc.status !== 'archived')
-    .sort((a,b) => a.name.localeCompare(b.name));
-  scSel.innerHTML = '<option value="">— No scene (direct under mission) —</option>' +
-    scenes.map(sc => `<option value="${sc.id}">${esc(sc.name)}</option>`).join('') +
-    '<option value="__new_scene__">+ Create new scene…</option>';
-}
-function onMdSceneChange(sel) {
-  if (!sel || sel.value !== '__new_scene__') return;
-  const mId = document.getElementById('mi-mission')?.value || '';
-  const name = prompt('Scene name:','');
-  if (!name) { sel.value = ''; return; }
-  mkScene(name.trim(), mId || null);
-  const newId = Object.keys(S.scenes).slice(-1)[0];
-  const mId2 = document.getElementById('mi-mission')?.value;
-  const scenes = Object.values(S.scenes).filter(sc => sc.missionId === mId2 && sc.status !== 'archived')
-    .sort((a,b) => a.name.localeCompare(b.name));
-  sel.innerHTML = '<option value="">— No scene (direct under mission) —</option>' +
-    scenes.map(sc => `<option value="${sc.id}" ${sc.id===newId?'selected':''}>${esc(sc.name)}</option>`).join('') +
-    '<option value="__new_scene__">+ Create new scene…</option>';
-  sel.value = newId;
-}
-
-function onMdMultiChange() {
-  const isMulti = document.getElementById('mi-multi')?.checked;
-  document.getElementById('mi-split-row').classList.toggle('hidden', !isMulti);
-  document.getElementById('mi-single-title').classList.toggle('hidden', isMulti);
-  if (isMulti) renderMdPreview();
-}
-
-function onMdLevelChange() {
-  renderMdPreview();
-}
-
-function renderMdPreview() {
-  if (!_mdImportData) return;
-  const level = document.getElementById('mi-level')?.value || 'h1';
-  const segs = splitMarkdownBySims(_mdImportData.parsedHtml, level);
-  const prev = document.getElementById('mi-preview'); if (!prev) return;
-  prev.classList.remove('hidden');
-  if (!segs.length || (segs.length === 1 && !segs[0].title)) {
-    prev.innerHTML = '<div style="color:var(--dim);font-size:0.73rem;padding:4px">No headings found at this level. Try a different heading level.</div>';
-    return;
-  }
-  prev.innerHTML = `<div style="font-size:0.67rem;color:var(--amber);letter-spacing:1px;margin-bottom:6px">${segs.length} SIMS DETECTED</div>` +
-    segs.map((s,i) => {
-      const wcount = wc(s.content.replace(/<[^>]+>/g,' '));
-      return `<div style="display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px solid var(--border)">
-        <span style="color:var(--dim);font-size:0.67rem;min-width:18px">${i+1}.</span>
-        <input class="mi" style="flex:1;padding:2px 6px;font-size:0.8rem" value="${esc(s.title||'Untitled')}" id="mi-t-${i}" placeholder="Sim title…">
-        <span style="color:var(--dim);font-size:0.67rem;white-space:nowrap">${wcount}w</span>
-      </div>`;
-    }).join('');
-}
-
-function doMdImport() {
-  if (!_mdImportData) return;
-  const mId = document.getElementById('mi-mission')?.value;
-  const scIdRaw = document.getElementById('mi-scene')?.value || null;
-  const scId = (scIdRaw && scIdRaw !== '__new_scene__') ? scIdRaw : null;
-  const isMulti = document.getElementById('mi-multi')?.checked;
-
-  if (!mId || mId === '__new_mission__') { alert('Please select or create a destination mission.'); return false; }
-
-  if (!isMulti) {
-    // Single sim import
-    const title = document.getElementById('mi-title')?.value.trim() || _mdImportData.filename.replace(/\.[^.]+$/,'');
-    const content = cleanPasteHTML(_mdImportData.parsedHtml);
-    createImportedSim(title, content, mId, scId);
-    renderNav();
-    closeModal();
-    if (_lastCreatedId) openDoc(_lastCreatedId);
-  } else {
-    // Batch import
-    const level = document.getElementById('mi-level')?.value || 'h1';
-    const segs = splitMarkdownBySims(_mdImportData.parsedHtml, level);
-    if (!segs.length) { alert('No sims detected.'); return false; }
-    segs.forEach((s, i) => {
-      const title = document.getElementById(`mi-t-${i}`)?.value.trim() || s.title || 'Imported Sim';
-      const content = cleanPasteHTML(s.content);
-      createImportedSim(title, content, mId, scId);
-    });
-    renderNav();
-    closeModal();
-    alert(`Imported ${segs.length} sim(s) successfully.`);
-  }
-  _mdImportData = null;
-}
-
-let _lastCreatedId = null;
-
-function createImportedSim(title, content, missionId, sceneId) {
-  const id = uid();
-  _lastCreatedId = id;
-  S.docs[id] = {
-    id, title, content,
-    missionId, sceneId: sceneId || null,
-    status: 'active',
-    postType: null, postedAt: null,
-    chars: [], myChars: [], charColors: {},
-    createdAt: Date.now(), updatedAt: Date.now(),
-    snapshots: []
-  };
-  persist();
 }
 
 // ================================================================
@@ -5654,10 +5379,6 @@ function openSettings() {
           <button class="btn btn-s" style="flex:1" onclick="importData()">${ic('upload')} Restore Data</button>
         </div>
         <div style="font-size:0.73rem;color:var(--dim);margin-top:5px">Saves or restores all your data — Sims, Character Manifest, and preferences. Use Backup regularly to keep a copy outside the browser. <strong>Restore replaces all current data.</strong></div>
-      </div>
-      <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px">
-        <button class="btn btn-s" style="width:68px;height:54px;flex-shrink:0;font-size:0.73rem;line-height:1.4;white-space:normal" onclick="openMarkdownImport()">${ic('upload')} Import Sims</button>
-        <div style="font-size:0.73rem;color:var(--dim)">Import sims from Google Docs: <em>File → Download → Markdown (.md)</em>. You can import multiple sims at once — each heading in the file becomes a separate sim.</div>
       </div>
     </div>
 
