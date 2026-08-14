@@ -1,0 +1,6410 @@
+// ================================================================
+// STORAGE
+// ================================================================
+const ZWS = String.fromCharCode(0x200B); // zero-width space used as caret anchor after marker spans
+const SKEY = 'lcars_v1';
+
+const APP_VERSION = '4.22';
+const VERSIONS = [
+  {
+    version: '4.0',
+    date: '2026-06-29',
+    changes: [
+      'Full sim writing editor with contenteditable rich text',
+      'Mission / Scene / Sim hierarchy with year grouping (OOC + IC year display)',
+      'Script markers: ::Action::, =/\\= Comms =/\\=, oO Thoughts Oo, ((Location)), ((OOC))',
+      'Visual Aids toggles to highlight/dim each marker type',
+      'Toolbar marker-insertion buttons with two-phase cursor placement',
+      'Auto Format: auto-bold names, italic thoughts, bold locations, italic OOCs',
+      'Character auto-detection and per-character colour coding',
+      'Character Manifest with service record, postings, and ribbons',
+      'Sim Templates — save, apply, and manage reusable templates',
+      'Revision snapshots with browse and restore',
+      'Full-text search across all sims',
+      'Dashboard with stats bar, in-progress, recently posted, and quick actions',
+      'Academy Mode with restricted formatting rules',
+      'Export (JSON backup) and Import (JSON restore + Markdown import)',
+      'Dark / Light / LCARS theme switcher',
+      'Resizable sidebar panels',
+    ]
+  },
+  {
+    version: '4.1',
+    date: '2026-06-29',
+    changes: [
+      'Fixed: italic/highlight formatting persisting past closing marker delimiter when inserted via toolbar buttons',
+      'Fixed: comms button cursor landing inside closing =/\\= delimiter',
+      'New Mission dialog: renamed "Sim Type" → "Mission Type" and "Stardate Year" → "OOC Year"',
+      'Nav hierarchy now shows IC year alongside OOC year (e.g. 2026 (2403 IC))',
+      'Migrated to GitHub repository and deployed on GitHub Pages',
+      'Added GitHub Gist auto-sync for cross-device personal data (auto-push 60s after save, auto-pull on load)',
+      'Added Settings → Cloud Sync section with PAT/Gist ID inputs and manual push/pull buttons',
+      'Added Settings → Version section with current version and expandable changelog',
+      'Added "Learn How to Use This Tool" button on Dashboard linking to the user guide',
+      'Added README.md and CHANGELOG.md to repository',
+    ]
+  },
+  {
+    version: '4.2',
+    date: '2026-07-14',
+    changes: [
+      'Fixed: removing a character via the Manifest caused the panel to break — clicking another character required a full page refresh to recover',
+      'Added: Google Fonts support — UI font and editor font can be set independently (or linked) via Settings → UI Preferences, with a searchable list of 56 popular Google Fonts',
+      'Added: Scene Partner reporting to Mission and Scene detail views — shows which characters your characters appear alongside, with scene and sim counts; add buttons moved to top-right header',
+      'Added: Top Scene Partners panel to Character Manifest sidebar — shows top 5 co-occurring characters across all sims',
+      'Fixed: Create a new Scene / Write a new Sim cards wrapping to a second row on the Mission detail view',
+      'Layout: mission/scene action cards moved inline with title (right-aligned) instead of above it',
+      'Fixed: Gist push was double-serializing data (JSON string inside JSON), inflating file size ~2x; now stores data object directly with backward-compat pull for old format',
+      'Fixed: importing a Gist file directly via backup/restore now unwraps the Gist sync envelope automatically, with proper error handling for both old and new formats',
+      'Fixed: Gist pull failing with "Failed to fetch" on new/different computers — raw_url fetch could be blocked by CORS preflight on fresh browsers; now tries without Authorization header as a middle step (simple GET, no preflight), then falls back to the truncated API content field with a clear error if data is too large',
+      'Fixed: marking a sim/scene/mission active, complete, or archived via the context menu now triggers a Gist auto-sync after 5 seconds (previously only editor saves did, after 60 s)',
+      'Improved: Link insertion (Ctrl+K / 🔗) now detects when cursor is inside an existing link — opens in Edit mode pre-populated with current URL, with a Remove Link button; new links get target=_blank',
+      'Fixed: link insertion was always inserting at the start of the sim — the selection was lost when the modal input took focus; range is now saved before the modal opens and restored before execCommand runs',
+      'Fixed: closing the link modal scrolled the sim back to the top; now uses focus({ preventScroll: true })',
+      'Fixed: selecting text in the editor would frequently collapse — background timers (normalize 80ms, transform 600ms, bold-names 900ms) called restoreCaret which wiped the selection; timers now bail out if a non-collapsed selection is active in the editor',
+      'Fixed: empty lines (blank paragraphs) were sometimes compressed into a single line break when copying to external apps — now preserved with non-breaking space in clipboard HTML',
+      'Fixed: copy-paste now preserves bold on ((Location)) markers and italic on ((OOC)) markers when those auto-format settings are enabled',
+      'Added: ¶ paragraph marker toggle button — shows a faint ¶ at the end of each paragraph to make line/paragraph structure visible while editing',
+      'Layout: moved Auto Format and Visual Aids dropdowns from toolbar row 2 to title row 1 to free up horizontal space in the toolbar',
+      'Layout: moved ⚠ title-duplicate warning to left of the title input; moved ✕ close button to rightmost position in the title row',
+      'Added: optional "Started" date field to scenes — set via New Scene modal or right-click → Edit Scene; shown in scene detail view; used as the staleness fallback when a scene has no sim activity',
+      'Added: scenes in the nav sidebar show a faint amber dot after 2 days or red dot after 3 days of no posting/completion activity, with the day count in small text alongside the dot',
+      'Fixed: stale indicator could wrongly suppress for scenes whose sims had been edited recently; now records an explicit completedAt timestamp only when a sim is actually marked complete',
+      'Fixed: currently-open sim showing blue title even when marked complete — the CSS override now only applies to active sims; complete sims keep their gold colour while selected',
+      'Fixed: opening Settings and saving would silently erase boldLocations and italicOOC prefs set via the Auto Format toolbar; save now merges into existing prefs rather than replacing them',
+      'Fixed: right-clicking a scene and choosing + New Sim now correctly pre-selects that scene and its parent mission in the New Sim modal',
+      'Added: right-clicking a sim in the sidebar now shows "Move to Scene…" — opens a modal to reassign the sim to any non-archived scene in any non-archived mission, grouped by mission',
+      'Added: ↕ Sort button in the sidebar header for scene sort order — 8 options: Sim Posting (recent/last), Due Status (stalest/freshest), Alphabetical (A–Z / Z–A), Scene Start (recent/last); preference persists to profile',
+      'Fixed: changing scene sort order now re-renders the sidebar immediately',
+      'Fixed: completed scenes no longer compete in Due Status sort orders — they sink to the bottom regardless of start date, since a finished scene cannot be stale',
+    ]
+  },
+  {
+    version: '4.21',
+    date: '2026-08-12',
+    changes: [
+      'Fixed: browser tab title was still showing v4.0; updated to v4.2',
+      'Changed: Clear Format toolbar button now shows 🧹 icon instead of text; tooltip clarifies that auto-formatting (bold names, locations, etc.) is not affected',
+      'Changed: Indent and Outdent buttons now use ⇥ / ⇤ symbols instead of wide →| / |← text',
+      'Fixed: Copy button tooltip was misleading; now says "Copy sim to clipboard"',
+      'Added: marker insertion buttons replaced by a compact "Insert ▾" dropdown that opens on hover or click; toggle between dropdown and individual buttons in Settings → Toolbar',
+      'Added: paste cleanup — extra consecutive blank lines in pasted content are automatically collapsed to one; a dismissible "Extra blank lines removed / Undo" banner appears above the editor for 8 seconds',
+      'Layout: moved Auto Format ▾ and Visual Aids ▾ back to toolbar row 2 (right side), clearing row 1 to just title + close; both dropdowns now open on hover as well as click; Insert ▾ moved inline with other row-2 buttons',
+      'Removed: ↑ Narrate experimental narration-import button and its modal/logic — unreliable in practice; a more robust multi-sim parsing integration is planned for the roadmap instead',
+      'Fixed: "StartFragment"/"EndFragment" text sometimes leaking into copy/pasted output (mostly Discord, occasionally email) — comment nodes are now stripped both when copying out and when pasting in, so they can no longer round-trip through the editor',
+      'Fixed: auto-italic oO Thoughts Oo were not copying out italicized (only manual italics survived) — the CSS-only italic on .tm is now converted to a real <em> on copy, matching how ((OOC)) italics are handled',
+      'Fixed: the first line of a copied sim (often the ((Location)) line) sometimes pasted in a different font, as though it were a header — bare top-level inline/text nodes are now wrapped in a <div> on copy so every line has the same block structure',
+      'Added: Ctrl+S (Cmd+S on Mac) while a sim is open now saves a revision snapshot and immediately syncs to your Gist (if configured), with a brief confirmation toast',
+      'Added: stale markers (amber ≥2 days / red ≥3 days since last post or completion) now show in the Mission dashboard SCENES table next to each scene status (Active/Completed), matching the sidebar indicators',
+      'Added: "SINCE LAST POST" stat on the Command Dashboard showing days since your most recently posted sim, tinted amber at ≥2 days and red at ≥3 days',
+      'Fixed: copying from the editor with Ctrl+C (no manual selection) now works the same as the 📋 button — the copy handler previously bailed out when the selection was collapsed, causing the browser to fall back to its own clipboard with raw markup, losing formatting and blank lines in Discord',
+      'Fixed: copy/paste to Discord (and other apps reading text/plain) was losing all line breaks and paragraph spacing — caused by innerText on a detached DOM node having no layout context and silently concatenating all text; now walks block children manually and joins with newlines',
+    ]
+  },
+  {
+    version: '4.22',
+    date: '2026-08-13',
+    changes: [
+      'New look: "Delta Prime" is now the default skin — same layout and controls, rebuilt on a new surface, type and shape system (elbow frames, accent-filled section caps, a hero stat strip, ruled tables, Space Grotesk + Public Sans)',
+      'Added: Style ▾ menu in the top bar with three independent settings — Duty Post (Command / Science / Operations / Medical accent), Appearance (Light / Dark / System) and Mood (Calm / Epic). Changes apply immediately, no Save button',
+      'Added: Calm is warm bone and graphite with solid panels; Epic is a cool deep-space field with duty-lit washes, frosted region surfaces and accent glow. Both share every dimension, radius, font and layout rule',
+      'Added: duty post accent resolves per (duty × light/dark × calm/epic) rather than one hex per post, so warm light fields get the muted accent and dark modes get the lighter one',
+      'Added: one-time "A new look" introduction on first load after upgrading, with the three style controls live inside it so the app can be previewed behind the window; reopen any time from Style ▾ → What\'s new',
+      'Added: the classic 4.21 LCARS look (Dark / Light / High Contrast) is still available and fully supported — switch back via Style ▾ → "Revert to the classic LCARS look", the theme dropdown, or Settings → UI Preferences → Visual Style',
+      'Added: style changes animate with a circular reveal expanding from the control you clicked (View Transitions API); skipped automatically when the browser lacks support or the OS requests reduced motion',
+      'Added: Appearance → System follows the operating system light/dark setting and re-resolves live when it changes',
+      'Changed: the skin is applied from a tiny separate localStorage mirror before first paint, so the app never boots in the wrong look and corrects itself',
+      'Changed: Public Sans and Space Grotesk are only fetched when Delta Prime is active — classic users load no extra fonts',
+      'Fixed: the UI font chosen in Settings still overrides the skin body font, as it did before',
+      'Note: Delta Prime is new and still being tuned — feedback on it, or on staying with Classic LCARS, is welcome',
+      'Changed: every emoji in the interface replaced with inline Lucide SVG icons, drawn in the current text colour and sized in em so they scale with the UI font setting and match in both skins. The icon set is an inline <symbol> sprite, so the app stays a single dependency-free file',
+      'Fixed: Search / Sort / Details and the panel collapse arrows were nearly invisible in Delta Prime — they sit on the accent-filled panel header and were inheriting a translucent ink colour instead of the accent ink',
+      'Fixed: the style-change reveal did not appear to come from the control clicked — it expanded from the control\'s centre, which on a segmented button is up to ~34px from where the pointer actually was. The origin now follows the pointer, falling back to the control centre for keyboard activation. Blending is left at the browser default, which keeps the softer edge',
+      'Fixed: the Delta Prime / Classic LCARS buttons in Settings were unreadable in dark mode — they render as outlined buttons on the panel, so they were picking up the dark accent ink meant for solid accent fills',
+      'Fixed: dashboard and detail-view titles were tinted cold blue, which clashed with the warm Calm palette — titles are now ink, per the style guide rule that hierarchy is typographic rather than chromatic. Blue and gold stay reserved for active / complete status',
+      'Changed: in Epic the editor keeps a flat background instead of the duty-lit gradient, which stays on the dashboards — a gradient behind long-form writing was distracting',
+      'Fixed: the sim title in the editor was still cold blue in Delta Prime — it is set as an inline style by status, which no stylesheet rule could override. Active titles now use a --title-active token so each skin decides; Delta Prime keeps them ink, Classic keeps its blue. Complete (gold) and archived (dim) are unchanged in both',
+      'Changed: the editor text caret follows the duty accent in Delta Prime rather than the status blue',
+      'Fixed: the Style menu\'s revert button showed raw SVG markup as text — the label is rebuilt on every style change and was being written through textContent, which cannot carry markup',
+      'Fixed: the Sim Details panel\'s open/close chevron pointed the wrong way — it now mirrors the left sidebar, pointing right to collapse the panel rightwards and left to reopen it',
+      'Fixed: modal text was hard to read in Epic — dialogs were being frosted like region surfaces, and a 55% panel over the dimmed backdrop mixed down to a murky grey. Modals are now solid in Epic; blur stays on regions only, per the style guide',
+    ]
+  },
+  {
+    version: 'pending',
+    date: '2026-08-14',
+    changes: [
+      'Removed: the "Import Sims" Markdown/Google Docs importer in Settings — exporting a Doc to Markdown and re-importing it was clunky, and better ways to bring sims in are being built. Backup and Restore are unaffected',
+      'Changed: revision snapshots now live in your account rather than inside the main data blob. They were ten full copies of each sim being re-uploaded on every save, and were by far the largest part of the payload; they are now fetched only when you open the Snapshots window, and follow you between devices',
+      'Changed: Writer ID entry now checks the real ten-character format (ship letter, stardate year and month, two initials, academy digit) and the example shown is a placeholder, not a real writer',
+      'Added: accounts. Sign in with your Writer ID and a PIN, and your sims save to your account automatically and follow you to any device — no tokens, no export files. An optional recovery email can be given when creating the account',
+      'Added: a first-run choice between signing in and working offline on one device only. Offline sends nothing anywhere; you can switch to an account later from Settings, and your existing work is carried across',
+      'Changed: cloud sync now uses a proper database instead of a GitHub Gist. The Gist was capped near 1 MB and this data was close to it; that ceiling is gone. The Personal Access Token and Gist ID fields are removed — nothing to set up any more',
+      'Changed: saves reach your account after ~5 seconds instead of ~60, and Ctrl+S still saves a snapshot and syncs immediately',
+      'Fixed: restoring a backup did not save to your account — it saved on the device only and would not reach the server until your next edit. Restoring now uploads straight away, which matters most when moving your sims across from the old address',
+      'Added: the old GitHub Pages address now shows a moving notice explaining the change, with Move My Stuff (sign in there and your sims and settings upload to your account, ready at the new address), a manual backup download, a link to the new site, and Remind Me Later — which returns on the next load rather than dismissing for good',
+      'Added: a Getting Started wizard on first run, with separate routes for writers new to LCARS and writers arriving from the old address \u2014 the latter covering what changed and how to bring sims across, including loading a backup file directly from the wizard. Dismiss it with the \u201cDon\u2019t show this again\u201d button, or reopen it any time from Getting Started on the Dashboard',
+      'Added: a Danger Zone in Settings \u2192 Data Management. Erase all sims and characters wipes LCARS clean \u2014 synced to your other devices when signed in \u2014 and, with an account, Delete my account removes your sims, characters and revision history from the server. Both need the action typed out to confirm, and neither can be undone',
+      'Changed: the Dashboard\u2019s Ready to get started? cards now sit in two rows \u2014 making things on the first, learning about them on the second',
+      'Fixed: the Danger Zone heading was tinted red and became unreadable against the red duty post accent; it now uses the normal text colour',
+      'Fixed: reopening the Getting Started wizard from the Dashboard left no way out except Skip, which also stopped it appearing again \u2014 there is now a close button on every step',
+      'Fixed: Move My Stuff on the old address uploaded your sims but then left you sitting on the old site. It now confirms the move and forwards you to the new address, with the option to stay. If the upload did not complete it says so and offers to retry or download a backup rather than sending you on',
+      'Fixed: restoring a large backup froze the page for over a second — the whole dataset was being written and the sim tree rebuilt inside the click, with a blocking alert on the end. The work now yields a frame first and reports through a toast',
+      'Note: if this browser and your account both hold sims, you are asked which copy to keep rather than one silently replacing the other',
+      'Changed: the app is now three files — LCARS.html, lcars.css and lcars.js — instead of one. Nothing looks or behaves differently; it is groundwork so Settings and the Character Manifest can become pages of their own. Offline downloads are still a single self-contained file',
+    ],
+  },
+];
+function loadState() {
+  try { const r = localStorage.getItem(SKEY); if (r) return JSON.parse(r); } catch(e){}
+  return { docs:{}, missions:{}, scenes:{}, settings:{zoom:100,myChars:[],theme:'dark',prefs:{}} };
+}
+const S = loadState();
+if (!S.settings) S.settings = {zoom:100,myChars:[],theme:'dark',prefs:{}};
+if (!S.settings.prefs) S.settings.prefs = {};
+if (!S.settings.myChars) S.settings.myChars = [];
+if (!S.settings.confirmedPairs) S.settings.confirmedPairs = [];
+if (S.settings.sidebarOpen === undefined) S.settings.sidebarOpen = true;
+if (S.settings.charsOpen === undefined) S.settings.charsOpen = true;
+if (S.settings.sidebarDetail === undefined) S.settings.sidebarDetail = false;
+if (!S.characters) S.characters = {};
+// Migrate existing characters to new fields
+Object.values(S.characters).forEach(c => {
+  if (!c.aliases) c.aliases = [];
+  if (c.charType === undefined) c.charType = '';
+});
+// Migrate existing docs to new fields
+Object.values(S.docs || {}).forEach(d => {
+  if (!d.charColors) d.charColors = {};
+});
+if (!S.templates) S.templates = [];
+// One-time migration: strip inline color/font styles from all existing sim content
+if (!S._pasteCleanV1) {
+  Object.values(S.docs || {}).forEach(doc => {
+    if (doc.content) doc.content = doc.content
+      .replace(/\s*style\s*=\s*"[^"]*"/gi, m => {
+        const kept = m.match(/margin-left\s*:\s*[^;"]*/i);
+        return kept ? ` style="${kept[0]}"` : '';
+      })
+      .replace(/\s*style\s*=\s*'[^']*'/gi, m => {
+        const kept = m.match(/margin-left\s*:\s*[^;']*/i);
+        return kept ? ` style="${kept[0]}"` : '';
+      });
+  });
+  S._pasteCleanV1 = true;
+}
+// Inline SVG icon reference — see the sprite at the top of <body>.
+// `extra` takes size modifiers such as 'ic-sm' / 'ic-lg'.
+function ic(name, extra) {
+  return `<svg class="ic${extra ? ' ' + extra : ''}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+}
+
+function persist() { try { localStorage.setItem(SKEY, JSON.stringify(S)); } catch(e){} }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+// ================================================================
+// APP STATE
+// ================================================================
+let curId = null;
+let curView = null;   // 'mission' | 'scene' | null
+let curViewId = null;
+let zoom = S.settings.zoom || 100;
+let fmts = { action:true, comms:true, thought:true };
+let collapsed = {};
+let showArchived = false;
+let saveTimer = null;
+let trTimer = null;
+let modalCb = null;
+let _editingLink = null;
+let _resizing = null;
+let _titleWarnMatch = null;
+let searchActive = false;
+let searchTimer = null;
+let _manifestSort = 'type';
+let _manifestTypeFilter = '';
+let _manifestActiveTab = 'sims'; // 'sims' | 'service' | 'ribbons' | 'edit'
+let _srEditMode = false;
+let _ribbonEditMode = false;
+let _expandedRibbonIdx = -1;
+let _curCharId = null;
+let _activeRibbonCats = new Set(); // empty = all categories
+let _ribbonAddFormOpen = false;
+let _sourceMode = false;
+
+// ================================================================
+// VISUAL STYLE — Delta Prime skin (v4.22)
+//
+// Three orthogonal axes produce every appearance: duty post (accent),
+// light/dark, and calm/epic (material). State lives in S.settings.style,
+// is applied as attributes on <html>, and every component reads CSS custom
+// properties — no component knows which skin is active.
+//
+// Skin 'classic' falls back entirely to the 4.21 Dark/Light/HC themes.
+// ================================================================
+const STYLE_KEY = 'lcars_style_v1';   // tiny mirror for flash-free first paint
+const STYLE_VERSION = '4.22';         // bump to re-show the intro on a future restyle
+const DUTY_ACCENTS = {
+  command:    { calmLight:'#B4463C', epicLight:'#C0433A', dark:'#F0705F' },
+  science:    { calmLight:'#2F7FC9', epicLight:'#2F7FC9', dark:'#5FB2FF' },
+  operations: { calmLight:'#C8901C', epicLight:'#C8901C', dark:'#F2B441' },
+  medical:    { calmLight:'#1E8E7E', epicLight:'#1E8E7E', dark:'#48D3BE' },
+};
+const DUTY_ORDER = ['command','science','operations','medical'];
+const STYLE_DEFAULTS = { skin:'prime', duty:'command', mode:'system', vibe:'calm' };
+
+function getStyle() { return Object.assign({}, STYLE_DEFAULTS, S.settings.style || {}); }
+
+// Space Grotesk (display) + Public Sans (body). Loaded once, only for Prime —
+// classic users never pay for them. Matches the id used by the first-paint script.
+function ensurePrimeFonts() {
+  if (document.getElementById('gf-delta-prime')) return;
+  const l = document.createElement('link');
+  l.id = 'gf-delta-prime'; l.rel = 'stylesheet';
+  l.href = 'https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&family=Space+Grotesk:wght@600;700&display=swap';
+  document.head.appendChild(l);
+}
+
+// mode 'system' resolves through matchMedia and re-resolves while it stays 'system'
+function resolvedMode(st) {
+  const s = st || getStyle();
+  if (s.mode !== 'system') return s.mode;
+  try { return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+  catch(e) { return 'dark'; }
+}
+
+// Accent is (duty, mode, vibe) → hex, never a single hex per duty post.
+function resolveAccent(st) {
+  const s = st || getStyle();
+  const t = DUTY_ACCENTS[s.duty] || DUTY_ACCENTS.command;
+  if (resolvedMode(s) === 'dark') return t.dark;
+  return s.vibe === 'epic' ? t.epicLight : t.calmLight;
+}
+
+function applyStyle() {
+  const s = getStyle();
+  const mode = resolvedMode(s);
+  const r = document.documentElement;
+  r.setAttribute('data-skin', s.skin);
+  r.setAttribute('data-mode', mode);
+  r.setAttribute('data-vibe', s.vibe);
+  r.setAttribute('data-duty', s.duty);          // carried for edge cases; styling reads --ac
+  r.style.setProperty('--ac', resolveAccent(s));
+  if (s.skin === 'prime') {
+    ensurePrimeFonts();
+    // Classic theme classes would otherwise override the Prime token blocks
+    document.body.classList.remove('light','hc');
+  } else {
+    setTheme(S.settings.theme || 'dark', true);
+  }
+  try { localStorage.setItem(STYLE_KEY, JSON.stringify(s)); } catch(e){}
+  updateStyleMenu();
+}
+
+function setStyle(patch, el, ev) {
+  const apply = () => {
+    S.settings.style = Object.assign(getStyle(), patch);
+    persist();
+    applyStyle();
+  };
+  applyWithReveal(el, apply, ev);
+}
+
+// Radial reveal from the point that was clicked. Progressive enhancement only —
+// without View Transitions (or with reduced motion) the change just applies.
+//
+// The origin is the pointer position, not the control's centre: on a segmented
+// button (62px min-width plus padding) those differ by up to ~30px, which reads
+// as the animation starting near the button rather than at it. Keyboard-driven
+// clicks report clientX/clientY of 0, so fall back to the element's centre.
+function applyWithReveal(el, apply, ev) {
+  try {
+    let x = null, y = null;
+    if (ev && (ev.clientX || ev.clientY)) { x = ev.clientX; y = ev.clientY; }
+    else {
+      const r = el && el.getBoundingClientRect && el.getBoundingClientRect();
+      if (r) { x = r.left + r.width/2; y = r.top + r.height/2; }
+    }
+    if (x !== null) {
+      document.documentElement.style.setProperty('--vtx', x + 'px');
+      document.documentElement.style.setProperty('--vty', y + 'px');
+    }
+  } catch(e){}
+  let reduced = false;
+  try { reduced = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){}
+  if (!document.startViewTransition || reduced) return apply();
+  document.startViewTransition(() => { apply(); });
+}
+
+// Re-resolve light/dark when the OS flips, but only while mode is 'system'
+try {
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (getStyle().mode === 'system') applyStyle();
+  });
+} catch(e){}
+
+function toggleStyleMenu(force) {
+  const m = document.getElementById('style-menu');
+  if (!m) return;
+  const open = force !== undefined ? force : !m.classList.contains('open');
+  m.classList.toggle('open', open);
+  const btn = document.getElementById('btn-style');
+  if (btn) btn.setAttribute('aria-expanded', String(open));
+  if (open) updateStyleMenu();
+}
+
+// Refreshes every live control set — the header menu, the intro modal, and the
+// Settings panel can all be showing the same three radio groups at once.
+function updateStyleMenu() {
+  const s = getStyle();
+  const mode = resolvedMode(s);
+  ['style-menu','mo-body','sty-settings'].forEach(id => {
+    const m = document.getElementById(id);
+    if (!m) return;
+    m.querySelectorAll('.sty-sw').forEach(b => {
+      const t = DUTY_ACCENTS[b.dataset.duty];
+      if (!t) return;
+      b.style.background = mode === 'dark' ? t.dark : (s.vibe === 'epic' ? t.epicLight : t.calmLight);
+      b.setAttribute('aria-checked', String(b.dataset.duty === s.duty));
+    });
+    m.querySelectorAll('[data-mode-opt]').forEach(b =>
+      b.setAttribute('aria-checked', String(b.dataset.modeOpt === s.mode)));
+    m.querySelectorAll('[data-vibe-opt]').forEach(b =>
+      b.setAttribute('aria-checked', String(b.dataset.vibeOpt === s.vibe)));
+  });
+  const rev = document.getElementById('sty-revert');
+  if (rev) rev.innerHTML = s.skin === 'prime'
+    ? ic('chevron-left') + ' Revert to the classic LCARS look'
+    : ic('sparkles') + ' Switch to the Delta Prime look';
+  const btn = document.getElementById('btn-style');
+  if (btn) btn.title = s.skin === 'prime'
+    ? `Style: ${s.duty} · ${s.mode} · ${s.vibe}` : 'Style: classic LCARS';
+}
+
+function toggleSkin(el, ev) {
+  const next = getStyle().skin === 'prime' ? 'classic' : 'prime';
+  setStyle({ skin: next }, el, ev);
+}
+
+// ================================================================
+// "NEW LOOK" INTRODUCTION — one-time, re-openable from the Style menu
+// ================================================================
+function styleIntroBody() {
+  return `
+    <div style="font-size:0.87rem;line-height:1.6;margin-bottom:14px">
+      LCARS has a new look in v${STYLE_VERSION}, called <strong>Delta Prime</strong> — same layout and
+      the same controls, rebuilt on a cleaner surface, type and shape system.
+      Try the three settings below and watch the app behind this window change.
+    </div>
+    ${styleControlsHtml()}
+    <div style="font-size:0.73rem;color:var(--dim);line-height:1.55;margin-top:14px">
+      Everything here lives under <strong>Style ▾</strong> in the top bar afterwards, alongside
+      <em>What's new</em> to reopen this window.
+    </div>
+    <div style="font-size:0.73rem;color:var(--dim);line-height:1.55;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+      <strong style="color:var(--amber)">Feedback wanted.</strong> The classic LCARS look is still
+      one click away — <em>Revert to the classic LCARS look</em>, in the same menu — and it stays
+      supported for now. Which one you prefer, and what feels off in either, is the useful thing
+      to report back.
+    </div>`;
+}
+
+function showStyleIntro() {
+  closeStyleMenu();
+  openModal('A NEW LOOK — DELTA PRIME', styleIntroBody(), () => {}, { ok:'Got it', noCancel:true });
+  // Escape, the backdrop and "Got it" all dismiss, so mark it seen on open —
+  // the intro never blocks and never nags twice.
+  S.settings.prefs = Object.assign({}, S.settings.prefs, { seenStyleIntro: STYLE_VERSION });
+  persist();
+  setTimeout(updateStyleMenu, 20);
+}
+
+function maybeShowStyleIntro() {
+  if ((S.settings.prefs || {}).seenStyleIntro === STYLE_VERSION) return;
+  setTimeout(showStyleIntro, 400);
+}
+
+function closeStyleMenu(){ toggleStyleMenu(false); }
+
+// Shared markup for the three controls — header menu, intro modal and Settings
+function styleControlsHtml() {
+  const swatches = DUTY_ORDER.map(d =>
+    `<button class="sty-sw" role="radio" data-duty="${d}" aria-label="${d[0].toUpperCase()+d.slice(1)}"
+       title="${d[0].toUpperCase()+d.slice(1)}" onclick="setStyle({duty:'${d}'},this,event)"></button>`).join('');
+  const modes = [['light','LIGHT'],['dark','DARK'],['system','SYSTEM']].map(([v,l]) =>
+    `<button role="radio" data-mode-opt="${v}" onclick="setStyle({mode:'${v}'},this,event)">${l}</button>`).join('');
+  const vibes = [['calm','CALM'],['epic','EPIC']].map(([v,l]) =>
+    `<button role="radio" data-vibe-opt="${v}" onclick="setStyle({vibe:'${v}'},this,event)">${l}</button>`).join('');
+  return `
+    <div class="sty-controls">
+      <div class="sty-grp"><div class="sty-lbl">DUTY POST</div>
+        <div class="sty-swatches" role="radiogroup" aria-label="Duty post">${swatches}</div></div>
+      <div class="sty-grp"><div class="sty-lbl">APPEARANCE</div>
+        <div class="sty-seg" role="radiogroup" aria-label="Appearance">${modes}</div></div>
+      <div class="sty-grp"><div class="sty-lbl">MOOD</div>
+        <div class="sty-seg" role="radiogroup" aria-label="Mood">${vibes}</div>
+        <div class="sty-hint">Calm — warm and quiet. Epic — cool, lit, atmospheric.</div></div>
+    </div>`;
+}
+
+function renderStyleMenu() {
+  const m = document.getElementById('style-menu');
+  if (!m) return;
+  m.innerHTML = styleControlsHtml() + `
+    <div class="sty-sep"></div>
+    <div class="sty-foot">
+      <button id="sty-revert" onclick="toggleSkin(this,event)">${ic('chevron-left')} Revert to the classic LCARS look</button>
+      <button onclick="showStyleIntro()">${ic('sparkles')} What's new in ${STYLE_VERSION}</button>
+    </div>
+    <div class="sty-feedback"><strong>New in ${STYLE_VERSION}</strong> — the classic look stays
+      available while this one settles. Feedback on either is welcome.</div>`;
+  updateStyleMenu();
+}
+
+// ================================================================
+// THEME (classic skin only)
+// ================================================================
+function setTheme(t, keepSkin) {
+  const acad = document.body.classList.contains('academy');
+  document.body.classList.remove('light','hc');
+  if (t !== 'dark') document.body.classList.add(t);
+  if (acad) document.body.classList.add('academy');
+  S.settings.theme = t;
+  // Picking a classic theme from Settings implies wanting the classic skin
+  if (!keepSkin && getStyle().skin !== 'classic') {
+    S.settings.style = Object.assign(getStyle(), { skin:'classic' });
+    try { localStorage.setItem(STYLE_KEY, JSON.stringify(getStyle())); } catch(e){}
+    document.documentElement.setAttribute('data-skin','classic');
+    updateStyleMenu();
+  }
+  persist();
+  updateThemeBtn();
+  updateManifestThemeBtn();
+}
+function cycleTheme() {
+  const order = ['dark','light','hc'];
+  const cur = S.settings.theme || 'dark';
+  setTheme(order[(order.indexOf(cur) + 1) % order.length]);
+}
+function updateThemeBtn() {
+  const t = S.settings.theme || 'dark';
+  const btn = document.getElementById('btn-theme');
+  if (!btn) return;
+  btn.innerHTML = ic(t === 'light' ? 'sun' : t === 'hc' ? 'contrast' : 'moon');
+  btn.title = `Theme: ${t}`;
+  document.querySelectorAll('.theme-opt').forEach(o => {
+    o.classList.toggle('active', o.dataset.theme === t);
+  });
+}
+
+// ================================================================
+// ACADEMY MODE — per-mission (simType === 'academy')
+// ================================================================
+function isAcademyDoc(doc) {
+  if (!doc || !doc.missionId) return false;
+  const m = S.missions[doc.missionId];
+  return m ? m.simType === 'academy' : false;
+}
+
+function stripFormattingHtml(html) {
+  if (!html) return html;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  // Unwrap rich formatting tags: bold, italic, strikethrough, links
+  tmp.querySelectorAll('strong, b, em, i, s, strike, u, a').forEach(el => {
+    const p = el.parentNode; if (!p) return;
+    while (el.firstChild) p.insertBefore(el.firstChild, el);
+    p.removeChild(el);
+  });
+  // Remove indent classes
+  [1,2,3,4].forEach(n => {
+    tmp.querySelectorAll('.ind-'+n).forEach(el => el.classList.remove('ind-'+n));
+  });
+  // Unwrap blockquotes
+  tmp.querySelectorAll('blockquote').forEach(bq => {
+    const p = bq.parentNode; if (!p) return;
+    while (bq.firstChild) p.insertBefore(bq.firstChild, bq);
+    p.removeChild(bq);
+  });
+  return tmp.innerHTML;
+}
+
+// ================================================================
+// PREFERENCES
+// ================================================================
+const PREF_DEFAULTS = {
+  lineSpacing: 1.15,
+  editorFontSize: 12,
+  uiFontSize: 15,
+  uiFont: '',
+  editorFont: '',
+  editorFontSameAsUI: false,
+  actionAccent: '#ff9999',
+  commsAccent: '#66cc99',
+  thoughtAccent: '#aabbff',
+  actionOn: true,
+  commsOn: true,
+  thoughtOn: true,
+  autoBoldNames: false,
+  thoughtItalic: true,
+  boldLocations: true,
+  italicOOC: false,
+  navSceneSort: 'recent-first',
+  markerLayout: 'dropdown',
+};
+
+const GOOGLE_FONTS = [
+  'Abril Fatface','Arvo','Barlow','Bebas Neue','Bitter','Cabin','Cantarell',
+  'Caveat','Cormorant Garamond','Courier Prime','Crimson Text','Dancing Script',
+  'DM Mono','DM Sans','Droid Sans','Droid Serif','EB Garamond','Exo 2',
+  'Fira Code','Fira Sans','IBM Plex Mono','Inconsolata','Inter','JetBrains Mono',
+  'Josefin Sans','Jost','Karla','Lato','Libre Baskerville','Lora','Merriweather',
+  'Montserrat','Mulish','Noto Sans','Noto Serif','Nunito','Open Sans','Oswald',
+  'Pacifico','Permanent Marker','Playfair Display','Poppins','PT Serif','Quicksand',
+  'Raleway','Roboto','Roboto Mono','Satisfy','Source Code Pro','Source Sans 3',
+  'Source Serif 4','Space Mono','Spectral','Titillium Web','Ubuntu','Work Sans',
+];
+
+function loadGoogleFont(fontName) {
+  if (!fontName) return;
+  const id = 'gf-' + fontName.replace(/\s+/g,'-').toLowerCase();
+  if (document.getElementById(id)) return;
+  const link = document.createElement('link');
+  link.id = id; link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName)}&display=swap`;
+  document.head.appendChild(link);
+}
+
+function getPrefs() { return Object.assign({}, PREF_DEFAULTS, S.settings.prefs); }
+
+function hexToRgba(hex, alpha) {
+  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function applyPrefs() {
+  const p = getPrefs();
+  const u = p.uiFontSize;
+  const style = document.getElementById('prefs-style');
+  const editorFontName = p.editorFontSameAsUI ? p.uiFont : p.editorFont;
+  if (p.uiFont) loadGoogleFont(p.uiFont);
+  if (editorFontName && editorFontName !== p.uiFont) loadGoogleFont(editorFontName);
+  const bodyFontRule = p.uiFont ? `body { font-family: '${p.uiFont}', sans-serif; }` : '';
+  const editorFontDecl = editorFontName ? `font-family: '${editorFontName}', sans-serif;` : '';
+  style.textContent = `
+    html { font-size: ${u}px; }
+    ${bodyFontRule}
+    #editor { line-height: ${p.lineSpacing}; font-size: ${p.editorFontSize}pt; ${editorFontDecl} }
+    .am { background:${hexToRgba(p.actionAccent,.30)}; }
+    .cm { background:${hexToRgba(p.commsAccent,.30)}; }
+    .tm { background:${hexToRgba(p.thoughtAccent,.30)}; font-style:${p.thoughtItalic?'italic':'normal'}; }
+    .lm { font-weight:${p.boldLocations?'bold':'normal'}; }
+    .om { font-style:${p.italicOOC?'italic':'normal'}; }
+    #tbb-am.fmt-on { background:${hexToRgba(p.actionAccent,.35)}!important; border-color:${hexToRgba(p.actionAccent,.6)}!important; color:var(--text)!important; }
+    #tbb-cm.fmt-on { background:${hexToRgba(p.commsAccent,.35)}!important; border-color:${hexToRgba(p.commsAccent,.6)}!important; color:var(--text)!important; }
+    #tbb-th.fmt-on { background:${hexToRgba(p.thoughtAccent,.35)}!important; border-color:${hexToRgba(p.thoughtAccent,.6)}!important; color:var(--text)!important; }
+    #tbb-bn.fmt-on { font-weight:bold!important; color:var(--text)!important; border-color:var(--scroll)!important; background:rgba(128,128,128,.1)!important; }
+    #tbb-it.fmt-on { font-style:italic!important; color:var(--text)!important; border-color:var(--scroll)!important; background:rgba(128,128,128,.1)!important; }
+    #tbb-bl.fmt-on { font-weight:bold!important; color:var(--text)!important; border-color:var(--scroll)!important; background:rgba(128,128,128,.1)!important; }
+    #tbb-oi.fmt-on { font-style:italic!important; color:var(--text)!important; border-color:var(--scroll)!important; background:rgba(128,128,128,.1)!important; }
+  `;
+  // Sync fmts state from saved prefs and update toolbar buttons
+  fmts.action = p.actionOn !== false;
+  fmts.comms  = p.commsOn  !== false;
+  fmts.thought = p.thoughtOn !== false;
+  const fmtMap = {action:'tbb-am', comms:'tbb-cm', thought:'tbb-th'};
+  Object.entries(fmtMap).forEach(([t, id]) => {
+    const btn = document.getElementById(id);
+    if (btn) btn.classList.toggle('fmt-on', fmts[t]);
+  });
+  updateAutoBoldBtn();
+  updateItalicThoughtsBtn();
+  updateBoldLocationsBtn();
+  updateItalicOOCBtn();
+  const r2 = document.querySelector('#dh .dh-r2');
+  if (r2) r2.classList.toggle('mkr-expanded', p.markerLayout === 'buttons');
+}
+
+function resetPrefsForm() {
+  const d = PREF_DEFAULTS;
+  document.getElementById('pf-ls').value = d.lineSpacing;
+  document.getElementById('pf-efs').value = d.editorFontSize;
+  document.getElementById('pf-ufs').value = d.uiFontSize;
+  document.getElementById('pf-ac').value = d.actionAccent;
+  document.getElementById('pf-cc').value = d.commsAccent;
+  document.getElementById('pf-tc').value = d.thoughtAccent;
+  document.getElementById('pf-ao').checked = d.actionOn;
+  document.getElementById('pf-co').checked = d.commsOn;
+  document.getElementById('pf-to').checked = d.thoughtOn;
+  document.getElementById('pf-abn').checked = d.autoBoldNames;
+  document.getElementById('pf-ti').checked = d.thoughtItalic;
+}
+
+// ================================================================
+// EXPORT / IMPORT
+// ================================================================
+function exportData() {
+  const blob = new Blob([JSON.stringify(S, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'lcars-' + new Date().toISOString().slice(0,10) + '.lcars';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importData() {
+  document.getElementById('import-file').value = '';
+  document.getElementById('import-file').click();
+}
+
+let _pendingImport = null;
+
+function onImportFile(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    let data;
+    try {
+      data = JSON.parse(ev.target.result);
+      // Unwrap Gist sync format: { data: <S or JSON string>, savedAt: <ts> }
+      if (data.savedAt && data.data) {
+        data = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
+      }
+    } catch(err) { alert('Invalid file — could not parse JSON.'); return; }
+    if (!data.docs || !data.missions) { alert('Invalid LCARS save file.'); return; }
+    _pendingImport = data;
+    const mCount = Object.keys(data.missions||{}).length;
+    const scCount = Object.keys(data.scenes||{}).length;
+    const dCount = Object.keys(data.docs||{}).length;
+    openModal('IMPORT DATA',
+      `<p style="color:var(--dim);font-size:0.87rem;line-height:1.6">
+        File: <strong style="color:var(--text)">${esc(file.name)}</strong><br>
+        Contains: ${mCount} mission(s), ${scCount} scene(s), ${dCount} sim(s).
+      </p>
+      <p style="color:var(--dim);font-size:0.87rem;line-height:1.6;margin-top:10px">
+        <strong style="color:var(--text)">Overwrite</strong> replaces all current data.<br>
+        <strong style="color:var(--text)">Merge</strong> adds imported items alongside existing data.
+      </p>`,
+      () => applyImport('merge'),
+      { ok: 'Merge', extra: [{label:ic('alert') + ' Overwrite', cls:'btn-s', fn:"applyImport('overwrite')"}] }
+    );
+  };
+  reader.readAsText(file);
+}
+
+function applyImport(mode) {
+  const data = _pendingImport; _pendingImport = null;
+  if (!data) return;
+  closeModal();
+  showToast('Restoring…');
+  // Yield a frame before the heavy part. persist() stringifies the entire
+  // dataset and renderNav rebuilds the whole tree; on a large backup that is
+  // over a second of blocked main thread, which reads as the page having frozen.
+  setTimeout(() => {
+    if (mode === 'overwrite') {
+      Object.assign(S, data);
+    } else {
+      Object.assign(S.missions, data.missions||{});
+      Object.assign(S.scenes, data.scenes||{});
+      Object.assign(S.docs, data.docs||{});
+    }
+    persist();
+    curId = null; curView = null; curViewId = null;
+    setTheme(S.settings.theme||'dark', true);
+    applyStyle();
+    applyPrefs();
+    renderNav();
+    showDashboard();
+    showToast(isCloud() ? 'Import complete · saving to your account' : 'Import complete');
+    // Restoring a backup is exactly when data most needs to reach the account —
+    // without this it would sit locally until the next edit, or be lost with the
+    // tab. Deferred again so the restored view paints first.
+    if (isCloud()) setTimeout(() => { saveToCloud(); backfillSnapshots(); }, 50);
+  }, 30);
+}
+
+// ================================================================
+// CLOUD SYNC (Supabase)
+// ================================================================
+// Talks to Supabase over plain fetch rather than their CDN client, so the app
+// stays a single dependency-free file and still works with no network at all.
+// Two independent ideas live here:
+//   * mode  — 'cloud' (signed in, data on the server) or 'local' (offline, this
+//             browser only). Every network call is gated on mode === 'cloud'.
+//   * auth  — the Supabase session, refreshed on demand when a call 401s.
+const SUPA_URL  = 'https://nyjpqaelilrqzmnangft.supabase.co';
+const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55anBxYWVsaWxycXptbmFuZ2Z0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NzMwMDIsImV4cCI6MjEwMjI0OTAwMn0.uYUMt49TBW3S_LLse5ZreDQgfL74frlf01jSoHa1qkU';
+const AUTH_KEY  = 'lcars_auth_v1';
+const MODE_KEY  = 'lcars_mode_v1';
+
+let syncTimer = null;
+let syncStatus = { state: 'idle', msg: '' }; // 'idle' | 'syncing' | 'ok' | 'error'
+
+function getMode() { try { return localStorage.getItem(MODE_KEY) || ''; } catch(e) { return ''; } }
+function setMode(m) { try { localStorage.setItem(MODE_KEY, m); } catch(e) {} }
+function isCloud() { return getMode() === 'cloud'; }
+
+function getAuth() { try { return JSON.parse(localStorage.getItem(AUTH_KEY) || '{}'); } catch(e) { return {}; } }
+function saveAuth(a) { try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e) {} }
+function clearAuth() { try { localStorage.removeItem(AUTH_KEY); } catch(e) {} }
+
+// A writer ID is ten characters: first letter of the writer's first ship, the
+// four-digit stardate year, the two-digit month, the character's first and last
+// initials (last becomes 1 for a single-named character), then the academy list
+// digit. e.g. A239809JP3.
+// The two initial positions are left loose rather than pinned to letters, since
+// that is where the format's documented exceptions live.
+function normalizeWriterId(s) { return (s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+function validWriterId(s) {
+  return /^[A-Z]\d{6}[A-Z0-9]{2}\d$/.test(normalizeWriterId(s));
+}
+// The auth account's email is derived from the Writer ID, so signing in needs no
+// server-side lookup. It is a synthetic address and never receives mail.
+function writerEmail(wid) { return normalizeWriterId(wid).toLowerCase() + '@lcars.local'; }
+
+function setSyncStatus(state, msg) {
+  syncStatus = { state, msg };
+  const el = document.getElementById('sync-status');
+  if (el) {
+    el.textContent = msg || '';
+    el.style.color = state === 'error' ? 'var(--red,#c66)' : state === 'ok' ? 'var(--dim)' : 'var(--dim)';
+  }
+}
+
+function supaErr(j, fallback) {
+  return (j && (j.error_description || j.msg || j.message || j.error)) || fallback;
+}
+
+async function refreshSession() {
+  const a = getAuth();
+  if (!a.refresh_token) return false;
+  try {
+    const r = await fetch(SUPA_URL + '/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST',
+      headers: { 'apikey': SUPA_ANON, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: a.refresh_token })
+    });
+    if (!r.ok) return false;
+    const j = await r.json();
+    saveAuth({ ...a, access_token: j.access_token, refresh_token: j.refresh_token || a.refresh_token,
+               uid: (j.user && j.user.id) || a.uid, expires_at: Date.now() + (j.expires_in || 3600) * 1000 });
+    return true;
+  } catch(e) { return false; }
+}
+
+// Authenticated call against the Supabase REST/Auth API. Retries once through a
+// token refresh when the access token has expired.
+async function supaFetch(path, opts = {}, retry = true) {
+  const a = getAuth();
+  const headers = Object.assign({ 'apikey': SUPA_ANON, 'Content-Type': 'application/json' }, opts.headers || {});
+  if (a.access_token) headers['Authorization'] = 'Bearer ' + a.access_token;
+  const res = await fetch(SUPA_URL + path, Object.assign({}, opts, { headers }));
+  if (res.status === 401 && retry && a.refresh_token) {
+    if (await refreshSession()) return supaFetch(path, opts, false);
+  }
+  return res;
+}
+
+async function cloudSignUp(wid, pin, recoveryEmail) {
+  const w = normalizeWriterId(wid);
+  const r = await fetch(SUPA_URL + '/auth/v1/signup', {
+    method: 'POST',
+    headers: { 'apikey': SUPA_ANON, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: writerEmail(w), password: pin })
+  });
+  const j = await r.json();
+  if (!r.ok) {
+    if (/already registered/i.test(supaErr(j, ''))) throw new Error('That Writer ID already has an account. Try signing in instead.');
+    throw new Error(supaErr(j, 'Could not create the account.'));
+  }
+  if (!j.access_token) throw new Error('Account created, but no session came back. Check that "Confirm email" is turned off in Supabase → Authentication → Sign In / Providers → Email.');
+  saveAuth({ access_token: j.access_token, refresh_token: j.refresh_token, uid: j.user.id,
+             writerId: w, expires_at: Date.now() + (j.expires_in || 3600) * 1000 });
+  await supaFetch('/rest/v1/writers', {
+    method: 'POST',
+    headers: { 'Prefer': 'resolution=merge-duplicates' },
+    body: JSON.stringify({ id: j.user.id, writer_id: w, recovery_email: (recoveryEmail || '').trim() || null })
+  });
+  setMode('cloud');
+  return w;
+}
+
+async function cloudSignIn(wid, pin) {
+  const w = normalizeWriterId(wid);
+  const r = await fetch(SUPA_URL + '/auth/v1/token?grant_type=password', {
+    method: 'POST',
+    headers: { 'apikey': SUPA_ANON, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: writerEmail(w), password: pin })
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(/invalid/i.test(supaErr(j, '')) ? 'Writer ID or PIN not recognised.' : supaErr(j, 'Could not sign in.'));
+  saveAuth({ access_token: j.access_token, refresh_token: j.refresh_token, uid: j.user.id,
+             writerId: w, expires_at: Date.now() + (j.expires_in || 3600) * 1000 });
+  setMode('cloud');
+  return w;
+}
+
+function cloudSignOut() {
+  clearAuth();
+  setMode('');
+  location.reload();
+}
+
+// Snapshots are ten full copies of a sim's HTML apiece. Kept in the main payload
+// they dominated its size and were re-uploaded on every single save, so they go
+// to their own table and are fetched only when the history modal is opened.
+// doc.snapshots stays as the local copy — offline mode needs it, and restoring
+// from it is instant.
+function cloudPayload() {
+  const docs = {};
+  for (const k in (S.docs || {})) {
+    const { snapshots, ...rest } = S.docs[k];
+    docs[k] = rest;
+  }
+  return { ...S, docs };
+}
+
+async function pushSnapshot(docId, snap) {
+  if (!isCloud()) return;
+  const a = getAuth();
+  if (!a.uid) return;
+  try {
+    const r = await supaFetch('/rest/v1/snapshots', {
+      method: 'POST',
+      body: JSON.stringify({ writer_uid: a.uid, doc_id: docId, html: snap.content,
+                             word_count: snap.wordCount, created_at: new Date(snap.savedAt).toISOString() })
+    });
+    if (r.ok) await pruneSnapshots(docId);
+  } catch(e) { /* local copy still holds it */ }
+}
+
+// Keep the server to the same ten-per-sim cap as local.
+async function pruneSnapshots(docId) {
+  const a = getAuth();
+  const q = '/rest/v1/snapshots?writer_uid=eq.' + encodeURIComponent(a.uid) +
+            '&doc_id=eq.' + encodeURIComponent(docId);
+  const r = await supaFetch(q + '&select=id&order=created_at.desc&limit=200&offset=10');
+  if (!r.ok) return;
+  const old = await r.json();
+  for (const row of old) await supaFetch('/rest/v1/snapshots?id=eq.' + row.id, { method: 'DELETE' });
+}
+
+async function fetchSnapshots(docId) {
+  const a = getAuth();
+  if (!a.uid) return null;
+  const r = await supaFetch('/rest/v1/snapshots?writer_uid=eq.' + encodeURIComponent(a.uid) +
+                            '&doc_id=eq.' + encodeURIComponent(docId) +
+                            '&select=html,word_count,created_at&order=created_at.asc');
+  if (!r.ok) return null;
+  const rows = await r.json();
+  return rows.map(x => ({ content: x.html, wordCount: x.word_count, savedAt: new Date(x.created_at).getTime() }));
+}
+
+// One-off: lift snapshots that already existed locally up to the server, so a
+// writer's existing history follows them to a new device.
+async function backfillSnapshots() {
+  if (!isCloud() || S._snapBackfill) return;
+  for (const id in (S.docs || {})) {
+    for (const snap of (S.docs[id].snapshots || [])) await pushSnapshot(id, snap);
+  }
+  S._snapBackfill = true;
+  persist();
+}
+
+// Push the whole state. localStorage keeps its own copy either way, so a failed
+// push is a warning rather than data loss.
+async function saveToCloud() {
+  if (!isCloud()) return;
+  const a = getAuth();
+  if (!a.uid) return;
+  setSyncStatus('syncing', 'Saving…');
+  try {
+    const r = await supaFetch('/rest/v1/state', {
+      method: 'POST',
+      headers: { 'Prefer': 'resolution=merge-duplicates' },
+      body: JSON.stringify({ writer_uid: a.uid, payload: cloudPayload(), updated_at: new Date().toISOString() })
+    });
+    if (!r.ok) throw new Error((await r.text()).slice(0, 160));
+    setSyncStatus('ok', 'Saved ' + new Date().toLocaleTimeString());
+  } catch(e) {
+    setSyncStatus('error', 'Not saved — kept on this device. ' + (e.message || ''));
+  }
+}
+
+async function loadFromCloud() {
+  const a = getAuth();
+  if (!a.uid) return null;
+  const r = await supaFetch('/rest/v1/state?writer_uid=eq.' + encodeURIComponent(a.uid) + '&select=payload,updated_at');
+  if (!r.ok) throw new Error('Could not reach your saved data.');
+  const rows = await r.json();
+  return rows && rows[0] ? rows[0] : null;
+}
+
+// Debounced auto-save. Name and signature are unchanged from the Gist era so
+// every existing call site still works.
+function schedSync(delay) {
+  if (!isCloud()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(saveToCloud, delay || 5000);
+}
+
+function hasLocalData() {
+  return !!(S && S.docs && Object.keys(S.docs).length);
+}
+
+// Boot path for a signed-in writer: pull the server copy, and reconcile if this
+// browser also has local work.
+async function cloudBoot() {
+  if (!isCloud()) return;
+  setSyncStatus('syncing', 'Loading…');
+  let row;
+  try { row = await loadFromCloud(); }
+  catch(e) { setSyncStatus('error', 'Working offline — could not reach the server.'); return; }
+
+  if (!row) {                       // nothing on the server yet
+    if (hasLocalData()) { await saveToCloud(); await backfillSnapshots(); }
+    else setSyncStatus('ok', '');
+    return;
+  }
+  const remote = row.payload || {};
+  const remoteDocs = Object.keys(remote.docs || {}).length;
+
+  if (!hasLocalData()) { adoptCloudState(remote); setSyncStatus('ok', ''); return; }
+  backfillSnapshots();              // lift any pre-existing local history up once
+
+  // Both sides have data. Same account on a second device is the normal case, so
+  // prefer the server, but never silently discard local work.
+  const localDocs = Object.keys(S.docs || {}).length;
+  if (remoteDocs >= localDocs) { adoptCloudState(remote); setSyncStatus('ok', ''); return; }
+
+  openModal('Which copy is right?',
+    `<div style="font-size:0.85rem;line-height:1.6">
+      <p>This browser has <strong>${localDocs} sim(s)</strong>, but your account holds <strong>${remoteDocs}</strong>.</p>
+      <p>Keeping this device's copy will replace what is stored online. Backup Data first if you are unsure.</p>
+     </div>`,
+    null,
+    { noCancel: true, extra: [
+      { label: 'Use my account\'s copy', cls: 'btn-p', fn: 'adoptCloudFromPrompt()' },
+      { label: 'Keep this device\'s copy', fn: 'closeModal();saveToCloud()' }
+    ] });
+  _pendingCloudState = remote;
+}
+
+let _pendingCloudState = null;
+function adoptCloudFromPrompt() {
+  if (_pendingCloudState) adoptCloudState(_pendingCloudState);
+  _pendingCloudState = null;
+  closeModal();
+}
+
+function adoptCloudState(remote) {
+  if (!remote || !remote.docs) return;
+  Object.assign(S, remote);
+  persist();
+  curId = null; curView = null; curViewId = null;
+  setTheme(S.settings.theme || 'dark', true);
+  applyStyle(); applyPrefs(); renderNav(); showDashboard();
+}
+
+// ================================================================
+// ERASE / DELETE
+// ================================================================
+// Both paths demand a typed confirmation rather than an OK button, because
+// neither can be undone and a backup is the only way back.
+function eraseConfirmBody(word, warning) {
+  return `<div style="font-size:0.87rem;line-height:1.65">
+      ${warning}
+      <p style="margin:12px 0 6px">Type <strong>${word}</strong> below to confirm.</p>
+      <input class="mi" id="erase-confirm" type="text" autocomplete="off" spellcheck="false" placeholder="${word}">
+    </div>`;
+}
+
+function confirmEraseData() {
+  closeModal();
+  setTimeout(() => openModal('Erase all sims and characters',
+    eraseConfirmBody('ERASE',
+      `<p style="margin:0 0 8px">This removes every mission, scene, sim and character from LCARS.</p>
+       <p style="margin:0 0 8px">${isCloud()
+         ? 'Your account stays and you remain signed in, but the erase is synced — it will clear on your other devices too.'
+         : 'This applies to this browser only.'}</p>
+       <p style="margin:0"><strong>There is no undo.</strong> If you have not taken a backup, cancel and do that first.</p>`),
+    () => {
+      const v = (document.getElementById('erase-confirm').value || '').trim().toUpperCase();
+      if (v !== 'ERASE') { showToast('Type ERASE to confirm'); return false; }
+      eraseAllData();
+    },
+    { ok: 'Erase everything' }), 60);
+}
+
+async function eraseAllData() {
+  S.docs = {}; S.missions = {}; S.scenes = {}; S.characters = {}; S.templates = [];
+  persist();
+  curId = null; curView = null; curViewId = null;
+  renderNav(); showDashboard();
+  showToast('Everything erased');
+  if (isCloud()) {
+    await saveToCloud();
+    const a = getAuth();
+    if (a.uid) await supaFetch('/rest/v1/snapshots?writer_uid=eq.' + encodeURIComponent(a.uid), { method: 'DELETE' });
+  }
+}
+
+function confirmDeleteAccount() {
+  closeModal();
+  setTimeout(() => openModal('Delete account and all data',
+    eraseConfirmBody('DELETE',
+      `<p style="margin:0 0 8px">This removes your sims, characters and revision history from the server, and wipes this device's copy.</p>
+       <p style="margin:0 0 8px">Your Writer ID stays registered as a login — signing in with it again would give you an empty LCARS. To have the login itself removed, ask the tool's maintainer.</p>
+       <p style="margin:0"><strong>There is no undo.</strong> Take a backup first if there is anything you want to keep.</p>`),
+    () => {
+      const v = (document.getElementById('erase-confirm').value || '').trim().toUpperCase();
+      if (v !== 'DELETE') { showToast('Type DELETE to confirm'); return false; }
+      deleteAccount();
+    },
+    { ok: 'Delete my account' }), 60);
+}
+
+async function deleteAccount() {
+  const a = getAuth();
+  if (a.uid) {
+    const uid = encodeURIComponent(a.uid);
+    try {
+      await supaFetch('/rest/v1/snapshots?writer_uid=eq.' + uid, { method: 'DELETE' });
+      await supaFetch('/rest/v1/state?writer_uid=eq.' + uid, { method: 'DELETE' });
+      await supaFetch('/rest/v1/writers?id=eq.' + uid, { method: 'DELETE' });
+    } catch(e) {
+      alert('Could not reach the server, so nothing was deleted. Check your connection and try again.');
+      return;
+    }
+  }
+  S.docs = {}; S.missions = {}; S.scenes = {}; S.characters = {}; S.templates = [];
+  persist();
+  clearAuth();
+  setMode('');
+  location.reload();
+}
+
+// ================================================================
+// GETTING STARTED WIZARD
+// ================================================================
+// Shown once after the first-run gate resolves, and reopenable any time from
+// the Dashboard. Two routes through it: writers new to LCARS entirely, and
+// writers arriving from the old GitHub Pages version who mainly need to know
+// what changed and how to bring their sims across.
+let _wizStep = 'welcome';
+
+function wizardSeen() { return !!(S.settings && S.settings.wizardDone); }
+
+function markWizardSeen() {
+  if (!S.settings) S.settings = {};
+  S.settings.wizardDone = true;
+  persist();
+  if (isCloud()) schedSync(2000);
+}
+
+function maybeShowWizard() {
+  if (wizardSeen()) return;
+  showWizard();
+}
+
+function showWizard() {
+  closeWizard();
+  const el = document.createElement('div');
+  el.id = 'wiz';
+  el.style.cssText = 'position:fixed;inset:0;z-index:8800;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,0.72);overflow:auto';
+  el.innerHTML = `
+    <div style="position:relative;width:100%;max-width:560px;background:var(--panel,#1b1b1b);border:1px solid var(--border,#333);border-radius:10px;padding:26px 24px;max-height:88vh;overflow:auto">
+      <button class="btn btn-s" onclick="wizFinish(false)" title="Close" aria-label="Close"
+        style="position:absolute;top:10px;right:10px;padding:2px 8px;line-height:1.4">✕</button>
+      <div id="wiz-body"></div>
+    </div>`;
+  document.body.appendChild(el);
+  wizGo('welcome');
+}
+
+function closeWizard() {
+  const el = document.getElementById('wiz');
+  if (el) el.remove();
+}
+
+// "Don't show again" is explicit and separate from simply closing, so a writer
+// who closes mid-way still gets the wizard back next time.
+function wizFinish(remember) {
+  if (remember) markWizardSeen();
+  closeWizard();
+}
+
+function wizFoot(backStep) {
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:20px;padding-top:14px;border-top:1px solid var(--border,#333)">
+      ${backStep ? `<button class="btn btn-s" onclick="wizGo('${backStep}')">Back</button>` : ''}
+      <div style="flex:1"></div>
+      <button class="btn btn-s" onclick="wizFinish(true)">Don't show this again</button>
+      <button class="btn btn-s" onclick="wizFinish(false)">Close</button>
+    </div>`;
+}
+
+function wizGo(step) {
+  _wizStep = step;
+  const b = document.getElementById('wiz-body');
+  if (!b) return;
+  b.innerHTML = WIZ[step] ? WIZ[step]() : WIZ.welcome();
+  b.parentElement.scrollTop = 0;
+}
+
+const WIZ = {
+  welcome: () => `
+    <div style="font-size:1.15rem;font-weight:700;margin-bottom:10px">Welcome to LCARS</div>
+    <p style="font-size:0.87rem;line-height:1.65;color:var(--dim);margin:0 0 8px">
+      LCARS is a writing tool for Starbase 118 — somewhere to draft your sims, keep them organised by mission and scene, and track your characters.
+    </p>
+    <p style="font-size:0.87rem;line-height:1.65;color:var(--dim);margin:0 0 18px">
+      Which of these sounds like you?
+    </p>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('new1')">I'm new to LCARS</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizGo('ret1')">I've used LCARS before</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizFinish(true)">Skip — let me get on with it</button>
+    </div>
+    <div style="font-size:0.72rem;color:var(--dim);margin-top:14px;line-height:1.5">
+      You can reopen this any time from the Dashboard.
+    </div>`,
+
+  // ---------- new writers ----------
+  new1: () => `
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">How your writing is organised</div>
+    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
+      <p style="margin:0 0 10px">Three levels, largest to smallest:</p>
+      <p style="margin:0 0 8px"><strong style="color:var(--text)">Missions</strong> — a storyline your ship is playing through.</p>
+      <p style="margin:0 0 8px"><strong style="color:var(--text)">Scenes</strong> — a thread within a mission. The bridge, sickbay, an away team.</p>
+      <p style="margin:0 0 8px"><strong style="color:var(--text)">Sims</strong> — the individual posts you write. These live inside a scene.</p>
+      <p style="margin:10px 0 0">Start a mission, add a scene, then write. You can always move a sim later if you put it in the wrong place.</p>
+    </div>
+    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('new2')">Next</button></div>
+    ${wizFoot('welcome')}`,
+
+  new2: () => `
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Writing a sim</div>
+    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
+      <p style="margin:0 0 10px">The editor formats sim conventions as you type:</p>
+      <p style="margin:0 0 6px"><code>::Action::</code> — an action beat</p>
+      <p style="margin:0 0 6px"><code>=/\\= Comms =/\\=</code> — over comms</p>
+      <p style="margin:0 0 6px"><code>oO Thoughts Oo</code> — internal thought</p>
+      <p style="margin:0 0 6px"><code>((Location))</code> and <code>((OOC))</code></p>
+      <p style="margin:10px 0 0">Character names bold themselves once LCARS knows who is in a scene. When you're done, the copy button puts the sim on your clipboard with formatting intact, ready to paste into email or Discord.</p>
+    </div>
+    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('acct')">Next</button></div>
+    ${wizFoot('new1')}`,
+
+  // ---------- returning writers ----------
+  ret1: () => `
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">What's changed</div>
+    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
+      <p style="margin:0 0 10px"><strong style="color:var(--text)">LCARS has a new home and accounts.</strong> Sign in with your Writer ID and your sims save automatically and follow you to any device — no export files, no tokens to set up.</p>
+      <p style="margin:0 0 10px"><strong style="color:var(--text)">Gist sync is gone.</strong> It capped out around 1 MB. Accounts replace it with no practical limit. Your old Gist is untouched and still on GitHub if you want the file.</p>
+      <p style="margin:0 0 10px"><strong style="color:var(--text)">The Google Docs importer is gone.</strong> It was clumsy; better ways to bring sims in are coming.</p>
+      <p style="margin:0"><strong style="color:var(--text)">You can still work offline</strong> if you'd rather not have an account — everything stays in this browser and nothing is sent anywhere.</p>
+    </div>
+    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('ret2')">Next — bringing my sims across</button></div>
+    ${wizFoot('welcome')}`,
+
+  ret2: () => `
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Bringing your sims across</div>
+    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
+      <p style="margin:0 0 10px">Your old sims are still on the address you used before. Browsers keep each web address's data separate, so they don't come across on their own.</p>
+      <p style="margin:0 0 10px"><strong style="color:var(--text)">The easy way:</strong> go back to the old address and click <em>Move My Stuff</em> in the notice at the bottom. Sign in there, your sims upload, and they'll be waiting when you sign in here.</p>
+      <p style="margin:0 0 10px"><strong style="color:var(--text)">Or with a backup file:</strong> if you've already downloaded one, load it now.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizImportBackup()">Load a backup file</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizGo('acct')">${isCloud() ? 'Next' : 'Next — set up an account'}</button>
+    </div>
+    ${wizFoot('ret1')}`,
+
+  // ---------- shared tail ----------
+  acct: () => isCloud() ? `
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">You're all set</div>
+    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
+      <p style="margin:0 0 10px">You're signed in as <strong style="color:var(--text)">${(getAuth().writerId)||''}</strong>. Your work saves to your account a few seconds after each change, and will be there on any device you sign in on.</p>
+      <p style="margin:0">A backup is still worth taking now and then — Settings → Backup Data.</p>
+    </div>
+    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true)">Start writing</button></div>
+    ${wizFoot(null)}` : `
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Keep your work safe</div>
+    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
+      <p style="margin:0 0 10px">You're working offline, so your sims live in this browser alone. Clearing your browser data would erase them.</p>
+      <p style="margin:0 0 10px">An account fixes that — it needs your SB118 Writer ID and a PIN of your choice, nothing else. Your work on this device comes across with you.</p>
+      <p style="margin:0">Prefer to stay offline? That's fine — just take backups from Settings regularly.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true);showAuthGate(true)">Set up an account</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizFinish(true)">Stay offline for now</button>
+    </div>
+    ${wizFoot(null)}`
+};
+
+// Reuses the normal restore path, so the file is validated and the
+// merge/overwrite choice is the same one Settings offers.
+function wizImportBackup() {
+  closeWizard();
+  markWizardSeen();
+  importData();
+}
+
+// ================================================================
+// MOVED NOTICE — old GitHub Pages address only
+// ================================================================
+// Pages and Vercel serve the same file from main, so this is keyed off the
+// hostname. Sims saved on the Pages address stay in that browser and do not
+// follow the move, hence the nudge to back up first.
+const NEW_HOME = 'https://sb118-lcars.vercel.app/';
+
+// Add ?moved=1 to any address to preview this banner.
+function movedBannerApplies() {
+  try { if (new URLSearchParams(location.search).get('moved')) return true; } catch(e) {}
+  return /github\.io$/i.test(location.hostname);
+}
+
+function showMovedBanner() {
+  if (!movedBannerApplies()) return;
+  const b = document.createElement('div');
+  b.id = 'moved-banner';
+  b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:8500;padding:16px;background:var(--panel,#1b1b1b);border-top:2px solid var(--accent,#f80);font-size:0.84rem;line-height:1.6;max-height:65vh;overflow:auto';
+  b.innerHTML = `
+    <div style="max-width:840px;margin:0 auto">
+      <div style="font-size:0.95rem;font-weight:700;margin-bottom:8px">
+        LCARS is moving to a new host. The new URL is
+        <a href="${NEW_HOME}" style="color:var(--accent,#f80)">sb118-lcars.vercel.app</a>.
+      </div>
+      <p style="margin:0 0 8px">
+        If you're seeing this note, you're still using the GitHub Pages version. This page still works, but your sims and settings live in the browser's local storage, making them more prone to loss and harder to sync across devices.
+      </p>
+      <p style="margin:0 0 8px">
+        We strongly recommend migrating to the new site and bringing your sims and settings with you. The easiest way is to click <strong>Move My Stuff</strong> and set up an account — it just needs your SB118 Writer ID and a PIN of your choice. You can also download a manual backup and import it after creating an account if you prefer.
+      </p>
+      <p style="margin:0 0 14px;font-size:0.75rem;color:var(--dim)">
+        <em>Note: this new version discontinues and replaces Gist Sync, which had very limited space. The new site backs everything up securely on its own database. Your existing Gist is untouched and still accessible at <a href="https://gist.github.com" target="_blank" rel="noopener" style="color:var(--dim);text-decoration:underline">gist.github.com</a>.</em>
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-p" onclick="movedTransfer()">Move My Stuff</button>
+        <button class="btn btn-s" onclick="exportData()">Manual Backup Download</button>
+        <a class="btn btn-s" href="${NEW_HOME}" style="text-decoration:none">Visit the New Site</a>
+        <button class="btn btn-s" onclick="ackMoved()">Remind Me Later</button>
+      </div>
+    </div>`;
+  document.body.appendChild(b);
+}
+
+// Signing in from the old address uploads whatever this browser holds, so
+// signing in again at the new address brings it all down.
+function movedTransfer() {
+  ackMoved();
+  showAuthGate(true);
+}
+
+// Deliberately not remembered — the banner returns on the next page load until
+// the writer has actually moved.
+function ackMoved() {
+  const b = document.getElementById('moved-banner');
+  if (b) b.remove();
+}
+
+// ================================================================
+// AUTH GATE — first-run choice, sign in / create account
+// ================================================================
+// Shown once on a fresh browser. Everything here is optional: choosing
+// "Use offline" sets mode to 'local' and the app never touches the network.
+let _gateEl = null;
+
+function gateClose() {
+  if (_gateEl) { _gateEl.remove(); _gateEl = null; }
+}
+
+function showAuthGate(fromSettings) {
+  gateClose();
+  const el = document.createElement('div');
+  _gateEl = el;
+  el.id = 'auth-gate';
+  el.style.cssText = 'position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--bg,#111);overflow:auto';
+  el.innerHTML = `
+    <div style="width:100%;max-width:440px;background:var(--panel,#1b1b1b);border:1px solid var(--border,#333);border-radius:10px;padding:26px 24px">
+      <div style="font-size:1.15rem;font-weight:700;letter-spacing:0.04em;margin-bottom:6px">LCARS</div>
+      <div id="gate-body"></div>
+    </div>`;
+  document.body.appendChild(el);
+  gateChoice(!!fromSettings);
+}
+
+function gateChoice(fromSettings) {
+  document.getElementById('gate-body').innerHTML = `
+    <div style="font-size:0.85rem;color:var(--dim);line-height:1.65;margin-bottom:18px">
+      ${fromSettings
+        ? 'Set up an account and your sims on this device will be carried across, then kept in step on every device you sign in on.'
+        : 'Sign in to keep your sims backed up and available on any device &mdash; or work offline in this browser alone.'}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="gateForm('in')">Sign in with your Writer ID</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateForm('up')">Create an account</button>
+      ${fromSettings
+        ? `<button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateClose()">Not now</button>`
+        : `<button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateUseOffline()">Use offline on this device only</button>`}
+    </div>
+    ${fromSettings ? '' : `<div style="font-size:0.71rem;color:var(--dim);line-height:1.55;margin-top:14px">
+      Offline keeps everything in this browser and sends nothing anywhere. Clearing your browser data will erase it, so take backups. You can switch to an account later from Settings.
+    </div>`}`;
+}
+
+function gateUseOffline() {
+  setMode('local');
+  gateClose();
+  maybeShowWizard();
+}
+
+function gateForm(kind) {
+  const up = kind === 'up';
+  document.getElementById('gate-body').innerHTML = `
+    <div style="font-size:0.85rem;color:var(--dim);line-height:1.6;margin-bottom:14px">
+      ${up ? 'Your Writer ID identifies you; the PIN keeps your work private.' : 'Welcome back.'}
+    </div>
+    <div class="mf" style="margin-bottom:10px">
+      <label class="ml">WRITER ID</label>
+      <input class="mi" id="gate-wid" type="text" placeholder="A239809JP3" maxlength="10" autocomplete="username" spellcheck="false" style="text-transform:uppercase">
+    </div>
+    <div class="mf" style="margin-bottom:10px">
+      <label class="ml">PIN <span style="font-weight:normal;opacity:0.6">(at least 6 characters)</span></label>
+      <input class="mi" id="gate-pin" type="password" autocomplete="${up ? 'new-password' : 'current-password'}">
+    </div>
+    ${up ? `<div class="mf" style="margin-bottom:10px">
+      <label class="ml">RECOVERY EMAIL <span style="font-weight:normal;opacity:0.6">(optional)</span></label>
+      <input class="mi" id="gate-email" type="email" autocomplete="email" placeholder="so you can be identified if you forget your PIN">
+    </div>` : ''}
+    <div id="gate-msg" style="font-size:0.76rem;line-height:1.5;min-height:1.1em;margin:6px 0 12px;color:var(--red,#c66)"></div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-p" id="gate-go" style="width:100%;justify-content:center" onclick="gateSubmit('${kind}')">${up ? 'Create account' : 'Sign in'}</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateChoice(${!!getMode()})">Back</button>
+    </div>
+    ${up ? `<div style="font-size:0.71rem;color:var(--dim);line-height:1.55;margin-top:14px">
+      A forgotten PIN cannot be reset automatically yet &mdash; ask the tool's maintainer to reset it for you. Keep a backup either way.
+    </div>` : ''}`;
+  const wid = document.getElementById('gate-wid');
+  wid.focus();
+  ['gate-wid','gate-pin','gate-email'].forEach(id => {
+    const n = document.getElementById(id);
+    if (n) n.addEventListener('keydown', e => { if (e.key === 'Enter') gateSubmit(kind); });
+  });
+}
+
+// Shown after signing in from the old GitHub Pages address. cloudBoot() has
+// already pushed this browser's sims up, so the only thing left is to move the
+// writer across. Auto-forwards on the real old address; on a ?moved=1 preview it
+// waits for the click so the preview is not navigated away from.
+function showTransferDone() {
+  gateClose();
+  const ok = syncStatus.state !== 'error';
+  const el = document.createElement('div');
+  _gateEl = el;
+  el.id = 'auth-gate';
+  el.style.cssText = 'position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--bg,#111);overflow:auto';
+  el.innerHTML = `
+    <div style="width:100%;max-width:440px;background:var(--panel,#1b1b1b);border:1px solid var(--border,#333);border-radius:10px;padding:26px 24px">
+      <div style="font-size:1.15rem;font-weight:700;margin-bottom:10px">${ok ? 'Your sims are on your account' : 'Signed in — but the upload did not finish'}</div>
+      <p style="font-size:0.87rem;line-height:1.65;color:var(--dim);margin:0 0 8px">
+        ${ok
+          ? 'Everything in this browser has been saved to your account. Carry on at the new address — sign in there with the same Writer ID and PIN and it will all be waiting.'
+          : 'Your account is set up, but this browser\'s sims could not be uploaded just now. Stay here and try again in a moment, or download a backup and restore it at the new address.'}
+      </p>
+      <p style="font-size:0.75rem;color:var(--dim);margin:0 0 16px">This old address stays available, but it will not receive new features.</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <a class="btn btn-p" href="${NEW_HOME}" style="width:100%;justify-content:center;text-decoration:none">Go to the new address</a>
+        ${ok ? '' : `<button class="btn btn-s" style="width:100%;justify-content:center" onclick="saveToCloud().then(showTransferDone)">Try the upload again</button>
+        <button class="btn btn-s" style="width:100%;justify-content:center" onclick="exportData()">Download a backup</button>`}
+        <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateClose()">Stay here for now</button>
+      </div>
+      ${ok && /github\.io$/i.test(location.hostname)
+        ? '<div style="font-size:0.72rem;color:var(--dim);margin-top:12px">Taking you there automatically…</div>' : ''}
+    </div>`;
+  document.body.appendChild(el);
+  if (ok && /github\.io$/i.test(location.hostname)) {
+    setTimeout(() => { if (document.getElementById('auth-gate')) location.href = NEW_HOME; }, 3000);
+  }
+}
+
+async function gateSubmit(kind) {
+  const msg = document.getElementById('gate-msg');
+  const btn = document.getElementById('gate-go');
+  const wid = (document.getElementById('gate-wid').value || '').trim();
+  const pin = document.getElementById('gate-pin').value || '';
+  const email = (document.getElementById('gate-email') || {}).value || '';
+
+  if (!validWriterId(wid)) { msg.textContent = 'That does not look like a Writer ID — it should be ten characters, like A239809JP3.'; return; }
+  if (pin.length < 6) { msg.textContent = 'Your PIN needs to be at least 6 characters.'; return; }
+
+  msg.style.color = 'var(--dim)';
+  msg.textContent = kind === 'up' ? 'Creating your account…' : 'Signing in…';
+  btn.disabled = true;
+  try {
+    if (kind === 'up') await cloudSignUp(wid, pin, email);
+    else await cloudSignIn(wid, pin);
+    gateClose();
+    await cloudBoot();
+    showToast('Signed in as ' + normalizeWriterId(wid));
+    // Signing in from the old address is a migration, not a destination — the
+    // sims are on the account now, so send them where they should be writing.
+    if (movedBannerApplies()) { showTransferDone(); return; }
+    maybeShowWizard();
+  } catch(e) {
+    msg.style.color = 'var(--red,#c66)';
+    msg.textContent = e.message || 'Something went wrong. Please try again.';
+    btn.disabled = false;
+  }
+}
+
+// ================================================================
+// DASHBOARD
+// ================================================================
+function showDashboard() {
+  document.body.classList.remove('academy');
+  document.getElementById('dashboard').classList.remove('hidden');
+  document.getElementById('detail-view').classList.add('hidden');
+  ['dh','ec'].forEach(x=>document.getElementById(x).classList.add('hidden'));
+  document.getElementById('sim-details').classList.add('hidden');
+  document.getElementById('s-doc').textContent = 'No sim open';
+  document.getElementById('chars-list').innerHTML =
+    '<div style="padding:10px;font-size:0.8rem;color:var(--dim)">Open a sim to see characters</div>';
+  renderDashboard();
+}
+
+function closeDoc() {
+  if (curId) flushSave();
+  curId = null; curView = null; curViewId = null;
+  showDashboard();
+  renderNav();
+}
+
+function renderDashboard() {
+  const el = document.getElementById('dashboard');
+  const allDocs = Object.values(S.docs);
+  const allMissions = Object.values(S.missions);
+  // Compute total words across all sims
+  let totalWords = 0;
+  allDocs.forEach(d => {
+    const tmp = document.createElement('div'); tmp.innerHTML = d.content||'';
+    totalWords += wc(tmp.innerText||'');
+  });
+  const totalPosted = allDocs.filter(d=>d.postedAt).length;
+  // Days since the most recent posted sim (amber ≥2d, red ≥3d)
+  const lastPostMs = allDocs.filter(d=>d.postedAt)
+    .map(d=>new Date(d.postedAt).getTime()).filter(t=>!isNaN(t))
+    .reduce((a,b)=>Math.max(a,b),0);
+  const daysSincePost = lastPostMs ? Math.floor((Date.now()-lastPostMs)/86400000) : null;
+  const dspColor = daysSincePost==null ? 'var(--dim)' : daysSincePost>=3 ? '#cc2222' : daysSincePost>=2 ? '#d98c00' : 'inherit';
+  const dspVal = daysSincePost==null ? '—' : daysSincePost+'d';
+  const dspTip = daysSincePost==null ? 'No posted sims yet' : `${daysSincePost} day${daysSincePost===1?'':'s'} since your last posted sim`;
+  const inProgress = allDocs.filter(d=>d.status==='active')
+    .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,10);
+  const recentPosted = allDocs.filter(d=>d.postedAt)
+    .sort((a,b)=>(b.postedAt||'').localeCompare(a.postedAt||'')).slice(0,3);
+
+  el.innerHTML = `
+    <div class="dash-header-row">
+      <div class="dash-header-left">
+        <div class="dash-title">LCARS — COMMAND DASHBOARD</div>
+        <div class="dash-stats">
+          <div class="dash-stat-item"><div class="dash-stat-num">${allMissions.length}</div><div class="dash-stat-lbl">MISSIONS</div></div>
+          <div class="dash-stat-item"><div class="dash-stat-num">${allDocs.length}</div><div class="dash-stat-lbl">SIMS</div></div>
+          <div class="dash-stat-item"><div class="dash-stat-num">${totalPosted}</div><div class="dash-stat-lbl">POSTED</div></div>
+          <div class="dash-stat-item"><div class="dash-stat-num">${totalWords.toLocaleString()}</div><div class="dash-stat-lbl">WORDS</div></div>
+          <div class="dash-stat-item" title="${dspTip}"><div class="dash-stat-num" style="color:${dspColor}">${dspVal}</div><div class="dash-stat-lbl">SINCE LAST POST</div></div>
+        </div>
+      </div>
+      <div class="dash-ai-box" id="dash-ai-box">
+        <div class="dash-ai-logo" onclick="toggleDashAi()">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;opacity:.85">
+            <circle cx="9" cy="9" r="7.5" stroke="currentColor" stroke-width="1.2" opacity=".6"/>
+            <circle cx="9" cy="9" r="2.5" fill="currentColor"/>
+            <line x1="9" y1="1.5" x2="9" y2="5" stroke="currentColor" stroke-width="1.2"/>
+            <line x1="9" y1="13" x2="9" y2="16.5" stroke="currentColor" stroke-width="1.2"/>
+            <line x1="1.5" y1="9" x2="5" y2="9" stroke="currentColor" stroke-width="1.2"/>
+            <line x1="13" y1="9" x2="16.5" y2="9" stroke="currentColor" stroke-width="1.2"/>
+            <line x1="3.4" y1="3.4" x2="5.8" y2="5.8" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
+            <line x1="12.2" y1="12.2" x2="14.6" y2="14.6" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
+            <line x1="14.6" y1="3.4" x2="12.2" y2="5.8" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
+            <line x1="5.8" y1="12.2" x2="3.4" y2="14.6" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
+          </svg>
+          <strong>Tool Built with Claude Code AI</strong>
+          <span id="dash-ai-toggle" style="margin-left:auto;font-size:0.73rem;color:var(--dim);border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;transition:color .15s,border-color .15s">?</span>
+        </div>
+        <div id="dash-ai-body" style="display:none">
+          <div>This tool uses <strong>no AI to run</strong> and your content is never touched by AI. Everything is contained locally on your device and in your browser's storage. No internet connection required*.</div>
+          <div style="margin-top:6px;font-size:0.67rem;opacity:.7">*Fonts load from Google Fonts on first use.</div>
+        </div>
+      </div>
+    </div>
+    ${inProgress.length ? `
+      <div class="dash-section">IN PROGRESS</div>
+      <table class="dash-table">
+        <tr><th>TITLE</th><th>MISSION</th><th>WORDS</th><th>LAST EDITED</th></tr>
+        ${inProgress.map(d => {
+          const m = d.missionId ? S.missions[d.missionId] : null;
+          const tmp = document.createElement('div'); tmp.innerHTML = d.content||'';
+          const words = wc(tmp.innerText||'');
+          const date = d.updatedAt ? new Date(d.updatedAt).toLocaleDateString() : '—';
+          return `<tr>
+            <td><span class="dash-link" onclick="openDoc('${d.id}')">${esc(d.title||'Untitled')}</span></td>
+            <td style="color:var(--dim);font-size:0.8rem">${m?esc(m.name):'—'}</td>
+            <td style="color:var(--dim);font-size:0.8rem">${words}</td>
+            <td style="color:var(--dim);font-size:0.8rem">${date}</td>
+          </tr>`;
+        }).join('')}
+      </table>` : ''}
+    ${recentPosted.length ? `
+      <div class="dash-section">RECENTLY POSTED</div>
+      <table class="dash-table">
+        <tr><th>TITLE</th><th>MISSION</th><th>POSTED</th></tr>
+        ${recentPosted.map(d => {
+          const m = d.missionId ? S.missions[d.missionId] : null;
+          return `<tr>
+            <td><span class="dash-link" onclick="openDoc('${d.id}')">${esc(d.title||'Untitled')}</span></td>
+            <td style="color:var(--dim);font-size:0.8rem">${m?esc(m.name):'—'}</td>
+            <td style="color:var(--dim);font-size:0.8rem">${d.postedAt||'—'}</td>
+          </tr>`;
+        }).join('')}
+      </table>` : ''}
+    <div class="dash-section">READY TO GET STARTED?</div>
+    <div class="dash-actions">
+      <button class="dash-action" onclick="showNewMission()">
+        <div class="da-icon">${ic('circle-dot')}</div>
+        <div class="da-label">Start a new Mission</div>
+        <div class="da-hint">Create a mission folder to organise scenes and sims</div>
+      </button>
+      <button class="dash-action" onclick="showNewScene()">
+        <div class="da-icon">${ic('table')}</div>
+        <div class="da-label">Create a new Scene</div>
+        <div class="da-hint">Add a scene grouping within a mission</div>
+      </button>
+      <button class="dash-action" onclick="showNewDoc()">
+        <div class="da-icon">${ic('pencil')}</div>
+        <div class="da-label">Write a new Sim</div>
+        <div class="da-hint">Start a new sim post</div>
+      </button>
+      <button class="dash-action" onclick="openManifest()">
+        <div class="da-icon">${ic('user')}</div>
+        <div class="da-label">Character Manifest</div>
+        <div class="da-hint">View and manage your characters</div>
+      </button>
+    </div>
+    <div class="dash-actions">
+      <button class="dash-action" onclick="showWizard()">
+        <div class="da-icon">${ic('sparkles')}</div>
+        <div class="da-label">Getting Started</div>
+        <div class="da-hint">A quick tour, and how to bring old sims across</div>
+      </button>
+      <button class="dash-action" onclick="window.open('LCARS-Guide-v2.html','_blank')">
+        <div class="da-icon">${ic('book-open')}</div>
+        <div class="da-label">Learn How to Use This Tool</div>
+        <div class="da-hint">Open the full user guide</div>
+      </button>
+    </div>`;
+}
+
+function toggleDashAi() {
+  const body = document.getElementById('dash-ai-body');
+  if (!body) return;
+  body.style.display = body.style.display === 'none' ? '' : 'none';
+}
+
+// ================================================================
+// COPY POST
+// ================================================================
+function copyPost() {
+  const ed = document.getElementById('editor');
+  ed.focus();
+  document.execCommand('selectAll');
+  document.execCommand('copy');
+  const btn = document.getElementById('btn-copy');
+  const prev = btn.textContent;
+  btn.innerHTML = ic('check') + ' Copied!';
+  btn.style.color = 'var(--green)';
+  setTimeout(() => { btn.textContent = prev; btn.style.color = ''; }, 1500);
+}
+function removeFormatting() {
+  const ed = document.getElementById('editor');
+  ed.focus();
+  const sel = window.getSelection();
+  const hasSelection = sel && sel.toString().length > 0;
+  if (!hasSelection) {
+    const block = getCaretBlock();
+    if (block) {
+      const r = document.createRange(); r.selectNodeContents(block);
+      sel.removeAllRanges(); sel.addRange(r);
+    } else {
+      document.execCommand('selectAll');
+    }
+  }
+  document.execCommand('removeFormat');
+  document.execCommand('unlink');
+  schedSave();
+}
+
+function formatHTMLSource(html) {
+  // Insert newlines before/after block-level tags for readability
+  const blocks = 'div|p|br|h[1-6]|ul|ol|li|blockquote|pre|table|thead|tbody|tr|td|th|hr';
+  let s = html
+    .replace(new RegExp(`(<(?:${blocks})[^>]*>)`, 'gi'), '\n$1')
+    .replace(new RegExp(`(</(?:${blocks})>)`, 'gi'), '$1\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return s;
+}
+
+function toggleSourceView() {
+  if (!curId) return;
+  const ed = document.getElementById('editor');
+  const ec = document.getElementById('ec');
+  const btn = document.getElementById('tbb-src');
+  if (!ed || !ec) return;
+
+  if (!_sourceMode) {
+    // Enter source mode — capture cursor position first via a temporary marker node
+    _sourceMode = true;
+    const MARK = 'LCARS_CUR_MARK';
+    let rawWithMarker = '';
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && ed.contains(sel.getRangeAt(0).startContainer)) {
+      const range = sel.getRangeAt(0).cloneRange();
+      range.collapse(true);
+      const markerNode = document.createTextNode(MARK);
+      range.insertNode(markerNode);
+      rawWithMarker = ed.innerHTML;
+      markerNode.parentNode.removeChild(markerNode);
+    }
+    ed.style.display = 'none';
+    const ta = document.createElement('textarea');
+    ta.id = 'src-mode-ta';
+    ta.spellcheck = false;
+    ta.value = formatHTMLSource(ed.innerHTML);
+    ta.style.cssText = 'display:block;width:100%;min-height:100%;font-family:monospace;font-size:0.78rem;background:var(--bg);color:var(--text);border:none;outline:none;padding:28px 44px;resize:none;box-sizing:border-box;line-height:1.7;tab-size:2';
+    ec.appendChild(ta);
+    ta.focus();
+    // Place cursor at the equivalent source position
+    if (rawWithMarker) {
+      const fmtWithMarker = formatHTMLSource(rawWithMarker);
+      const pos = fmtWithMarker.indexOf(MARK);
+      if (pos >= 0) {
+        // Measure exact scroll position by truncating to cursor and reading scrollTop
+        const fullText = ta.value;
+        ta.value = fullText.substring(0, pos);
+        ta.scrollTop = Number.MAX_SAFE_INTEGER;
+        const targetScroll = ta.scrollTop;
+        ta.value = fullText;
+        ta.scrollTop = Math.max(0, targetScroll - ta.clientHeight / 2);
+        ta.setSelectionRange(pos, pos);
+      } else {
+        ta.setSelectionRange(0, 0); ta.scrollTop = 0;
+      }
+    } else {
+      ta.setSelectionRange(0, 0); ta.scrollTop = 0;
+    }
+    if (btn) { btn.classList.add('tbb-active'); btn.title = 'Exit source view (applies changes)'; }
+  } else {
+    // Exit source mode — apply edits back to editor
+    _sourceMode = false;
+    const ta = document.getElementById('src-mode-ta');
+    if (ta) { ed.innerHTML = ta.value; ta.remove(); schedSave(); setTimeout(transformNow, 0); }
+    ed.style.display = '';
+    if (btn) { btn.classList.remove('tbb-active'); btn.title = 'View / edit raw HTML source of this sim'; }
+  }
+}
+
+// ================================================================
+// UTILS
+// ================================================================
+function fmtPostedDate(isoDate) {
+  const [y,m,d] = isoDate.split('-');
+  return `${y}${m}.${d}`;
+}
+
+function toStardate(isoDate) {
+  if (!isoDate) return '';
+  const [y,m,d] = isoDate.split('-');
+  return `${parseInt(y)+376}${m}.${d}`;
+}
+
+function showToast(msg, dur=2200) {
+  let t = document.getElementById('lcars-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'lcars-toast';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.className = 'lcars-toast-show';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>{ t.className=''; }, dur);
+}
+
+// Allows <b> <i> <s> <u> <br> through; escapes everything else.
+function sanitizeSRHtml(str) {
+  if (!str) return '';
+  return str
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/&lt;(\/?(b|i|s|u|br)\s*\/?)&gt;/gi,'<$1>');
+}
+
+// Converts [[Article]] and [[Article|Label]] to <a> links; safe for display.
+function renderWikiLinks(rawText) {
+  if (!rawText) return '';
+  const parts = []; let last = 0;
+  const re = /\[\[([^\]]+?)\]\]/g; let m;
+  while ((m = re.exec(rawText)) !== null) {
+    parts.push(esc(rawText.slice(last, m.index)));
+    const pipe = m[1].indexOf('|');
+    const article = pipe >= 0 ? m[1].slice(0, pipe) : m[1];
+    const display = pipe >= 0 ? m[1].slice(pipe+1) : m[1];
+    const url = 'https://wiki.starbase118.net/wiki/' + encodeURIComponent(article.replace(/ /g,'_'));
+    parts.push(`<a href="${url}" target="_blank" rel="noopener">${esc(display)}</a>`);
+    last = m.index + m[0].length;
+  }
+  parts.push(esc(rawText.slice(last)));
+  return parts.join('');
+}
+
+// Display title: strip leading "Rank Name - " or "Name: " prefixes for cleaner sidebar listing.
+// Uses doc.displayTitle override if the user has chosen a specific split.
+function getDisplayTitle(doc) {
+  if (doc.displayTitle != null) return doc.displayTitle;
+  const title = doc.title || 'Untitled';
+  const m = title.match(/(?:[-–—]|:)\s+(.+)$/);
+  return m ? m[1].trim() : title;
+}
+
+// Count separators in a title (for the "choose split" right-click option)
+function countTitleSeps(title) {
+  return (title.match(/(?:[-–—]|:)\s/g)||[]).length;
+}
+
+// Build list of possible title splits at each separator
+function getTitleSplitOptions(title) {
+  const opts = [];
+  const re = /(?:[-–—]|:)\s+/g;
+  let m, last = 0;
+  const parts = [];
+  while ((m = re.exec(title)) !== null) parts.push(m.index + m[0].length);
+  parts.forEach(start => opts.push(title.slice(start).trim()));
+  opts.push(title); // "Full title" option
+  return opts;
+}
+function todayIso() { return new Date().toISOString().split('T')[0]; }
+function wc(t) { return (t.trim().match(/\S+/g)||[]).length; }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+
+// ================================================================
+// LEVENSHTEIN
+// ================================================================
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  let prev = Array.from({length:n+1},(_,i)=>i);
+  for (let i=1;i<=m;i++) {
+    const curr=[i];
+    for (let j=1;j<=n;j++)
+      curr[j]=a[i-1]===b[j-1]?prev[j-1]:1+Math.min(prev[j-1],prev[j],curr[j-1]);
+    prev=curr;
+  }
+  return prev[n];
+}
+
+// ================================================================
+// CLEAN COPY
+// ================================================================
+// ── PASTE HANDLER: strip colors/fonts from pasted content ──
+function cleanPasteHTML(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+
+  // Recursively unwrap or clean each element
+  function processNode(node) {
+    if (node.nodeType === 8) { node.parentNode.removeChild(node); return; } // drop comment nodes (StartFragment/EndFragment)
+    if (node.nodeType !== 1) return; // text nodes pass through
+    const tag = node.tagName.toLowerCase();
+    const keep = ['strong','b','em','i','s','strike','del','a',
+                  'div','p','br','ul','ol','li','blockquote','h1','h2','h3','h4'];
+    if (!keep.includes(tag)) {
+      // Unwrap: replace element with its children
+      while (node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+      node.parentNode.removeChild(node);
+      return;
+    }
+    // For kept elements, strip all styles/classes/ids except href on anchors
+    [...node.attributes].forEach(attr => {
+      if (tag === 'a' && attr.name === 'href') return;
+      if (tag === 'a' && attr.name === 'target') return;
+      node.removeAttribute(attr.name);
+    });
+    // Recurse into children (iterate copy since we may mutate)
+    [...node.childNodes].forEach(processNode);
+  }
+
+  [...tmp.childNodes].forEach(processNode);
+  return tmp.innerHTML;
+}
+
+function plainToHTML(plain) {
+  return plain
+    .split(/\r?\n/)
+    .map(line => `<div>${line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') || '<br>'}</div>`)
+    .join('');
+}
+
+// Strip just inline color/font styles from existing stored content (lighter, non-destructive)
+function stripInlineStyles(html) {
+  // Remove style attributes that contain color, background, or font-related properties
+  return html
+    .replace(/\s*style\s*=\s*"[^"]*"/gi, m => {
+      // Keep only margin-left (for indents), remove everything else
+      const kept = m.match(/margin-left\s*:\s*[^;"]*/i);
+      return kept ? ` style="${kept[0]}"` : '';
+    })
+    .replace(/\s*style\s*=\s*'[^']*'/gi, m => {
+      const kept = m.match(/margin-left\s*:\s*[^;']*/i);
+      return kept ? ` style="${kept[0]}"` : '';
+    });
+}
+
+let _pasteCleanSnap = null;
+function collapsePasteBlankLines(ed) {
+  const kids = Array.from(ed.children);
+  const toRemove = [];
+  let runStart = -1;
+  for (let i = 0; i < kids.length; i++) {
+    const empty = kids[i].textContent.trim() === '';
+    if (empty) {
+      if (runStart === -1) runStart = i;
+    } else {
+      if (runStart !== -1 && i - runStart >= 2)
+        for (let k = runStart + 1; k < i; k++) toRemove.push(kids[k]);
+      runStart = -1;
+    }
+  }
+  if (runStart !== -1 && kids.length - runStart >= 2)
+    for (let k = runStart + 1; k < kids.length; k++) toRemove.push(kids[k]);
+  toRemove.forEach(el => el.remove());
+  return toRemove.length > 0;
+}
+function showPasteCleanBanner(snapshot) {
+  _pasteCleanSnap = snapshot;
+  let b = document.getElementById('paste-clean-banner');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'paste-clean-banner';
+    b.className = 'paste-clean-banner';
+    const ec = document.getElementById('ec');
+    ec.insertBefore(b, ec.firstChild);
+  }
+  b.innerHTML = '<span class="pcb-msg">Extra blank lines removed</span><button class="tbb pcb-undo" onclick="undoPasteClean()">Undo</button><button class="tbb pcb-close" onclick="document.getElementById(\'paste-clean-banner\').remove()">' + ic('x','ic-sm') + '</button>';
+  clearTimeout(b._t);
+  b._t = setTimeout(() => { if (b.parentElement) b.remove(); }, 8000);
+}
+function undoPasteClean() {
+  if (!_pasteCleanSnap) return;
+  document.getElementById('editor').innerHTML = _pasteCleanSnap;
+  const b = document.getElementById('paste-clean-banner');
+  if (b) b.remove();
+  _pasteCleanSnap = null;
+  schedSave();
+}
+
+function installPasteHandler() {
+  document.getElementById('editor').addEventListener('paste', e => {
+    e.preventDefault();
+    const html = e.clipboardData.getData('text/html');
+    const plain = e.clipboardData.getData('text/plain');
+    const cleaned = html ? cleanPasteHTML(html) : plainToHTML(plain);
+    const ed = document.getElementById('editor');
+    document.execCommand('insertHTML', false, cleaned);
+    normalizeEditorContent(ed);
+    setTimeout(() => {
+      const snap = ed.innerHTML;
+      if (collapsePasteBlankLines(ed)) { showPasteCleanBanner(snap); schedSave(); }
+    }, 0);
+  });
+}
+
+function installCopyHandler() {
+  document.getElementById('editor').addEventListener('copy', e => {
+    let sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    // No selection (cursor only) — select all so the handler always runs cleanly
+    if (sel.isCollapsed) {
+      document.execCommand('selectAll');
+      sel = window.getSelection();
+      if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+    }
+    const frag = sel.getRangeAt(0).cloneContents();
+    const tmp = document.createElement('div');
+    tmp.appendChild(frag);
+
+    // Strip comment nodes (e.g. <!--StartFragment-->/<!--EndFragment--> that some
+    // clipboards/apps inject) so they never leak into pasted text in Discord/email
+    (function stripComments(node) {
+      [...node.childNodes].forEach(child => {
+        if (child.nodeType === 8) child.remove();
+        else if (child.nodeType === 1) stripComments(child);
+      });
+    })(tmp);
+
+    // Convert ind-N classes to inline margin-left before stripping
+    [1,2,3,4].forEach(n => {
+      tmp.querySelectorAll('.ind-'+n).forEach(el => {
+        el.style.marginLeft = (n*2)+'em';
+        el.classList.remove('ind-'+n);
+      });
+    });
+
+    // Unwrap legacy blockquotes (plain margin, no styling)
+    tmp.querySelectorAll('blockquote').forEach(bq => {
+      bq.style.marginLeft = bq.style.marginLeft || '2em';
+      const p = bq.parentNode;
+      const span = document.createElement('div');
+      span.style.marginLeft = bq.style.marginLeft;
+      while (bq.firstChild) span.appendChild(bq.firstChild);
+      p.replaceChild(span, bq);
+    });
+
+    // Preserve bold on location markers and italic on OOC markers before unwrapping
+    const prefs = getPrefs();
+    if (prefs.boldLocations) {
+      tmp.querySelectorAll('.lm').forEach(span => {
+        const strong = document.createElement('strong');
+        while (span.firstChild) strong.appendChild(span.firstChild);
+        span.parentNode.replaceChild(strong, span);
+      });
+    }
+    if (prefs.italicOOC) {
+      tmp.querySelectorAll('.om').forEach(span => {
+        const em = document.createElement('em');
+        while (span.firstChild) em.appendChild(span.firstChild);
+        span.parentNode.replaceChild(em, span);
+      });
+    }
+    // Auto-italic thoughts are styled via CSS on .tm (no inline <em>), so convert
+    // them to real <em> here or the italics would be lost on copy out
+    if (prefs.thoughtItalic) {
+      tmp.querySelectorAll('.tm').forEach(span => {
+        const em = document.createElement('em');
+        while (span.firstChild) em.appendChild(span.firstChild);
+        span.parentNode.replaceChild(em, span);
+      });
+    }
+
+    // Unwrap ALL spans — marker spans become plain text
+    tmp.querySelectorAll('span').forEach(span => {
+      const p = span.parentNode;
+      while (span.firstChild) p.insertBefore(span.firstChild, span);
+      p.removeChild(span);
+    });
+
+    // Strip class/data attributes; keep href, target, and margin-left style only
+    tmp.querySelectorAll('*').forEach(el => {
+      [...el.attributes].forEach(attr => {
+        if (attr.name === 'style') {
+          // Keep only margin-left; strip color and everything else
+          const ml = el.style.marginLeft;
+          el.removeAttribute('style');
+          if (ml) el.style.marginLeft = ml;
+        } else if (!['href','target'].includes(attr.name)) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    });
+
+    // The first line of a contenteditable is often bare inline/text nodes with no
+    // block wrapper, while later lines sit inside <div>s. Pasted into Discord/email
+    // that leading bare run gets treated as its own paragraph in a different font
+    // (looks like a header). Wrap any run of top-level inline/text nodes in a <div>
+    // so every line has identical block structure.
+    const isBlockNode = n => n.nodeType === 1 &&
+      ['DIV','P','UL','OL','LI','BLOCKQUOTE','H1','H2','H3','H4','TABLE','PRE'].includes(n.tagName);
+    let _lineWrap = null;
+    [...tmp.childNodes].forEach(node => {
+      if (isBlockNode(node)) { _lineWrap = null; return; }
+      if (!_lineWrap) { _lineWrap = document.createElement('div'); node.parentNode.insertBefore(_lineWrap, node); }
+      _lineWrap.appendChild(node);
+    });
+
+    // Capture plain text before modifying tmp for HTML-clipboard compatibility.
+    // Walk top-level children manually — innerText on a detached node has no layout
+    // context and silently falls back to textContent (no block-level newlines).
+    const plainText = [...tmp.childNodes]
+      .map(n => (n.textContent || '').replace(/ /g, ' '))
+      .join('\n');
+
+    // Empty-line blocks use <br> as a height placeholder — replace with NBSP so paste
+    // targets (Word, Google Docs, forum editors) render a visible blank line instead of
+    // collapsing it to nothing
+    tmp.querySelectorAll('div, p').forEach(block => {
+      if (block.childNodes.length === 1 && block.firstChild.nodeName === 'BR') {
+        block.replaceChildren(document.createTextNode(' '));
+      }
+    });
+
+    e.clipboardData.setData('text/html', tmp.innerHTML);
+    e.clipboardData.setData('text/plain', plainText);
+    e.preventDefault();
+  });
+}
+
+// ================================================================
+// MARKER TRANSFORM
+// ================================================================
+function applyMarkers(html) {
+  html = html.split(ZWS).join(''); // strip any ZWS caret-anchor nodes left by pushCaretOutOfMarkerSpans
+  html = html.replace(/<span class="am">([\s\S]*?)<\/span>/g, '$1');
+  html = html.replace(/<span class="cm">([\s\S]*?)<\/span>/g, '$1');
+  html = html.replace(/<span class="bk">([\s\S]*?)<\/span>/g, '$1');
+  html = html.replace(/<span class="lm">([\s\S]*?)<\/span>/g, '$1');
+  html = html.replace(/<span class="om">([\s\S]*?)<\/span>/g, '$1');
+  html = html.replace(/<span class="tm"><em>(oO\s[\s\S]*?\sOo)<\/em><\/span>/g, '$1');
+  html = html.replace(/<span class="tm">(oO\s[\s\S]*?\sOo)<\/span>/g, '$1');
+  html = html.replace(/<em>(oO\s[\s\S]*?\sOo)<\/em>/g, '$1');
+  if (fmts.action)
+    html = html.replace(/::((?:(?!::)[\s\S])*?)::/g, (_,i) => `<span class="am">::${i}::</span>`);
+  if (fmts.comms)
+    html = html.replace(/=\/\\=((?:(?!=\/\\=)[\s\S])*?)=\/\\=/g, (_,i) => `<span class="cm">=/\\= ${i.trim()} =/\\=</span>`);
+  const tItalic = getPrefs().thoughtItalic;
+  // Prevent matching across paragraph (div) boundaries in innerHTML
+  const thoughtRe = /\boO\s((?:(?!<div|<\/div>)[\s\S])*?)\sOo\b/g;
+  // Italic is applied via CSS on .tm, not via <em>, so typing after a thought doesn't inherit italic
+  if (fmts.thought)
+    html = html.replace(thoughtRe, (_,i) => `<span class="tm">oO ${i} Oo</span>`);
+  else if (tItalic)
+    html = html.replace(thoughtRe, (_,i) => `<em>oO ${i} Oo</em>`);
+  // OOC: any ((OOC...)) — must start with OOC (case-sensitive); runs first so Location doesn't catch it
+  html = html.replace(/\(\((OOC[^)<>]*)\)\)/g, (_,i) => `<span class="om">((${i}))</span>`);
+  // Location: any ((text)) that does NOT start with OOC
+  html = html.replace(/\(\((?!OOC)([^)<>]+)\)\)/g, (_,i) => `<span class="lm">((${i}))</span>`);
+  if (curId && isAcademyDoc(S.docs[curId]))
+    html = html.replace(/\[([^\]\n<]+)\]/g, (_,i) => `<span class="bk">[${i}]</span>`);
+  return html;
+}
+function stripMarkers(html) {
+  return html
+    .replace(/<span class="am">([\s\S]*?)<\/span>/g,'$1')
+    .replace(/<span class="cm">([\s\S]*?)<\/span>/g,'$1')
+    .replace(/<span class="lm">([\s\S]*?)<\/span>/g,'$1')
+    .replace(/<span class="om">([\s\S]*?)<\/span>/g,'$1')
+    .replace(/<em>(oO\s[\s\S]*?\sOo)<\/em>/g,'$1')
+    .replace(/<span class="tm"><em>([\s\S]*?)<\/em><\/span>/g,'$1')
+    .replace(/<span class="tm">([\s\S]*?)<\/span>/g,'$1')
+    // Strip char-color spans (cc-nm class) — keep their text
+    .replace(/<span class="cc-nm"[^>]*>([\s\S]*?)<\/span>/g,'$1')
+    // Strip inline color style from block elements (keep margin-left only)
+    .replace(/(<(?:div|p|li|blockquote)[^>]*?)\s+style="[^"]*color[^"]*"/gi, (m, tag) => {
+      const ml = m.match(/margin-left\s*:\s*[^;"]*/i);
+      return ml ? `${tag} style="${ml[0]}"` : tag;
+    })
+    // Strip display-only attributes; keep data-char-override (user-set paragraph assignments)
+    .replace(/\s+data-char-clr="[^"]*"/g,'')
+    .replace(/\s+data-block-id="[^"]*"/g,'')
+    .split(ZWS).join('');
+}
+
+// ================================================================
+// CARET SAVE/RESTORE
+// ================================================================
+// Block-boundary-aware caret position. Each text character, each <br>, and
+// each block boundary (between sibling blocks) counts as one unit — so empty
+// lines occupy distinct positions and the caret survives re-serialization
+// without snapping back to the end of the previous worded paragraph.
+function _ccBlock(n){ return n.nodeType===1 && (n.tagName==='DIV'||n.tagName==='P'||n.tagName==='LI'||n.tagName==='BLOCKQUOTE'); }
+function _ccIdx(n){ return Array.prototype.indexOf.call(n.parentNode.childNodes,n); }
+
+function saveCaret(el) {
+  const sel = window.getSelection();
+  if (!sel||!sel.rangeCount) return null;
+  const r=sel.getRangeAt(0), tc=r.endContainer, to=r.endOffset;
+  if (tc!==el && !el.contains(tc)) return null;
+  let count=0, started=false, done=false;
+  function walk(n){
+    if(done) return;
+    if(n.nodeType===3){
+      if(n===tc){ count+=to; done=true; return; }
+      count+=n.length; started=true; return;
+    }
+    if(n.nodeName==='BR'){
+      if(tc===n.parentNode && to===_ccIdx(n)){ done=true; return; }
+      count+=1; started=true;
+      if(tc===n.parentNode && to===_ccIdx(n)+1){ done=true; return; }
+      return;
+    }
+    if(n.nodeType===1){
+      if(_ccBlock(n) && started) count+=1;
+      if(n===tc){
+        const kids=n.childNodes;
+        for(let i=0;i<to && i<kids.length;i++){ walk(kids[i]); if(done) return; }
+        done=true; return;
+      }
+      const kids=n.childNodes;
+      for(let i=0;i<kids.length;i++){ walk(kids[i]); if(done) return; }
+    }
+  }
+  const kids=el.childNodes;
+  for(let i=0;i<kids.length;i++){ walk(kids[i]); if(done) break; }
+  return count;
+}
+
+function restoreCaret(el,off) {
+  if (off==null) return;
+  const sel=window.getSelection(), r=document.createRange();
+  let count=0, started=false, done=false;
+  function place(node,offset){ try{ r.setStart(node,offset); }catch(e){ return; } r.collapse(true); done=true; }
+  function walk(n){
+    if(done) return;
+    if(n.nodeType===3){
+      if(count+n.length>=off){ place(n, off-count); return; }
+      count+=n.length; started=true; return;
+    }
+    if(n.nodeName==='BR'){
+      if(count>=off){ place(n.parentNode, _ccIdx(n)); return; }
+      count+=1; started=true;
+      if(count>=off){ place(n.parentNode, _ccIdx(n)+1); return; }
+      return;
+    }
+    if(n.nodeType===1){
+      if(_ccBlock(n) && started){ count+=1; if(count>=off){ place(n,0); return; } }
+      const kids=n.childNodes;
+      for(let i=0;i<kids.length;i++){ walk(kids[i]); if(done) return; }
+    }
+  }
+  const kids=el.childNodes;
+  for(let i=0;i<kids.length;i++){ walk(kids[i]); if(done) break; }
+  if(!done){ r.selectNodeContents(el); r.collapse(false); }
+  if(sel){ sel.removeAllRanges(); sel.addRange(r); }
+}
+
+// ================================================================
+// CUSTOM INDENT
+// ================================================================
+function getCaretBlock() {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  let node = sel.getRangeAt(0).startContainer;
+  const ed = document.getElementById('editor');
+  // Walk up to find direct child of editor
+  while (node && node.parentNode !== ed) node = node.parentNode;
+  return (node && node !== ed) ? node : null;
+}
+
+function getIndentLevel(el) {
+  for (let i=4;i>=1;i--) { if (el.classList && el.classList.contains('ind-'+i)) return i; }
+  return 0;
+}
+
+function setIndentLevel(el, n) {
+  if (!el || !el.classList) return;
+  for (let i=1;i<=4;i++) el.classList.remove('ind-'+i);
+  if (n>=1) el.classList.add('ind-'+Math.min(4,n));
+}
+
+// Lightweight undo queue for indent/outdent (bypasses native undo stack)
+let _indentUndo = [];   // [{el, fromLevel}]
+
+function doIndent() {
+  const block = getCaretBlock();
+  if (!block) return;
+  const from = getIndentLevel(block);
+  _indentUndo.push({el:block, fromLevel:from});
+  if (_indentUndo.length > 50) _indentUndo.shift();
+  setIndentLevel(block, from + 1);
+  schedSave();
+}
+
+function doOutdent() {
+  const block = getCaretBlock();
+  if (!block) return;
+  const from = getIndentLevel(block);
+  _indentUndo.push({el:block, fromLevel:from});
+  if (_indentUndo.length > 50) _indentUndo.shift();
+  setIndentLevel(block, from - 1);
+  schedSave();
+}
+
+// ================================================================
+// CHAR DETECTION
+// ================================================================
+const CREX = /^([A-Z][A-Za-zÀ-ɏ'''\-]{1,}(?:\/[A-Z][A-Za-zÀ-ɏ'''\-]{1,})*):/gm;
+function detectChars(text) {
+  const s = new Set(); let m; CREX.lastIndex = 0;
+  while ((m = CREX.exec(text)) !== null) m[1].split('/').forEach(n => s.add(n.trim()));
+
+  // Second pass: manifest aliases with periods/spaces/initials (e.g. "R. Hopper:")
+  // that the single-word regex above can't match.
+  const specialAliases = [];
+  Object.values(S.characters || {}).forEach(c => {
+    getAllNamesForChar(c).forEach(alias => {
+      if (alias && /[\s.]/.test(alias)) specialAliases.push(alias);
+    });
+  });
+  if (specialAliases.length) {
+    const lines = text.split(/\r?\n/);
+    for (const line of lines) {
+      const trimmed = line.trimStart();
+      for (const alias of specialAliases) {
+        if (trimmed.toLowerCase().startsWith((alias + ':').toLowerCase())) {
+          s.add(alias);
+        }
+      }
+    }
+  }
+
+  // Third pass: auto-detect "Initial. Lastname:" patterns (e.g. R. Hopper:, B. Richards:)
+  // without requiring alias registration — extends CREX to handle abbreviated names
+  const INIT_CREX = /^([A-Z]\. [A-Z][A-Za-zÀ-ɏ'''\-]+(?:\/[A-Z]\. [A-Z][A-Za-zÀ-ɏ'''\-]+)*):/gm;
+  let im; INIT_CREX.lastIndex = 0;
+  while ((im = INIT_CREX.exec(text)) !== null) {
+    im[1].split('/').forEach(n => s.add(n.trim()));
+  }
+
+  return [...s];
+}
+
+// Auto-populate doc.myChars from detected names via the manifest alias chain.
+// Called on save and on openDoc so the manifest always reflects reality without
+// requiring the user to manually untick/retick every character.
+function syncDocMyChars(doc) {
+  if (!doc.myChars) doc.myChars = [];
+  let changed = false;
+  (doc.chars || []).forEach(name => {
+    if (doc.myChars.includes(name)) return;
+    // Direct match in global myChars
+    if ((S.settings.myChars || []).includes(name)) {
+      doc.myChars.push(name); changed = true; return;
+    }
+    // Alias match: name resolves to a manifest character that already has
+    // at least one of their names in S.settings.myChars
+    const char = findCharByAnyName(name);
+    if (char) {
+      const charNames = getAllNamesForChar(char);
+      if (charNames.some(n => (S.settings.myChars || []).includes(n))) {
+        doc.myChars.push(name); changed = true;
+        // Widen global list so future sims auto-detect this alias too
+        if (!S.settings.myChars.includes(name)) S.settings.myChars.push(name);
+      }
+    }
+  });
+  return changed;
+}
+
+// ================================================================
+// CHAR CORPUS + SIMILARITY
+// ================================================================
+function buildCharCorpus(excludeDocId) {
+  const s = new Set();
+  Object.values(S.docs).forEach(d => {
+    if (d.id === excludeDocId) return;
+    (d.chars||[]).forEach(n => s.add(n));
+  });
+  return s;
+}
+
+function findSimilarChar(name, corpus) {
+  // Returns first similar name, or null
+  const nl = name.toLowerCase();
+  for (const other of corpus) {
+    const ol = other.toLowerCase();
+    if (ol === nl) continue; // exact match — not "similar"
+    const dist = levenshtein(nl, ol);
+    if (dist <= 2 && Math.abs(name.length - other.length) <= 3) return other;
+  }
+  return null;
+}
+
+function isPairConfirmed(a, b) {
+  if (!S.settings.confirmedPairs) return false;
+  const pair = [a,b].sort().join('||');
+  return S.settings.confirmedPairs.includes(pair);
+}
+
+function addConfirmedPair(a, b) {
+  if (!S.settings.confirmedPairs) S.settings.confirmedPairs = [];
+  const pair = [a,b].sort().join('||');
+  if (!S.settings.confirmedPairs.includes(pair)) S.settings.confirmedPairs.push(pair);
+  persist();
+  if (curId) updateCharsPanel(S.docs[curId]);
+}
+
+function replaceCharName(from, to) {
+  if (!curId) return;
+  const ed = document.getElementById('editor');
+  const pos = saveCaret(ed);
+  // Replace "From:" prefix in innerHTML (careful with HTML — match only text nodes)
+  ed.innerHTML = ed.innerHTML.replace(new RegExp(escRe(from)+'(?=:)', 'g'), to);
+  restoreCaret(ed, pos);
+  const doc = S.docs[curId];
+  if (doc) {
+    const di = (doc.myChars||[]).indexOf(from);
+    if (di>=0) { doc.myChars.splice(di,1); if (!doc.myChars.includes(to)) doc.myChars.push(to); }
+    const gi = S.settings.myChars.indexOf(from);
+    if (gi>=0) { S.settings.myChars.splice(gi,1); if (!S.settings.myChars.includes(to)) S.settings.myChars.push(to); }
+    doc.chars = detectChars(ed.innerText||'');
+  }
+  schedSave();
+  if (doc) updateCharsPanel(doc);
+}
+
+// Stored so modal button fns can reference without encoding issues
+let _warnName = null, _warnSimilar = null;
+function charWarnModal(name, similar) {
+  _warnName = name; _warnSimilar = similar;
+  openModal('SIMILAR CHARACTER NAME', `
+    <p style="color:var(--dim);font-size:0.87rem;line-height:1.7">
+      "<strong style="color:var(--text)">${esc(name)}</strong>" looks similar to
+      "<strong style="color:var(--text)">${esc(similar)}</strong>" used in another sim.<br>
+      Same character with a different spelling?
+    </p>
+  `, null, {
+    extra: [
+      {label:`Use "${esc(similar)}"`, cls:'btn-s', fn:'doWarnReplace()'},
+      {label:'Keep spelling', cls:'btn-s', fn:'closeModal()'},
+      {label:"They're different", cls:'btn-s', fn:'doWarnConfirm()'},
+    ]
+  });
+}
+function doWarnReplace() { if (_warnName&&_warnSimilar) replaceCharName(_warnName,_warnSimilar); closeModal(); }
+function doWarnConfirm() { if (_warnName&&_warnSimilar) addConfirmedPair(_warnName,_warnSimilar); closeModal(); }
+
+// ================================================================
+// TITLE DUPE DETECTION
+// ================================================================
+function coreTitleStr(title) {
+  // Strip "Rank Character: " or "Rank Character - " prefix
+  return (title||'').replace(/^[^:—–\-]+[:—–\-]\s*/,'').trim().toLowerCase();
+}
+
+function checkTitleDupe() {
+  if (!curId) return;
+  const title = document.getElementById('doc-title').value.trim();
+  const warn = document.getElementById('title-warn');
+  _titleWarnMatch = null;
+  if (!title) { warn.classList.add('hidden'); return; }
+  const core = coreTitleStr(title);
+  if (core.length < 4) { warn.classList.add('hidden'); return; }
+
+  for (const [id, d] of Object.entries(S.docs)) {
+    if (id === curId) continue;
+    const other = coreTitleStr(d.title||'');
+    if (other.length < 4) continue;
+    if (other === core || other.includes(core) || core.includes(other) || levenshtein(core, other) <= 3) {
+      _titleWarnMatch = d;
+      break;
+    }
+  }
+  warn.classList.toggle('hidden', !_titleWarnMatch);
+}
+
+function showTitleWarnModal() {
+  if (!_titleWarnMatch) return;
+  const d = _titleWarnMatch;
+  const m = d.missionId ? S.missions[d.missionId] : null;
+  openModal('SIMILAR TITLE FOUND', `
+    <p style="color:var(--dim);font-size:0.87rem;line-height:1.7">
+      A sim with a similar title already exists:<br>
+      <strong style="color:var(--text)">${esc(d.title||'Untitled')}</strong>
+      ${m ? `<br><span style="color:var(--dim);font-size:0.8rem">in mission: ${esc(m.name)}</span>` : ''}
+    </p>
+  `, null, {
+    extra: [{label:'Go to that sim', cls:'btn-s', fn:`openDoc('${d.id}');closeModal()`}]
+  });
+}
+
+// ================================================================
+// DOCUMENT OPERATIONS
+// ================================================================
+function openDoc(id) {
+  if (curId) flushSave();
+  _indentUndo = [];  // clear indent undo when switching docs
+  curId = id;
+  curView = null; curViewId = null;
+  const doc = S.docs[id]; if (!doc) return;
+  document.getElementById('dashboard').classList.add('hidden');
+  document.getElementById('detail-view').classList.add('hidden');
+  ['dh','ec'].forEach(x=>document.getElementById(x).classList.remove('hidden'));
+  document.getElementById('sim-details').classList.remove('hidden');
+  document.getElementById('doc-title').value = doc.title||'';
+  document.getElementById('doc-status').value = doc.status||'active';
+  document.getElementById('doc-posttype').value = doc.postType||'';
+  const pi = document.getElementById('doc-posted-input');
+  pi.value = doc.postedAt||'';
+  updatePostedMeta(doc);
+  updateTitleColor(doc);
+  updateStatusStyle(doc);
+  // Academy mode is per-mission — strip and apply when opening
+  const isAcad = isAcademyDoc(doc);
+  document.body.classList.toggle('academy', isAcad);
+  if (isAcad) {
+    const stripped = stripFormattingHtml(doc.content||'');
+    if (stripped !== doc.content) { doc.content = stripped; persist(); }
+  }
+  const ed = document.getElementById('editor');
+  ed.innerHTML = applyCharColors(applyMarkers(doc.content||''));
+  normalizeEditorContent(ed);
+  applyZoom();
+  // Sync doc.myChars from alias chain on open (fixes legacy docs and new sims)
+  if (syncDocMyChars(doc)) persist();
+  updateMeta(doc);
+  updateCharsPanel(doc);
+  updateWC();
+  updateSB();
+  checkTitleDupe();
+  renderNav();
+  // For a brand-new (empty) sim, drop the caret into the editor so it's obvious
+  // where to start writing (the :empty placeholder hint shows until first keystroke).
+  if (!doc.content) {
+    ed.focus();
+    const r=document.createRange(); r.selectNodeContents(ed); r.collapse(true);
+    const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }
+}
+
+function flushSave() {
+  if (!curId) return;
+  const doc = S.docs[curId]; if (!doc) return;
+  const ed = document.getElementById('editor');
+  let html = ed.innerHTML;
+  html = stripMarkers(html);
+  // Auto-snapshot when word delta ≥ 100 since last snapshot
+  const curWC = wc(ed.innerText||'');
+  if (!doc.snapshots) doc.snapshots = [];
+  const lastSnap = doc.snapshots.length ? doc.snapshots[doc.snapshots.length-1] : null;
+  const lastSnapWC = lastSnap ? lastSnap.wordCount : 0;
+  if (Math.abs(curWC - lastSnapWC) >= 100) {
+    const snap = {content:html, savedAt:Date.now(), wordCount:curWC};
+    doc.snapshots.push(snap);
+    if (doc.snapshots.length > 10) doc.snapshots.shift();
+    pushSnapshot(curId, snap);
+  }
+  doc.content = html;
+  doc.title = document.getElementById('doc-title').value;
+  const prevStatus = doc.status;
+  doc.status = document.getElementById('doc-status').value;
+  if (doc.status === 'complete' && prevStatus !== 'complete') doc.completedAt = Date.now();
+  else if (doc.status !== 'complete') doc.completedAt = null;
+  doc.postType = document.getElementById('doc-posttype').value||null;
+  doc.updatedAt = Date.now();
+  doc.chars = detectChars(ed.innerText||'');
+  // Prune myChars: remove names no longer detected in this sim (prevents ghost characters)
+  doc.myChars = (doc.myChars||[]).filter(n => (doc.chars||[]).includes(n));
+  syncDocMyChars(doc);   // re-add any that belong via alias chain
+  persist();
+  schedSync();
+  updateMeta(doc);
+  updateCharsPanel(doc);
+  renderNav();
+  // Keep manifest stats live if it's open
+  if (!document.getElementById('char-manifest').classList.contains('hidden')) refreshManifest();
+}
+
+function schedSave() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushSave, 1200);
+}
+
+// Ctrl/Cmd+S — flush the current sim, force a revision snapshot (bypassing the
+// usual ≥100-word threshold), and push to the Gist immediately if sync is set up.
+function manualSaveAndSync() {
+  if (!curId || !S.docs[curId]) { showToast('No sim open to save'); return; }
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  flushSave(); // persists content + detects chars + schedules a sync
+  const doc = S.docs[curId];
+  if (!doc.snapshots) doc.snapshots = [];
+  const last = doc.snapshots[doc.snapshots.length - 1];
+  if (!last || last.content !== doc.content) {
+    const snap = { content: doc.content, savedAt: Date.now(), wordCount: wc(document.getElementById('editor').innerText || '') };
+    doc.snapshots.push(snap);
+    if (doc.snapshots.length > 10) doc.snapshots.shift();
+    persist();
+    pushSnapshot(curId, snap);
+  }
+  if (isCloud()) {
+    if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
+    saveToCloud();
+    showToast('Snapshot saved · saving to your account');
+  } else {
+    showToast('Snapshot saved');
+  }
+}
+
+// ================================================================
+// REVISION SNAPSHOTS
+// ================================================================
+let _histList = [];
+
+async function showHistory() {
+  if (!curId) return;
+  const doc = S.docs[curId]; if (!doc) return;
+
+  // The server is the durable record once signed in; local is the fallback so
+  // history still opens offline or if the request fails.
+  let snaps = (doc.snapshots || []).slice();
+  if (isCloud()) {
+    try { const rows = await fetchSnapshots(curId); if (rows && rows.length) snaps = rows; }
+    catch(e) { /* keep the local list */ }
+  }
+  snaps.sort((a,b) => a.savedAt - b.savedAt);
+  _histList = snaps;
+
+  if (!snaps.length) {
+    openModal('REVISION SNAPSHOTS',
+      `<p style="color:var(--dim);font-size:0.87rem;line-height:1.6">No snapshots yet.<br>
+       Snapshots are saved automatically when your word count changes by 100 or more words since the last snapshot.</p>`,
+      null);
+    return;
+  }
+  const rows = snaps.slice().reverse().map((s,i) => {
+    const ri = snaps.length-1-i;
+    const date = new Date(s.savedAt).toLocaleString();
+    return `<tr>
+      <td style="color:var(--dim);font-size:0.8rem">${date}</td>
+      <td style="color:var(--dim);font-size:0.8rem">${s.wordCount} words</td>
+      <td><span class="dv-link" onclick="restoreSnapshot(${ri})">Restore</span></td>
+    </tr>`;
+  }).join('');
+  openModal('REVISION SNAPSHOTS', `
+    <table class="dv-table">
+      <tr><th>SAVED</th><th>WORDS</th><th></th></tr>
+      ${rows}
+    </table>
+    <p style="font-size:0.73rem;color:var(--dim);margin-top:10px">Up to 10 snapshots stored. Oldest removed when limit is reached.${isCloud() ? ' Saved to your account, so they follow you between devices.' : ''}</p>
+  `, null);
+}
+
+function restoreSnapshot(i) {
+  if (!curId) return;
+  const doc = S.docs[curId]; if (!doc) return;
+  const snap = _histList[i]; if (!snap) return;   // indexes the list showHistory built
+  const date = new Date(snap.savedAt).toLocaleString();
+  if (!confirm(`Restore this snapshot?\n\n${date} — ${snap.wordCount} words\n\nThis will replace the current editor content.`)) return;
+  closeModal();
+  const ed = document.getElementById('editor');
+  ed.innerHTML = applyMarkers(snap.content);
+  doc.content = snap.content;
+  doc.updatedAt = Date.now();
+  persist();
+  updateMeta(doc);
+  updateWC();
+  renderNav();
+}
+
+function mkDoc(title, missionId, sceneId) {
+  const id = uid();
+  S.docs[id] = {id,title,content:'',missionId:missionId||null,sceneId:sceneId||null,
+    chars:[],myChars:[],charColors:{},status:'active',postType:null,postedAt:null,
+    createdAt:Date.now(),updatedAt:Date.now()};
+  persist(); renderNav(); openDoc(id);
+}
+function mkMission(name, year, simType) {
+  const id = uid();
+  S.missions[id] = {id,name,year,simType:simType||null,status:'active',createdAt:Date.now()};
+  persist(); renderNav();
+}
+function mkScene(name, missionId, startedAt) {
+  const id = uid();
+  S.scenes[id] = {id,name,missionId,status:'active',startedAt:startedAt||null,createdAt:Date.now()};
+  persist(); renderNav();
+}
+
+function updateTitleColor(doc) {
+  const el = document.getElementById('doc-title');
+  if (!el || !doc) return;
+  if      (doc.status === 'archived') el.style.color = 'var(--dim)';
+  else if (doc.status === 'complete') el.style.color = 'var(--gold)';
+  // Active titles use a token rather than --blue2 directly, so a skin can
+  // decide whether the title is tinted at all (Delta Prime keeps it ink).
+  else                                el.style.color = 'var(--title-active)';
+}
+function updateStatusStyle(doc) {
+  const el = document.getElementById('doc-status');
+  if (!el || !doc) return;
+  el.className = '';
+  if      (doc.status === 'archived') el.classList.add('status-archived');
+  else if (doc.status === 'complete') el.classList.add('status-complete');
+  else                                el.classList.add('status-active');
+}
+function updateMeta(doc) {
+  const el = document.getElementById('dh-date');
+  if (!el) return;
+  if (doc.postedAt) {
+    el.textContent = 'Posted '+fmtPostedDate(doc.postedAt);
+    el.className = 'sd-date posted';
+  } else {
+    el.textContent = doc.updatedAt ? 'Saved '+new Date(doc.updatedAt).toLocaleDateString() : '';
+    el.className = 'sd-date';
+  }
+}
+function updatePostedMeta(doc) {
+  const btn = document.getElementById('btn-post');
+  if (doc.postedAt) {
+    btn.innerHTML = ic('calendar') + ' Change';
+  } else {
+    btn.innerHTML = ic('calendar') + ' Post';
+  }
+  updateMeta(doc);
+}
+function updateWC() {
+  document.getElementById('s-wc').textContent = wc(document.getElementById('editor').innerText||'') + ' words';
+}
+function updateSB() {
+  document.getElementById('s-doc').textContent =
+    (curId && S.docs[curId]) ? (S.docs[curId].title||'Untitled') : 'No sim open';
+}
+
+// ================================================================
+// POSTED DATE
+// ================================================================
+function openPostedCal() {
+  const pi = document.getElementById('doc-posted-input');
+  pi.value = '';
+  try { pi.showPicker(); } catch(e) { pi.click(); }
+}
+
+function onPostedDateChange() {
+  if (!curId) return;
+  const doc = S.docs[curId]; if (!doc) return;
+  const val = document.getElementById('doc-posted-input').value;
+  doc.postedAt = val || null;
+  if (val) {
+    doc.status = 'complete';
+    document.getElementById('doc-status').value = 'complete';
+  }
+  updatePostedMeta(doc);
+  updateTitleColor(doc);
+  updateStatusStyle(doc);
+  schedSave();
+}
+
+// ================================================================
+// POST TYPE
+// ================================================================
+function onPostTypeChange() {
+  if (!curId) return;
+  S.docs[curId].postType = document.getElementById('doc-posttype').value || null;
+  schedSave();
+}
+
+// ================================================================
+// CHARACTERS PANEL
+// ================================================================
+// Index-based click handlers avoid HTML-attribute encoding issues with
+// names that contain quotes, apostrophes, or other special characters.
+let _charList = [];   // populated each time updateCharsPanel runs
+let _charWarns = {};  // charList index → similar name
+
+function updateCharsPanel(doc) {
+  _charList = [];
+  _charWarns = {};
+  const list = document.getElementById('chars-list');
+  if (!doc||!doc.chars||!doc.chars.length) {
+    list.innerHTML = '<div style="padding:10px;font-size:0.8rem;color:var(--dim)">No dialogue characters detected</div>';
+    return;
+  }
+  const corpus = buildCharCorpus(doc.id);
+  // Deduplicate: if two detected names belong to the same manifest character, show only one
+  const seenCharIds = new Map(); // charId → index in deduped
+  const deduped = [];
+  (doc.chars||[]).forEach(n => {
+    const ch = findCharByAnyName(n);
+    if (ch) {
+      if (!seenCharIds.has(ch.id)) { seenCharIds.set(ch.id, deduped.length); deduped.push(n); }
+      // else: alias of already-listed character — skip
+    } else {
+      deduped.push(n);
+    }
+  });
+  list.innerHTML = deduped.map((n, i) => {
+    _charList.push(n);
+    const mine = (doc.myChars||[]).includes(n)||S.settings.myChars.includes(n);
+    const similar = findSimilarChar(n, corpus);
+    const showWarn = similar && !isPairConfirmed(n, similar);
+    if (showWarn) _charWarns[i] = similar;
+    const warnHtml = showWarn
+      ? `<span class="char-warn" title="Similar to '${esc(similar)}' — click to review" onclick="openCharWarn(${i})">${ic('alert','ic-sm')}</span>`
+      : '';
+    const charColor = (curId && S.docs[curId]?.charColors?.[n]) || '';
+    const colorDotHtml = charColor
+      ? `<span class="cc-char-dot" style="background:${charColor}"></span>`
+      : '';
+    return `<div class="chi ${mine?'mine':'other'}" onclick="toggleMyChar(${i})" oncontextmenu="charCtx(event,${i})">
+      <div class="chk">${mine?ic('check','ic-sm'):''}</div><span>${esc(n)}</span>${colorDotHtml}${warnHtml}
+    </div>`;
+  }).join('');
+}
+
+function toggleMyChar(i) {
+  const name = _charList[i]; if (!name || !curId) return;
+  const doc = S.docs[curId]; if (!doc) return;
+  if (!doc.myChars) doc.myChars=[];
+  if (!S.settings.myChars) S.settings.myChars=[];
+  const di = doc.myChars.indexOf(name);
+  const gi = S.settings.myChars.indexOf(name);
+  if (di>=0) {
+    doc.myChars.splice(di,1);
+    if (gi>=0) S.settings.myChars.splice(gi,1);
+  } else {
+    doc.myChars.push(name);
+    if (gi<0) S.settings.myChars.push(name);
+  }
+  persist(); updateCharsPanel(doc);
+  // Keep manifest stats live if it's open
+  if (!document.getElementById('char-manifest').classList.contains('hidden')) refreshManifest();
+}
+
+function openCharWarn(i) {
+  const name = _charList[i];
+  const similar = _charWarns[i];
+  if (!name || !similar) return;
+  charWarnModal(name, similar);
+}
+
+// ── CHARACTER CONTEXT MENU ──
+let _ctxCharIdx = -1;
+let _ctxCharPairs = []; // "other" names of confirmed pairs for this char
+
+function charCtx(e, i) {
+  e.preventDefault(); e.stopPropagation();
+  const name = _charList[i]; if (!name) return;
+  _ctxCharIdx = i; _ctxCharPairs = [];
+
+  const similar = _charWarns[i]; // active unresolved warning
+
+  // All confirmed pairs that include this character
+  const confirmedWith = (S.settings.confirmedPairs||[])
+    .filter(p => p.split('||').includes(name))
+    .map(p => p.split('||').find(n => n !== name))
+    .filter(Boolean);
+
+  const items = [];
+  items.push({label:`${ic('pencil')} Rename "${esc(name)}"…`, fn:'doCtxCharRename()'});
+  items.push('-');
+
+  if (similar) {
+    items.push({label:`⟳ Use "${esc(similar)}" (fix spelling)`, fn:'doCtxCharReplace()'});
+    items.push({label:`${ic('check')} They are different people`, fn:'doCtxCharConfirm()'});
+    items.push('-');
+  }
+
+  confirmedWith.forEach((other, j) => {
+    _ctxCharPairs.push(other);
+    items.push({label:`${ic('undo')} Un-mark "≠ ${esc(other)}"`, cls:'dim-item', fn:`doUnconfirmPair(${j})`});
+  });
+  if (confirmedWith.length) items.push('-');
+
+  const doc = curId ? S.docs[curId] : null;
+  const mine = doc && ((doc.myChars||[]).includes(name)||S.settings.myChars.includes(name));
+  items.push({label: mine ? ic('square') + ' Remove from my characters' : ic('square-check') + ' Mark as my character', fn:`toggleMyChar(${i})`});
+
+  // "View in manifest" if this character has a manifest entry and is marked as mine
+  if (mine) {
+    const manifestChar = findCharByAnyName(name);
+    if (manifestChar) {
+      items.push('-');
+      items.push({label:ic('circle-dot') + ' View in manifest', fn:`openManifestToChar('${manifestChar.id}')`});
+    }
+  }
+
+  // Colour coding
+  if (curId) {
+    const existingColor = (doc && doc.charColors && doc.charColors[name]);
+    const colorDot = existingColor ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${existingColor};margin-right:4px;vertical-align:middle"></span>` : '';
+    const jsName = name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    items.push('-');
+    items.push({label:`${colorDot}${ic('palette')} Set colour…`, fn:`showColorPicker(event,'${jsName}')`});
+    if (existingColor) items.push({label:ic('x') + ' Remove colour', fn:`removeCharColor('${jsName}')`});
+  }
+
+  showCtx(e, items);
+}
+
+function doCtxCharRename() {
+  const name = _charList[_ctxCharIdx]; if (!name || !curId) return;
+  openModal('RENAME CHARACTER', `
+    <div class="mf">
+      <label class="ml">NEW NAME</label>
+      <input class="mi" id="m-cr" value="${esc(name)}">
+    </div>
+    <p style="color:var(--dim);font-size:0.8rem;margin-top:8px">Replaces this character name everywhere in the current sim.</p>
+  `, () => {
+    const newName = document.getElementById('m-cr').value.trim();
+    if (!newName || newName === name) return;
+    replaceCharName(name, newName);
+  });
+}
+function doCtxCharReplace() {
+  const name = _charList[_ctxCharIdx];
+  const similar = _charWarns[_ctxCharIdx];
+  if (name && similar) { replaceCharName(name, similar); hideCtx(); }
+}
+function doCtxCharConfirm() {
+  const name = _charList[_ctxCharIdx];
+  const similar = _charWarns[_ctxCharIdx];
+  if (name && similar) addConfirmedPair(name, similar);
+  hideCtx();
+}
+function doUnconfirmPair(j) {
+  const name = _charList[_ctxCharIdx];
+  const other = _ctxCharPairs[j];
+  if (!name || !other) return;
+  removeConfirmedPair(name, other);
+  hideCtx();
+}
+function removeConfirmedPair(a, b) {
+  if (!S.settings.confirmedPairs) return;
+  const pair = [a,b].sort().join('||');
+  const idx = S.settings.confirmedPairs.indexOf(pair);
+  if (idx >= 0) S.settings.confirmedPairs.splice(idx, 1);
+  persist();
+  if (curId && S.docs[curId]) updateCharsPanel(S.docs[curId]);
+}
+
+// ================================================================
+// TOOLBAR ACTIONS
+// ================================================================
+function ec(cmd) { document.getElementById('editor').focus(); document.execCommand(cmd,false,null); }
+
+function doLink() {
+  const sel = window.getSelection();
+  const selText = sel ? sel.toString() : '';
+
+  // Save the selection range now — focusing the modal input will destroy it
+  let savedRange = (sel && sel.rangeCount > 0) ? sel.getRangeAt(0).cloneRange() : null;
+
+  // Detect if cursor is inside an existing link
+  _editingLink = null;
+  if (savedRange) {
+    const ed = document.getElementById('editor');
+    let node = savedRange.commonAncestorContainer;
+    if (node.nodeType === 3) node = node.parentNode;
+    while (node && node !== ed) {
+      if (node.nodeName === 'A') { _editingLink = node; break; }
+      node = node.parentNode;
+    }
+  }
+
+  const existingUrl = _editingLink ? (_editingLink.getAttribute('href') || '') : '';
+  const existingText = _editingLink ? _editingLink.textContent : '';
+  const isEdit = !!_editingLink;
+
+  openModal(isEdit ? 'EDIT LINK' : 'INSERT LINK', `
+    <div class="mf"><label class="ml">URL</label><input class="mi" id="m-url" placeholder="https://…" value="${esc(existingUrl)}"></div>
+    <div class="mf"><label class="ml">DISPLAY TEXT</label><input class="mi" id="m-lt" value="${esc(selText || existingText)}" placeholder="Link text (optional if text is selected)"></div>
+  `, () => {
+    const url = document.getElementById('m-url').value.trim();
+    const lt = document.getElementById('m-lt').value.trim();
+    if (!url) return false;
+    const ed = document.getElementById('editor');
+    ed.focus({ preventScroll: true });
+    // Restore the selection that was lost when the modal took focus
+    if (savedRange) {
+      const rs = window.getSelection();
+      rs.removeAllRanges();
+      rs.addRange(savedRange);
+    }
+    if (_editingLink) {
+      _editingLink.setAttribute('href', url);
+      _editingLink.setAttribute('target', '_blank');
+      if (lt) _editingLink.textContent = lt;
+    } else if (lt && !selText) {
+      document.execCommand('insertHTML', false, `<a href="${esc(url)}" target="_blank">${esc(lt)}</a>`);
+    } else {
+      document.execCommand('createLink', false, url);
+      // Apply target="_blank" to newly created link
+      const newSel = window.getSelection();
+      if (newSel && newSel.rangeCount > 0) {
+        let n = newSel.getRangeAt(0).commonAncestorContainer;
+        if (n.nodeType === 3) n = n.parentNode;
+        if (n.nodeName === 'A') n.setAttribute('target', '_blank');
+      }
+    }
+    _editingLink = null;
+    schedSave();
+  }, isEdit ? { extra: [{ cls: 'btn-s', label: 'Remove Link', fn: 'doUnlinkCurrent()' }] } : {});
+}
+
+function doUnlinkCurrent() {
+  const link = _editingLink;
+  _editingLink = null;
+  closeModal();
+  if (!link) return;
+  const ed = document.getElementById('editor');
+  ed.focus({ preventScroll: true });
+  const sel = window.getSelection();
+  const r = document.createRange();
+  r.selectNode(link);
+  sel.removeAllRanges();
+  sel.addRange(r);
+  document.execCommand('unlink');
+  schedSave();
+}
+
+function togglePilcrows() {
+  const ed = document.getElementById('editor');
+  const btn = document.getElementById('tbb-pil');
+  if (!ed) return;
+  const on = ed.classList.toggle('show-pilcrows');
+  if (btn) btn.classList.toggle('fmt-on', on);
+}
+
+// ── EDITOR STRUCTURE NORMALISER ──
+// Flattens wrapper divs (divs whose direct children include block elements),
+// strips empty style/class attrs, and removes stale data-block-id from non-
+// direct-children. Caret position is preserved via saveCaret/restoreCaret.
+function normalizeEditorContent(ed) {
+  if (!ed) return;
+  stripZWSFromEditor(ed);
+  const pos = saveCaret(ed);
+
+  // Unwrap any direct-child div/p that itself contains block-level children.
+  // These are browser-inserted wrapper containers, not paragraphs.
+  // Repeat until stable (handles multiple nesting levels).
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const child of [...ed.childNodes]) {
+      if (child.nodeType !== 1) continue;
+      if (child.tagName !== 'DIV' && child.tagName !== 'P') continue;
+      const hasBlockChild = [...child.children].some(c =>
+        ['DIV','P','BLOCKQUOTE','UL','OL'].includes(c.tagName)
+      );
+      if (hasBlockChild) {
+        while (child.firstChild) ed.insertBefore(child.firstChild, child);
+        ed.removeChild(child);
+        changed = true;
+        break; // restart — DOM was mutated
+      }
+    }
+  }
+
+  // Strip empty style="" and class="" left over from colour apply/remove cycles
+  [...ed.children].forEach(el => {
+    if (el.getAttribute('style') === '') el.removeAttribute('style');
+    if (el.getAttribute('class') === '') el.removeAttribute('class');
+  });
+
+  // Remove data-block-id from anything that is no longer a direct child —
+  // stale IDs from old outer wrappers would misdirect the colour-override lookup.
+  ed.querySelectorAll('[data-block-id]').forEach(el => {
+    if (el.parentNode !== ed) el.removeAttribute('data-block-id');
+  });
+
+  restoreCaret(ed, pos);
+}
+
+// ── BOLD NAMES ──
+function boldNames() {
+  const ed = document.getElementById('editor');
+  const pos = saveCaret(ed);
+
+  // ── Shared helper: normalize bold tags in the block, then re-bold the matching name.
+  //   Strips ALL <strong>/<b> tags from the block's HTML first so manual bold,
+  //   paste formatting, and prior cn-bolds are all cleared before re-applying.
+  function applyBoldToBlock(bl, nameRe) {
+    // Step 1: Remove only LCARS auto-bold (cn class) via DOM — preserves any
+    // manually applied bold the writer added elsewhere in the paragraph.
+    bl.querySelectorAll('strong.cn, b.cn').forEach(s => {
+      while (s.firstChild) s.parentNode.insertBefore(s.firstChild, s);
+      s.parentNode.removeChild(s);
+    });
+
+    // Step 2: Check if the block matches the name pattern
+    const txt = bl.textContent || '';
+    const m = txt.match(nameRe);
+    if (!m) return;
+    const matchedName = m[1];
+
+    // Step 3: The first child must be a text node starting with the matched name
+    const firstNode = bl.firstChild;
+    if (!firstNode || firstNode.nodeType !== 3) return;
+    const content = firstNode.textContent;
+    if (!content.startsWith(matchedName)) return;
+
+    // Step 4: Split the text node and wrap the name
+    const after = content.slice(matchedName.length);
+    const strong = document.createElement('strong');
+    strong.className = 'cn';
+    strong.textContent = matchedName;
+    firstNode.textContent = after;
+    bl.insertBefore(strong, firstNode);
+  }
+
+  // Build all patterns
+  const N_PAT = '[A-Z][A-Za-z\\u00C0-\\u024F\'\\u2019\\-]{1,}';
+  const CREX_RE = new RegExp(`^((${N_PAT})(?:\\/${N_PAT})*)(:\\s?)`);
+  const INIT_RE = /^([A-Z]\. [A-Z][A-Za-zÀ-ɏ'''\-]+(?:\/[A-Z]\. [A-Z][A-Za-zÀ-ɏ'''\-]+)*)(:\s?)/;
+
+  // Build alias list (manifest aliases containing spaces or dots)
+  const specialAliases = [];
+  Object.values(S.characters || {}).forEach(c => {
+    getAllNamesForChar(c).forEach(alias => {
+      if (alias && /[\s.]/.test(alias)) specialAliases.push(alias);
+    });
+  });
+
+  // Only process direct children of the editor — prevents outer wrapper divs
+  // from having their entire innerHTML stripped, and stops nested narration
+  // divs being double-processed (which could silently lose the name bold).
+  const rawBlocks = [...ed.children].filter(el =>
+    ['DIV','P','LI','BLOCKQUOTE'].includes(el.tagName)
+  );
+  // If editor starts with a raw text node (no block wrapper yet), treat editor itself as a block
+  if (ed.firstChild?.nodeType === 3) rawBlocks.unshift(ed);
+  const blocks = rawBlocks;
+  blocks.forEach(bl => {
+    const txt = (bl.textContent || '');
+
+    // Pass 1: standard CREX-style names (Hopper:, Name1/Name2:)
+    if (CREX_RE.test(txt)) {
+      applyBoldToBlock(bl, CREX_RE);
+      return; // one pattern per block
+    }
+    // Pass 2: initial-dot-space names (R. Hopper:, B. Richards:)
+    if (INIT_RE.test(txt)) {
+      applyBoldToBlock(bl, INIT_RE);
+      return;
+    }
+    // Pass 3: manifest aliases with spaces/dots
+    for (const alias of specialAliases) {
+      const esc2 = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const aliasRe = new RegExp(`^(${esc2})(:\\s?)`, 'i');
+      if (aliasRe.test(txt.trimStart())) {
+        applyBoldToBlock(bl, aliasRe);
+        break;
+      }
+    }
+  });
+
+  restoreCaret(ed, pos);
+  pushCaretOutOfMarkerSpans();
+  schedSave();
+}
+
+function stripBoldNames() {
+  const ed = document.getElementById('editor');
+  if (!ed) return;
+  const pos = saveCaret(ed);
+  ed.querySelectorAll('strong.cn, b.cn').forEach(el => {
+    while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+    el.parentNode.removeChild(el);
+  });
+  restoreCaret(ed, pos);
+  pushCaretOutOfMarkerSpans();
+  schedSave();
+}
+function toggleAutoBold() {
+  if (curId && isAcademyDoc(S.docs[curId])) return;
+  const on = !getPrefs().autoBoldNames;
+  S.settings.prefs = Object.assign({}, S.settings.prefs, { autoBoldNames: on });
+  persist();
+  updateAutoBoldBtn();
+  if (on) boldNames(); else stripBoldNames();
+}
+function updateAutoBoldBtn() {
+  const btn = document.getElementById('tbb-bn');
+  if (btn) btn.classList.toggle('fmt-on', getPrefs().autoBoldNames);
+}
+function toggleItalicThoughts() {
+  if (curId && isAcademyDoc(S.docs[curId])) return;
+  const on = !getPrefs().thoughtItalic;
+  S.settings.prefs = Object.assign({}, S.settings.prefs, { thoughtItalic: on });
+  persist();
+  applyPrefs();
+  updateItalicThoughtsBtn();
+  if (curId) transformNow();
+}
+function updateItalicThoughtsBtn() {
+  const btn = document.getElementById('tbb-it');
+  if (btn) btn.classList.toggle('fmt-on', getPrefs().thoughtItalic);
+}
+function toggleBoldLocations() {
+  const on = !getPrefs().boldLocations;
+  S.settings.prefs = Object.assign({}, S.settings.prefs, { boldLocations: on });
+  persist(); applyPrefs();
+  if (curId) transformNow();
+}
+function updateBoldLocationsBtn() {
+  const btn = document.getElementById('tbb-bl');
+  if (btn) btn.classList.toggle('fmt-on', getPrefs().boldLocations);
+}
+function toggleItalicOOC() {
+  const on = !getPrefs().italicOOC;
+  S.settings.prefs = Object.assign({}, S.settings.prefs, { italicOOC: on });
+  persist(); applyPrefs();
+  if (curId) transformNow();
+}
+function updateItalicOOCBtn() {
+  const btn = document.getElementById('tbb-oi');
+  if (btn) btn.classList.toggle('fmt-on', getPrefs().italicOOC);
+}
+
+function insertMarker(type) {
+  const ed = document.getElementById('editor');
+  if (!ed) return;
+  ed.focus();
+  // Comms spaces are included here so inserted text matches applyMarkers output exactly,
+  // preventing restoreCaret from miscounting after the space-adding transform.
+  const MARKERS = {
+    action:   { open: '::', close: '::',       ph: 'Action'    },
+    comms:    { open: '=/\\= ', close: ' =/\\=', ph: 'Comms'  },
+    thought:  { open: 'oO ', close: ' Oo',     ph: 'Thoughts'  },
+    location: { open: '((', close: '))',        ph: 'Location'  },
+    ooc:      { open: '((OOC - ', close: '))', ph: ''           },
+  };
+  const m = MARKERS[type]; if (!m) return;
+  const sel = window.getSelection();
+  const hasSelection = sel && sel.rangeCount && !sel.getRangeAt(0).collapsed;
+
+  if (hasSelection) {
+    document.execCommand('insertText', false, `${m.open}${sel.getRangeAt(0).toString()}${m.close}`);
+  } else {
+    // Two-phase insert: positions cursor BETWEEN open and placeholder (not after close).
+    // This avoids the browser's sticky-formatting inheriting italic/highlight from
+    // the adjacent .tm/.cm span that transform will create 600ms later.
+    document.execCommand('insertText', false, m.open);
+    const posAfterOpen = saveCaret(ed);
+    document.execCommand('insertText', false, `${m.ph}${m.close}`);
+    restoreCaret(ed, posAfterOpen);
+  }
+
+  if (_normTimer) clearTimeout(_normTimer);
+  _normTimer = setTimeout(() => normalizeEditorContent(ed), 80);
+  if (trTimer) clearTimeout(trTimer);
+  trTimer = setTimeout(transformNow, 600);
+  schedSave();
+}
+
+function toggleTbDropdown(id) {
+  const dd = document.getElementById('tb-dd-' + id);
+  if (!dd) return;
+  const isOpen = dd.classList.contains('open');
+  document.querySelectorAll('.tb-dd').forEach(d => d.classList.remove('open'));
+  if (!isOpen) dd.classList.add('open');
+}
+let _tbHoverTimer = null;
+function openTbDd(id) {
+  clearTimeout(_tbHoverTimer);
+  document.querySelectorAll('.tb-dd').forEach(d => d.classList.remove('open'));
+  const dd = document.getElementById('tb-dd-' + id);
+  if (dd) dd.classList.add('open');
+}
+function schedCloseTbDd(id) {
+  _tbHoverTimer = setTimeout(() => {
+    const dd = document.getElementById('tb-dd-' + id);
+    if (dd) dd.classList.remove('open');
+  }, 200);
+}
+function cancelCloseTbDd() { clearTimeout(_tbHoverTimer); }
+document.addEventListener('click', e => {
+  // Close all dropdowns when clicking outside a wrapper, or clicking an item inside a dropdown
+  if (!e.target.closest('.tb-dd-wrap') || e.target.closest('.tb-dd'))
+    document.querySelectorAll('.tb-dd').forEach(d => d.classList.remove('open'));
+}, true);
+
+function setThemeFromSettings(t) {
+  setTheme(t);
+  document.querySelectorAll('.st-btn').forEach(b =>
+    b.classList.toggle('btn-p', b.dataset.theme === t)
+  );
+}
+// Switching skin swaps which controls the panel shows, so re-render it in place
+function setStyleFromSettings(skin, el, ev) {
+  setStyle({ skin }, el, ev);
+  const body = document.getElementById('mo-body');
+  if (body) { closeModal(); openSettings(); }
+}
+function toggleFmt(type) {
+  fmts[type] = !fmts[type];
+  document.getElementById({action:'tbb-am',comms:'tbb-cm',thought:'tbb-th'}[type])
+    .classList.toggle('fmt-on',fmts[type]);
+  const prefKey = {action:'actionOn',comms:'commsOn',thought:'thoughtOn'}[type];
+  S.settings.prefs = Object.assign({}, S.settings.prefs, { [prefKey]: fmts[type] });
+  persist();
+  if (curId) transformNow();
+}
+
+// ================================================================
+// AUTO-FORMATTING
+// ================================================================
+let _panelTimer = null;
+function schedPanelRefresh() {
+  if (_panelTimer) clearTimeout(_panelTimer);
+  _panelTimer = setTimeout(() => {
+    if (!curId) return;
+    const doc = S.docs[curId]; if (!doc) return;
+    const ed = document.getElementById('editor');
+    const liveChars = detectChars(ed.innerText || '');
+    const tmpDoc = Object.assign({}, doc, {
+      chars: liveChars,
+      myChars: (doc.myChars||[]).filter(n => liveChars.includes(n))
+    });
+    updateCharsPanel(tmpDoc);
+  }, 400);
+}
+
+function hasEditorSel() {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return false;
+  const ed = document.getElementById('editor');
+  return !!ed && ed.contains(sel.getRangeAt(0).commonAncestorContainer);
+}
+
+function onEditorInput(e) {
+  if (e.inputType==='insertText' && e.data==='-') {
+    const sel=window.getSelection();
+    if (sel&&sel.rangeCount) {
+      const r=sel.getRangeAt(0),node=r.startContainer;
+      if (node.nodeType===3) {
+        const p=r.startOffset,t=node.textContent;
+        if (p>=2&&t[p-2]==='-'&&t[p-1]==='-') {
+          node.textContent=t.slice(0,p-2)+'–'+t.slice(p);
+          r.setStart(node,p-1);r.collapse(true);
+          sel.removeAllRanges();sel.addRange(r);
+        }
+      }
+    }
+  }
+  if (_normTimer) clearTimeout(_normTimer);
+  _normTimer = setTimeout(() => { if (!hasEditorSel()) normalizeEditorContent(document.getElementById('editor')); }, 80);
+  if (trTimer) clearTimeout(trTimer);
+  trTimer = setTimeout(() => { if (!hasEditorSel()) transformNow(); }, 600);
+  if (getPrefs().autoBoldNames && !(curId && isAcademyDoc(S.docs[curId]))) {
+    if (_bnTimer) clearTimeout(_bnTimer);
+    _bnTimer = setTimeout(() => { if (!hasEditorSel()) boldNames(); }, 900);
+  }
+  updateWC();
+  schedSave();
+  schedPanelRefresh();
+}
+let _bnTimer = null;
+let _normTimer = null;
+
+// After transformNow wraps a thought/action/comms marker, the restored caret can
+// land inside the trailing edge of the inline span, causing subsequent typing to
+// inherit the span's formatting. This moves the caret out if it's at the very end
+// of a marker span (but leaves it alone if it's editing text in the middle).
+function pushCaretOutOfMarkerSpans() {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || !sel.getRangeAt(0).collapsed) return;
+  const range = sel.getRangeAt(0);
+  const node = range.startContainer;
+  const offset = range.startOffset;
+  if (node.nodeType !== 3 || offset !== node.length) return;
+
+  let markerSpan = null;
+  let el = node.parentElement;
+  const ed = document.getElementById('editor');
+  while (el && el !== ed) {
+    if (el.classList && (el.classList.contains('am') || el.classList.contains('cm') || el.classList.contains('tm'))) {
+      markerSpan = el;
+      break;
+    }
+    el = el.parentElement;
+  }
+  if (!markerSpan) return;
+
+  function lastTextNode(n) {
+    if (n.nodeType === 3) return n;
+    for (let i = n.childNodes.length - 1; i >= 0; i--) {
+      const r = lastTextNode(n.childNodes[i]);
+      if (r) return r;
+    }
+    return null;
+  }
+  if (lastTextNode(markerSpan) !== node) return;
+
+  try {
+    // If there's already a text node after the span, use it — browser won't steal into span.
+    // If not, create a ZWS text node so the caret lands in a neutral text context.
+    // An element-level position (setStartAfter with no following text node) causes the
+    // browser to route the next keystroke back into the adjacent styled span every time.
+    const nextSib = markerSpan.nextSibling;
+    let targetNode, targetOffset;
+    if (nextSib && nextSib.nodeType === 3) {
+      targetNode = nextSib;
+      targetOffset = 0;
+    } else {
+      targetNode = document.createTextNode(ZWS);
+      markerSpan.parentNode.insertBefore(targetNode, nextSib || null);
+      targetOffset = 1;
+    }
+    const r = document.createRange();
+    r.setStart(targetNode, targetOffset);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  } catch(e) {}
+}
+
+// Strip ZWS caret-anchor characters inserted by pushCaretOutOfMarkerSpans,
+// adjusting the live cursor offset so saveCaret counts are ZWS-free.
+function stripZWSFromEditor(ed) {
+  const sel = window.getSelection();
+  let cn = null, co = 0;
+  if (sel && sel.rangeCount) { const r = sel.getRangeAt(0); cn = r.startContainer; co = r.startOffset; }
+  const walker = document.createTreeWalker(ed, NodeFilter.SHOW_TEXT);
+  const hits = [];
+  let n;
+  while ((n = walker.nextNode())) { if (n.textContent.includes(ZWS)) hits.push(n); }
+  if (!hits.length) return;
+  hits.forEach(n => {
+    if (n === cn) co -= (n.textContent.slice(0, co).split(ZWS).length - 1);
+    n.textContent = n.textContent.split(ZWS).join('');
+  });
+  if (cn && sel) {
+    try {
+      const r = document.createRange();
+      r.setStart(cn, Math.max(0, Math.min(co, cn.length)));
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    } catch(e) {}
+  }
+}
+
+function transformNow() {
+  const ed = document.getElementById('editor');
+  stripZWSFromEditor(ed);
+  const pos = saveCaret(ed);
+  let newHtml = applyMarkers(ed.innerHTML);
+  if (curId) newHtml = applyCharColors(newHtml);
+  if (newHtml!==ed.innerHTML) { ed.innerHTML=newHtml; restoreCaret(ed,pos); pushCaretOutOfMarkerSpans(); }
+}
+
+// ================================================================
+// CHARACTER COLOUR CODING
+// ================================================================
+const CC_PRESETS = [
+  {name:'Red',    hex:'#b03030'},
+  {name:'Gold',   hex:'#b8900b'},
+  {name:'Blue',   hex:'#4682b4'},
+  {name:'Purple', hex:'#7b22cc'},
+  {name:'Green',  hex:'#27ae60'},
+];
+
+function applyCharColors(html) {
+  if (!curId) return html;
+  const doc = S.docs[curId];
+  const colors = (doc && doc.charColors) || {};
+  // Fast path: nothing to apply AND nothing previously applied to strip.
+  // (When the last colour is removed, colors is empty but old markup still
+  //  needs clearing — so we must still run the strip pass in that case.)
+  if (!Object.keys(colors).length && !/data-char-clr|cc-nm/.test(html)) return html;
+
+  // Pre-compute lowercased color map for fast lookup
+  const lcolorMap = {};
+  Object.entries(colors).forEach(([k,v]) => { lcolorMap[k.toLowerCase()] = {name:k, hex:v}; });
+
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+
+  const blocks = tmp.querySelectorAll('div,p,li');
+  blocks.forEach(bl => {
+    // Strip any previously applied color coding first
+    if (bl.hasAttribute('data-char-clr')) {
+      bl.removeAttribute('data-char-clr');
+      bl.style.removeProperty('color');
+      bl.querySelectorAll('span.cc-nm').forEach(s => {
+        while (s.firstChild) s.parentNode.insertBefore(s.firstChild, s);
+        s.parentNode.removeChild(s);
+      });
+    }
+
+    // Manual paragraph override takes priority
+    const overrideChar = bl.getAttribute('data-char-override');
+    if (overrideChar) {
+      const entry = lcolorMap[overrideChar.toLowerCase()];
+      if (entry) {
+        bl.setAttribute('data-char-clr','1');
+        bl.style.color = entry.hex;
+      }
+      return;
+    }
+
+    // Get the text content of just this block (not nested blocks)
+    const text = bl.childNodes.length
+      ? [...bl.childNodes].filter(n=>n.nodeType===3||n.nodeType===1)
+          .map(n=>n.nodeType===3?n.textContent:(n.innerText||n.textContent)).join('')
+      : '';
+    const trimText = text.trimStart();
+
+    // Colour single-speaker lines only ("Name:" / "Name: …"). Multi-name lines
+    // (e.g. "Name1/Name2:") are left at the default colour — colouring just one
+    // name there required fragile <span> wrapping that broke removal and the
+    // [Names] bolding pass, so it is deliberately not attempted.
+    for (const [lname, entry] of Object.entries(lcolorMap)) {
+      const {name, hex} = entry;
+      const safeN = name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+      if (new RegExp(`^${safeN}\\s*:`, 'i').test(trimText)) {
+        bl.setAttribute('data-char-clr','1');
+        bl.style.color = hex;
+        break;
+      }
+    }
+  });
+
+  return tmp.innerHTML;
+}
+
+function getCharColor(name) {
+  if (!curId) return null;
+  const doc = S.docs[curId];
+  if (!doc || !doc.charColors) return null;
+  // Direct match
+  if (doc.charColors[name]) return doc.charColors[name];
+  // Case-insensitive + alias check
+  const lname = name.toLowerCase();
+  for (const [key, clr] of Object.entries(doc.charColors)) {
+    if (key.toLowerCase() === lname) return clr;
+  }
+  return null;
+}
+
+function setCharColor(name, hex) {
+  if (!curId) return;
+  const doc = S.docs[curId]; if (!doc) return;
+  if (!doc.charColors) doc.charColors = {};
+  if (hex) doc.charColors[name] = hex;
+  else delete doc.charColors[name];
+  persist();
+  transformNow();
+  updateCharsPanel(doc);  // refresh color dots in panel
+  hideCtx();
+}
+
+function removeCharColor(name) {
+  setCharColor(name, null);
+}
+
+function showColorPicker(e, name) {
+  e.preventDefault(); e.stopPropagation();
+  const doc = curId ? S.docs[curId] : null;
+  const currentColor = (doc && doc.charColors && doc.charColors[name]) || '';
+  const jsName = name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+  const swatches = CC_PRESETS.map(p =>
+    `<div class="cc-swatch${currentColor===p.hex?' active':''}" style="background:${p.hex}" title="${p.name}" onclick="setCharColor('${jsName}','${p.hex}')"></div>`
+  ).join('');
+
+  const customInput = `<div class="cc-custom" title="Custom colour"><input type="color" value="${currentColor||'#888888'}" onchange="setCharColor('${jsName}',this.value)"></div>`;
+
+  const removeBtn = currentColor
+    ? `<div style="font-size:0.67rem;color:var(--dim);cursor:pointer;padding:2px 4px" onclick="removeCharColor('${jsName}')">${ic('x','ic-sm')} Remove</div>`
+    : '';
+
+  // Show as a context menu
+  showCtx(e, [], `<div style="padding:4px 6px;font-size:0.67rem;color:var(--amber);letter-spacing:1px;border-bottom:1px solid var(--border);margin-bottom:4px">COLOUR — ${esc(name)}</div><div class="cc-palette">${swatches}${customInput}${removeBtn}</div>`);
+}
+
+// Editor right-click: assign paragraph to a character's color
+function editorCtx(e) {
+  // Plain right-click = native browser menu (spell-check). The colour-override
+  // menu is reachable via Shift+right-click so it never blocks spell-check.
+  if (!e.shiftKey) return;
+  e.preventDefault(); e.stopPropagation();
+  if (!curId) {
+    showCtx(e,[{label:'<span style="font-size:0.73rem;opacity:.6">No sim open</span>',fn:''}]);
+    return;
+  }
+  const doc = S.docs[curId];
+  const colors = doc && doc.charColors;
+  if (!colors || !Object.keys(colors).length) {
+    showCtx(e,[{label:'<span style="font-size:0.73rem;opacity:.6;line-height:1.6">Assign character colours via the<br>Characters panel first (right-click a name)</span>',fn:''}]);
+    return;
+  }
+
+  const sel = window.getSelection();
+  let block = null;
+  if (sel && sel.rangeCount) {
+    const ed = document.getElementById('editor');
+    let node = sel.getRangeAt(0).startContainer;
+    // Only resolve a block if the caret is actually inside the editor — a stale
+    // selection elsewhere must not walk past the editor up to document (which
+    // has no getAttribute and would throw).
+    if (ed.contains(node)) {
+      while (node && node.parentNode !== ed) node = node.parentNode;
+      if (node && node !== ed && node.nodeType === 1) block = node;
+    }
+  }
+  if (!block) {
+    showCtx(e,[{label:'<span style="font-size:0.73rem;opacity:.6">Click inside a paragraph first</span>',fn:''}]);
+    return;
+  }
+
+  // Assign a stable temp ID to this block element for later reference
+  if (!block.getAttribute('data-block-id')) block.setAttribute('data-block-id', 'b' + uid());
+  const bid = block.getAttribute('data-block-id');
+  const overrideChar = block.getAttribute('data-char-override') || null;
+  const jsBid = bid.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+  const items = [];
+  items.push({label:'<span style="font-size:0.67rem;letter-spacing:1px;opacity:.7">' + ic('palette') + ' ASSIGN PARAGRAPH COLOUR</span>',fn:''});
+  Object.entries(colors).forEach(([name, hex]) => {
+    const active = overrideChar === name ? ' ' + ic('check') : '';
+    const jsName = name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    items.push({label: `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${hex};margin-right:5px;vertical-align:middle"></span>${esc(name)}${active}`,
+      fn: `setParaCharOverride(event,'${jsBid}','${jsName}','${hex}')`});
+  });
+  if (overrideChar) {
+    items.push('-');
+    items.push({label:ic('x') + ' Remove paragraph override', fn:`clearParaCharOverride(event,'${jsBid}')`});
+  }
+  showCtx(e, items);
+}
+
+function setParaCharOverride(e, blockId, name, hex) {
+  const bl = document.querySelector(`[data-block-id="${blockId}"]`);
+  if (bl) {
+    bl.setAttribute('data-char-override', name);
+    bl.setAttribute('data-char-clr','1');
+    bl.style.color = hex;
+  }
+  hideCtx();
+  schedSave();
+}
+
+function clearParaCharOverride(e, blockId) {
+  const bl = document.querySelector(`[data-block-id="${blockId}"]`);
+  if (bl) {
+    bl.removeAttribute('data-char-override');
+    bl.removeAttribute('data-char-clr');
+    bl.style.removeProperty('color');
+  }
+  hideCtx();
+  schedSave();
+}
+
+// ================================================================
+// ZOOM
+// ================================================================
+function applyZoom() {
+  document.getElementById('editor').style.zoom = zoom/100;
+  document.getElementById('s-zoom').textContent = zoom+'%';
+}
+function adjZoom(d) {
+  zoom = Math.max(50,Math.min(200,zoom+d));
+  S.settings.zoom = zoom;
+  applyZoom();
+  persist();
+}
+
+// ================================================================
+// TOOLBAR STATE
+// ================================================================
+function updateTBState() {
+  document.getElementById('tbb-b').classList.toggle('on',document.queryCommandState('bold'));
+  document.getElementById('tbb-i').classList.toggle('on',document.queryCommandState('italic'));
+  document.getElementById('tbb-s').classList.toggle('on',document.queryCommandState('strikeThrough'));
+  pushCaretOutOfMarkerSpans();
+}
+
+// ================================================================
+// SIM TYPE (mission level)
+// ================================================================
+function setSimType(missionId, simType) {
+  const m = S.missions[missionId]; if (!m) return;
+  m.simType = simType||null;
+  // When tagging as Academy, strip formatting from all docs in this mission
+  if (simType === 'academy') {
+    Object.values(S.docs).filter(d => d.missionId === missionId).forEach(d => {
+      d.content = stripFormattingHtml(d.content||'');
+    });
+    // Refresh editor if a doc from this mission is currently open
+    if (curId && S.docs[curId] && S.docs[curId].missionId === missionId) {
+      document.body.classList.add('academy');
+      const ed = document.getElementById('editor');
+      ed.innerHTML = applyMarkers(S.docs[curId].content||'');
+    }
+  }
+  persist(); renderNav();
+}
+
+function docSimType(doc) {
+  if (!doc.missionId) return null;
+  const m = S.missions[doc.missionId];
+  return m ? (m.simType||null) : null;
+}
+
+// ================================================================
+// NAV HELPERS
+// ================================================================
+function simTypeTag(st) {
+  if (!st) return '';
+  if (st==='mission') return `<span class="tag tag-ml">Mission</span>`;
+  if (st==='shoreleave') return `<span class="tag tag-sl">Shore Leave</span>`;
+  if (st==='academy') return `<span class="tag tag-ac">Academy</span>`;
+  return '';
+}
+function postTypeTag(pt) {
+  if (!pt) return '';
+  if (pt==='jp') return `<span class="tag tag-jp">JP</span>`;
+  if (pt==='solo') return `<span class="tag tag-solo">Solo</span>`;
+  return '';
+}
+
+// ================================================================
+// SCENE PARTNER HELPERS
+// ================================================================
+function computeScenePartners(docs) {
+  const myChars = (S.settings.myChars||[]).map(n=>n.toLowerCase());
+  if (!myChars.length) return null; // null = myChars not set
+  const partners = {};
+  docs.forEach(d => {
+    if (!(d.myChars||[]).some(n=>myChars.includes(n.toLowerCase()))) return;
+    (d.chars||[]).forEach(name => {
+      if (myChars.includes(name.toLowerCase())) return;
+      if (!partners[name]) partners[name] = { scenes: new Set(), sims: 0 };
+      partners[name].sims++;
+      if (d.sceneId) partners[name].scenes.add(d.sceneId);
+    });
+  });
+  return Object.entries(partners)
+    .map(([name,{scenes,sims}])=>({name, scenes:scenes.size, sims}))
+    .sort((a,b)=>b.sims-a.sims||b.scenes-a.scenes);
+}
+
+function computeCharacterPartners(c, topN) {
+  const myNames = getAllNamesForChar(c).map(n=>n.toLowerCase());
+  const partners = {};
+  Object.values(S.docs).forEach(d => {
+    if (!(d.chars||[]).some(n=>myNames.includes(n.toLowerCase()))) return;
+    (d.chars||[]).forEach(name => {
+      if (myNames.includes(name.toLowerCase())) return;
+      if (!partners[name]) partners[name] = { scenes: new Set(), sims: 0 };
+      partners[name].sims++;
+      if (d.sceneId) partners[name].scenes.add(d.sceneId);
+    });
+  });
+  return Object.entries(partners)
+    .map(([name,{scenes,sims}])=>({name, scenes:scenes.size, sims}))
+    .sort((a,b)=>b.sims-a.sims||b.scenes-a.scenes)
+    .slice(0, topN||5);
+}
+
+function renderPartnersSection(partners, showScenes, emptyMsg) {
+  if (partners === null) return `<div class="dv-section">SCENE PARTNERS</div><div style="font-size:0.8rem;color:var(--dim);margin-bottom:12px">Mark characters as yours (${ic('square-check','ic-sm')} in the character panel) to see scene partner stats.</div>`;
+  if (!partners.length) return `<div class="dv-section">SCENE PARTNERS</div><div style="font-size:0.8rem;color:var(--dim);margin-bottom:12px">${emptyMsg||'No scene partners detected.'}</div>`;
+  const rows = partners.map(p => {
+    const detail = showScenes
+      ? `${p.scenes} scene${p.scenes!==1?'s':''}, ${p.sims} sim${p.sims!==1?'s':''}`
+      : `${p.sims} sim${p.sims!==1?'s':''}`;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:0.82rem;color:var(--text)">${esc(p.name)}</span>
+      <span style="font-size:0.78rem;color:var(--dim)">${detail}</span>
+    </div>`;
+  }).join('');
+  return `<div class="dv-section">SCENE PARTNERS</div><div style="margin-bottom:12px">${rows}</div>`;
+}
+
+// ================================================================
+// DETAIL VIEWS
+// ================================================================
+function openMission(id) {
+  if (curId) { flushSave(); curId = null; }
+  curView = 'mission'; curViewId = id;
+  document.body.classList.remove('academy');
+  ['dh','ec'].forEach(x=>document.getElementById(x).classList.add('hidden'));
+  document.getElementById('dashboard').classList.add('hidden');
+  const dv = document.getElementById('detail-view');
+  dv.innerHTML = renderMissionView(id);
+  dv.classList.remove('hidden');
+  document.getElementById('s-doc').textContent = S.missions[id]?S.missions[id].name:'';
+}
+
+function openScene(id) {
+  if (curId) { flushSave(); curId = null; }
+  curView = 'scene'; curViewId = id;
+  document.body.classList.remove('academy');
+  ['dh','ec'].forEach(x=>document.getElementById(x).classList.add('hidden'));
+  document.getElementById('dashboard').classList.add('hidden');
+  const dv = document.getElementById('detail-view');
+  dv.innerHTML = renderSceneView(id);
+  dv.classList.remove('hidden');
+  document.getElementById('s-doc').textContent = S.scenes[id]?S.scenes[id].name:'';
+}
+
+function renderMissionView(id) {
+  const m = S.missions[id]; if (!m) return '<p style="color:var(--dim)">Mission not found.</p>';
+  const scenes = Object.values(S.scenes).filter(sc=>sc.missionId===id).sort((a,b)=>a.name.localeCompare(b.name));
+  const allDocs = Object.values(S.docs).filter(d=>d.missionId===id);
+  const unsortedDocs = allDocs.filter(d=>!d.sceneId).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const posted = allDocs.filter(d=>d.postedAt).length;
+
+  let html = `
+    <div class="dv-close"><button class="dv-close-btn" onclick="showDashboard()" title="Back to dashboard">${ic('x')}</button></div>
+    <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:4px">
+      <div style="flex:1;min-width:0">
+        <div class="dv-title">${esc(m.name)}</div>
+        <div class="dv-meta">
+          <span class="sdot ${m.status||'active'}"></span>
+          <span>${m.year||''}</span>
+          ${simTypeTag(m.simType)}
+          <span style="text-transform:capitalize">${m.status||'active'}</span>
+        </div>
+        <div class="dv-stat">
+          <div class="dv-stat-item"><div class="dv-stat-num">${scenes.length}</div><div class="dv-stat-lbl">SCENES</div></div>
+          <div class="dv-stat-item"><div class="dv-stat-num">${allDocs.length}</div><div class="dv-stat-lbl">SIMS</div></div>
+          <div class="dv-stat-item"><div class="dv-stat-num">${posted}</div><div class="dv-stat-lbl">POSTED</div></div>
+        </div>
+      </div>
+      <div class="dash-actions dv-action-btns" style="flex-shrink:0;margin:0;flex-wrap:nowrap">
+        <button class="dash-action" onclick="showNewScene('${id}')">
+          <div class="da-icon">${ic('table')}</div>
+          <div class="da-label">Create a new Scene</div>
+          <div class="da-hint">Add a scene grouping to this mission</div>
+        </button>
+        <button class="dash-action" onclick="showNewDoc(null,'${id}')">
+          <div class="da-icon">${ic('pencil')}</div>
+          <div class="da-label">Write a new Sim</div>
+          <div class="da-hint">Start a new sim in this mission</div>
+        </button>
+      </div>
+    </div>
+  `;
+
+  if (scenes.length) {
+    html += `<div class="dv-section">SCENES</div>
+    <table class="dv-table">
+      <tr><th>SCENE</th><th>SIMS</th><th>STATUS</th></tr>
+      ${scenes.map(sc=>{
+        const cnt = Object.values(S.docs).filter(d=>d.sceneId===sc.id).length;
+        return `<tr>
+          <td><span class="dv-link" onclick="openScene('${sc.id}')">${esc(sc.name)}</span></td>
+          <td>${cnt}</td>
+          <td><span class="sdot ${sc.status||'active'}" style="display:inline-block;margin-right:4px"></span><span style="text-transform:capitalize;font-size:0.8rem;color:var(--dim)">${sc.status||'active'}</span>${staleMarker(sc.id, sc.status)}</td>
+        </tr>`;
+      }).join('')}
+    </table>`;
+  }
+
+  if (unsortedDocs.length) {
+    html += `<div class="dv-section">UNSCENED SIMS</div>
+    <table class="dv-table">
+      <tr><th>TITLE</th><th>TYPE</th><th>STATUS</th><th>POSTED</th></tr>
+      ${unsortedDocs.map(d=>`<tr>
+        <td><span class="dv-link" onclick="openDoc('${d.id}')">${esc(d.title||'Untitled')}</span></td>
+        <td>${postTypeTag(d.postType)||'<span style="color:var(--dim)">—</span>'}</td>
+        <td><span class="sdot ${d.status||'active'}" style="display:inline-block"></span></td>
+        <td style="color:var(--dim);font-size:0.8rem">${d.postedAt||'—'}</td>
+      </tr>`).join('')}
+    </table>`;
+  }
+
+  if (!scenes.length && !allDocs.length) {
+    html += `<div style="color:var(--dim);font-size:0.87rem;margin-top:16px">No scenes or sims in this mission yet.</div>`;
+  }
+
+  html += renderPartnersSection(computeScenePartners(allDocs), true, 'No character co-occurrences detected in this mission.');
+
+  return html;
+}
+
+function renderSceneView(id) {
+  const sc = S.scenes[id]; if (!sc) return '<p style="color:var(--dim)">Scene not found.</p>';
+  const m = sc.missionId ? S.missions[sc.missionId] : null;
+  const docs = Object.values(S.docs).filter(d=>d.sceneId===id).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+
+  let html = `
+    <div class="dv-close">
+      ${m ? `<span class="dv-back" style="margin-right:auto" onclick="openMission('${m.id}')">${ic('chevron-left')} ${esc(m.name)}</span>` : ''}
+      <button class="dv-close-btn" onclick="showDashboard()" title="Back to dashboard">${ic('x')}</button>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:4px">
+      <div style="flex:1;min-width:0">
+        <div class="dv-title">${esc(sc.name)}</div>
+        <div class="dv-meta">
+          <span class="sdot ${sc.status||'active'}"></span>
+          ${m ? `<span>Mission: <span class="dv-link" onclick="openMission('${m.id}')">${esc(m.name)}</span></span>` : ''}
+          <span style="text-transform:capitalize">${sc.status||'active'}</span>
+          ${sc.startedAt ? `<span style="color:var(--dim)">Started: ${new Date(sc.startedAt).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'})}</span>` : ''}
+        </div>
+        <div class="dv-stat">
+          <div class="dv-stat-item"><div class="dv-stat-num">${docs.length}</div><div class="dv-stat-lbl">SIMS</div></div>
+          <div class="dv-stat-item"><div class="dv-stat-num">${docs.filter(d=>d.postedAt).length}</div><div class="dv-stat-lbl">POSTED</div></div>
+        </div>
+      </div>
+      <div class="dash-actions dv-action-btns" style="flex-shrink:0;margin:0">
+        <button class="dash-action" onclick="showNewDoc('${id}','${sc.missionId||''}')">
+          <div class="da-icon">${ic('pencil')}</div>
+          <div class="da-label">Write a new Sim</div>
+          <div class="da-hint">Start a new sim in this scene</div>
+        </button>
+      </div>
+    </div>
+  `;
+
+  if (docs.length) {
+    html += `<div class="dv-section">SIMS IN THIS SCENE</div>
+    <table class="dv-table">
+      <tr><th>TITLE</th><th>TYPE</th><th>MY CHARS</th><th>STATUS</th><th>POSTED</th></tr>
+      ${docs.map(d=>`<tr>
+        <td><span class="dv-link" onclick="openDoc('${d.id}')">${esc(d.title||'Untitled')}</span></td>
+        <td>${postTypeTag(d.postType)||'<span style="color:var(--dim)">—</span>'}</td>
+        <td style="color:var(--dim);font-size:0.8rem">${(d.myChars||[]).join(', ')||'—'}</td>
+        <td><span class="sdot ${d.status||'active'}" style="display:inline-block"></span></td>
+        <td style="color:var(--dim);font-size:0.8rem">${d.postedAt||'—'}</td>
+      </tr>`).join('')}
+    </table>`;
+  } else {
+    html += `<div style="color:var(--dim);font-size:0.87rem;margin-top:16px">No sims in this scene yet.</div>`;
+  }
+
+  html += renderPartnersSection(computeScenePartners(docs), false, 'No character co-occurrences detected in this scene.');
+
+  return html;
+}
+
+// ================================================================
+// FULL-TEXT SEARCH
+// ================================================================
+function toggleSearch() {
+  searchActive = !searchActive;
+  const bar = document.getElementById('search-bar');
+  const btn = document.getElementById('sb-search-btn');
+  bar.classList.toggle('hidden', !searchActive);
+  btn.classList.toggle('on', searchActive);
+  if (searchActive) {
+    document.getElementById('search-input').focus();
+  } else {
+    document.getElementById('search-input').value = '';
+    renderNav();
+  }
+}
+
+function onSearchInput() {
+  if (searchTimer) clearTimeout(searchTimer);
+  searchTimer = setTimeout(runSearch, 300);
+}
+
+function clearSearch() {
+  searchActive = false;
+  const bar = document.getElementById('search-bar');
+  bar.classList.add('hidden');
+  document.getElementById('sb-search-btn').classList.remove('on');
+  document.getElementById('search-input').value = '';
+  renderNav();
+}
+
+function runSearch() {
+  const query = document.getElementById('search-input').value.trim();
+  if (query.length < 2) { renderNav(); return; }
+  const qL = query.toLowerCase();
+  const results = [];
+  Object.values(S.docs).forEach(d => {
+    const title = d.title||'';
+    const tmp = document.createElement('div');
+    tmp.innerHTML = d.content||'';
+    const text = tmp.innerText||tmp.textContent||'';
+    const titleMatch = title.toLowerCase().includes(qL);
+    const bodyIdx = text.toLowerCase().indexOf(qL);
+    if (titleMatch || bodyIdx>=0) {
+      const m = d.missionId ? S.missions[d.missionId] : null;
+      let snippet = '';
+      if (bodyIdx>=0) {
+        const s = Math.max(0,bodyIdx-40), e = Math.min(text.length,bodyIdx+query.length+60);
+        const raw = (s>0?'…':'')+text.slice(s,e)+(e<text.length?'…':'');
+        snippet = hlMatch(raw, query);
+      }
+      results.push({d, m, titleHl:hlMatch(title||'Untitled',query), snippet});
+    }
+  });
+  const tree = document.getElementById('nav-tree');
+  if (!results.length) {
+    tree.innerHTML = `<div class="sr-count">No results for "${esc(query)}"</div>`;
+    return;
+  }
+  tree.innerHTML = `<div class="sr-count">${results.length} result${results.length!==1?'s':''}</div>` +
+    results.map(({d,m,titleHl,snippet}) =>
+      `<div class="nd${d.id===curId?' cur':''}" onclick="openDoc('${d.id}')" title="${esc(d.title||'Untitled')}">
+        <span class="sdot ${d.status||'active'}"></span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:0.87rem;white-space:normal;overflow:hidden">${titleHl}</div>
+          ${m?`<div style="font-size:0.73rem;color:var(--dim)">${esc(m.name)}</div>`:''}
+          ${snippet?`<div style="font-size:0.73rem;color:var(--dim);margin-top:2px;line-height:1.4">${snippet}</div>`:''}
+        </div>
+      </div>`
+    ).join('');
+}
+
+function hlMatch(text, query) {
+  if (!query) return esc(text);
+  return esc(text).replace(new RegExp(escRe(esc(query)), 'gi'), '<mark>$&</mark>');
+}
+
+// ================================================================
+// NAVIGATION RENDER
+// ================================================================
+// Returns ms timestamp of last "meaningful" activity in a scene: a sim being posted
+// (postedAt set) or marked complete (status='complete', using updatedAt as proxy).
+// Falls back to scene.createdAt when no qualifying sims exist.
+function sceneLastActivityMs(sceneId) {
+  const docs = Object.values(S.docs).filter(d => d.sceneId === sceneId);
+  let best = 0;
+  docs.forEach(d => {
+    if (d.postedAt) {
+      const t = new Date(d.postedAt).getTime();
+      if (!isNaN(t) && t > best) best = t;
+    }
+    if (d.completedAt && d.completedAt > best) best = d.completedAt;
+  });
+  return best || (S.scenes[sceneId]?.startedAt) || (S.scenes[sceneId]?.createdAt) || Date.now();
+}
+
+// Stale marker (amber ≥2d / red ≥3d since last post/completion) for a scene.
+// Returns '' for non-active scenes (a finished scene can't be stale) or fresh ones.
+function staleMarker(sceneId, status) {
+  if ((status || 'active') !== 'active') return '';
+  const daysSince = (Date.now() - sceneLastActivityMs(sceneId)) / 86400000;
+  const d = Math.floor(daysSince);
+  const tip = `${d} days since last post/completion`;
+  const cls = daysSince >= 3 ? 'stale-red' : daysSince >= 2 ? 'stale-amber' : '';
+  if (!cls) return '';
+  return `<span class="stale-label" style="margin-left:6px;display:inline-flex" title="${tip}"><span style="font-size:0.7rem;opacity:0.6">${d}d</span><span class="stale-dot ${cls}"></span></span>`;
+}
+
+// Returns the timestamp of the most recently posted (or updated) sim matching the filter fn
+// postedAt takes priority so missions sort chronologically by actual post history
+function newestSimDate(filterFn) {
+  const docs = Object.values(S.docs).filter(filterFn);
+  if (!docs.length) return Date.now(); // brand-new container = treat as newest
+  const postTimes = docs.filter(d => d.postedAt)
+    .map(d => new Date(d.postedAt).getTime()).filter(t => !isNaN(t) && t > 0);
+  if (postTimes.length) return Math.max(...postTimes);
+  return Math.max(...docs.map(d => d.updatedAt || d.createdAt || 0));
+}
+// Returns a sort value for a sim: posted sims by postedAt, active sims float to top by updatedAt
+// Active (unposted) sims always appear above posted sims in the list
+function simSortKey(d) {
+  if (!d.postedAt) {
+    // Active/in-progress: float to top; add a large offset so they sort above any posted date
+    return 2e15 + (d.updatedAt || d.createdAt || 0);
+  }
+  const t = new Date(d.postedAt).getTime();
+  return isNaN(t) ? (d.updatedAt || 0) : t;
+}
+
+function renderNav() {
+  if (searchActive) return; // don't clobber active search results
+  const tree = document.getElementById('nav-tree');
+  const byYear = {};
+  Object.values(S.missions).forEach(m => {
+    if (!showArchived&&m.status==='archived') return;
+    const y=m.year||'Unknown';
+    if (!byYear[y]) byYear[y]={};
+    byYear[y][m.id]={...m,scenes:{},unsorted:[]};
+  });
+  Object.values(S.scenes).forEach(sc => {
+    if (!showArchived&&sc.status==='archived') return;
+    const m=S.missions[sc.missionId]; if (!m) return;
+    if (!showArchived&&m.status==='archived') return;
+    const y=m.year||'Unknown';
+    if (byYear[y]&&byYear[y][sc.missionId])
+      byYear[y][sc.missionId].scenes[sc.id]={...sc,docs:[]};
+  });
+  Object.values(S.docs).forEach(d => {
+    if (!showArchived&&d.status==='archived') return;
+    const m=S.missions[d.missionId]; if (!m) return;
+    if (!showArchived&&m.status==='archived') return;
+    const y=m.year||'Unknown';
+    if (!byYear[y]||!byYear[y][d.missionId]) return;
+    if (d.sceneId&&byYear[y][d.missionId].scenes[d.sceneId])
+      byYear[y][d.missionId].scenes[d.sceneId].docs.push(d);
+    else byYear[y][d.missionId].unsorted.push(d);
+  });
+
+  const years = Object.keys(byYear).sort().reverse();
+  if (!years.length) {
+    tree.innerHTML='<div style="padding:14px;font-size:0.8rem;color:var(--dim);text-align:center">No missions yet.<br>Click + Mission above.</div>';
+    return;
+  }
+
+  function docItem(d) {
+    const active = d.id===curId?' cur':'';
+    const st = d.status||'active';
+    const dispTitle = getDisplayTitle(d);
+    // Metadata: date + characters
+    let metaParts = [];
+    if (d.postedAt) {
+      const [py,pm,pd] = d.postedAt.split('-');
+      metaParts.push(`<span class="nd-posted">${ic('check','ic-sm')} ${py}${pm}.${pd}</span>`);
+    } else if (d.updatedAt) metaParts.push(new Date(d.updatedAt).toLocaleDateString());
+    const chars = (d.myChars||[]);
+    if (chars.length) {
+      // Collapse aliases of the same manifest character to primary name
+      const seenIds = new Set();
+      const dedupedChars = [];
+      chars.forEach(n => {
+        const ch = findCharByAnyName(n);
+        const key = ch ? ch.id : n;
+        if (!seenIds.has(key)) { seenIds.add(key); dedupedChars.push(ch ? ch.name : n); }
+      });
+      const charStr = dedupedChars.slice(0,2).join(', ') + (dedupedChars.length>2?' +'+(dedupedChars.length-2):'');
+      metaParts.push(esc(charStr));
+    }
+    const metaHtml = metaParts.length ? `<div class="nd-meta">${metaParts.join(' · ')}</div>` : '';
+    return `<div class="nd nd-s-${st}${active}" onclick="openDoc('${d.id}')" oncontextmenu="ctxDoc(event,'${d.id}')" title="${esc(d.title||'Untitled')}">
+      <span class="sdot ${st}"></span>
+      <div class="nd-inner">
+        <div class="nd-title">${esc(dispTitle)}</div>
+        ${metaHtml}
+      </div>
+      ${postTypeTag(d.postType)}
+    </div>`;
+  }
+
+  let html='';
+  years.forEach(y => {
+    const yc=collapsed['y_'+y];
+    const yNum = parseInt(y, 10);
+    const yDisp = isNaN(yNum) ? y : `${y} <span class="ny-ic">(${yNum + 377} IC)</span>`;
+    html+=`<div><div class="ny-hdr" oncontextmenu="ctxYear(event,'${esc(y)}')">
+      <span class="caret" onclick="tog('y_${y}')">${ic(yc?'chevron-right':'chevron-down')}</span><span>${yDisp}</span>
+    </div>`;
+    if (!yc) {
+      html+=`<div class="ny-ch">`;
+      Object.values(byYear[y]).sort((a,b)=>newestSimDate(d=>d.missionId===b.id)-newestSimDate(d=>d.missionId===a.id)).forEach(m => {
+        const mc=collapsed['m_'+m.id]!==undefined?collapsed['m_'+m.id]:(m.status==='archived'||m.status==='complete');
+        const isViewedM = curView==='mission'&&curViewId===m.id;
+        html+=`<div><div class="nm-hdr" oncontextmenu="ctxMission(event,'${m.id}')">
+          <span class="caret" onclick="tog('m_${m.id}')">${ic(mc?'chevron-right':'chevron-down')}</span>
+          <span class="sdot ${m.status||'active'}"></span>
+          <span class="lbl${isViewedM?' cur':''}" onclick="openMission('${m.id}')" title="${esc(m.name)}">${esc(m.name)}</span>
+          ${simTypeTag(m.simType)}
+        </div>`;
+        if (!mc) {
+          html+=`<div class="nm-ch">`;
+          const _nss = getPrefs().navSceneSort||'recent-first';
+          const _sceneSorted = Object.values(m.scenes).slice().sort((a,b) => {
+            if (_nss==='alpha-az')     return a.name.localeCompare(b.name);
+            if (_nss==='alpha-za')     return b.name.localeCompare(a.name);
+            if (_nss==='stale-first' || _nss==='stale-last') {
+              const aC=a.status==='complete', bC=b.status==='complete';
+              if (aC!==bC) return aC?1:-1;
+              if (aC) return a.name.localeCompare(b.name);
+              return _nss==='stale-first'?sceneLastActivityMs(a.id)-sceneLastActivityMs(b.id):sceneLastActivityMs(b.id)-sceneLastActivityMs(a.id);
+            }
+            if (_nss==='recent-last')  return newestSimDate(doc=>doc.sceneId===a.id)-newestSimDate(doc=>doc.sceneId===b.id);
+            if (_nss==='started-first')return (b.startedAt||b.createdAt||0)-(a.startedAt||a.createdAt||0);
+            if (_nss==='started-last') return (a.startedAt||a.createdAt||0)-(b.startedAt||b.createdAt||0);
+            return newestSimDate(doc=>doc.sceneId===b.id)-newestSimDate(doc=>doc.sceneId===a.id); // 'recent-first'
+          });
+          _sceneSorted.forEach(sc => {
+            const sc2=S.scenes[sc.id]; if (!sc2) return;
+            const sc2status=S.scenes[sc.id]&&S.scenes[sc.id].status;
+            const scc=collapsed['sc_'+sc.id]!==undefined?collapsed['sc_'+sc.id]:(sc2status==='archived'||sc2status==='complete');
+            const isViewedSc = curView==='scene'&&curViewId===sc.id;
+            let staleDot = '';
+            if ((sc2status||'active')==='active') {
+              const daysSince = (Date.now() - sceneLastActivityMs(sc.id)) / 86400000;
+              const d = Math.floor(daysSince);
+              const tip = `${d} days since last post/completion`;
+              if (daysSince >= 3) staleDot = `<span class="stale-label" title="${tip}"><span style="font-size:0.7rem;opacity:0.6">${d}d</span><span class="stale-dot stale-red"></span></span>`;
+              else if (daysSince >= 2) staleDot = `<span class="stale-label" title="${tip}"><span style="font-size:0.7rem;opacity:0.6">${d}d</span><span class="stale-dot stale-amber"></span></span>`;
+            }
+            html+=`<div><div class="ns-hdr ns-s-${sc2status||'active'}" oncontextmenu="ctxScene(event,'${sc.id}')">
+              <span class="caret" onclick="tog('sc_${sc.id}')">${ic(scc?'chevron-right':'chevron-down')}</span>
+              <span class="sdot ${sc2.status||'active'}"></span>
+              <span class="lbl${isViewedSc?' cur':''}" onclick="openScene('${sc.id}')" title="${esc(sc2.name)}">${esc(sc2.name)}</span>
+              ${staleDot}
+            </div>`;
+            if (!scc) html+=`<div class="ns-ch">${sc.docs.slice().sort((a,b)=>simSortKey(b)-simSortKey(a)).map(docItem).join('')}</div>`;
+            html+=`</div>`;
+          });
+          m.unsorted.slice().sort((a,b)=>simSortKey(b)-simSortKey(a)).forEach(d=>{html+=docItem(d);});
+          html+=`</div>`;
+        }
+        html+=`</div>`;
+      });
+      html+=`</div>`;
+    }
+    html+=`</div>`;
+  });
+  tree.innerHTML=html;
+}
+
+function tog(k){collapsed[k]=!collapsed[k];renderNav();}
+
+// ================================================================
+// SIDEBAR RESIZE + TOGGLE
+// ================================================================
+function toggleSidebar() {
+  S.settings.sidebarOpen = !S.settings.sidebarOpen;
+  const sb = document.getElementById('sidebar');
+  sb.classList.toggle('collapsed', !S.settings.sidebarOpen);
+  document.getElementById('sb-toggle').innerHTML = ic(S.settings.sidebarOpen ? 'chevron-left' : 'chevron-right');
+  persist();
+}
+function toggleSidebarDetail() {
+  S.settings.sidebarDetail = !S.settings.sidebarDetail;
+  document.getElementById('sidebar').classList.toggle('sidebar-detail', !!S.settings.sidebarDetail);
+  document.getElementById('sb-detail-btn').innerHTML = ic('list') + ' Details';
+  persist();
+}
+
+const SORT_OPTIONS = [
+  { val:'recent-first',  label:'Sim Posting (Recent First)' },
+  { val:'recent-last',   label:'Sim Posting (Recent Last)' },
+  { val:'stale-first',   label:'Due Status (Stalest First)' },
+  { val:'stale-last',    label:'Due Status (Freshest First)' },
+  { val:'alpha-az',      label:'Alphabetical (A – Z)' },
+  { val:'alpha-za',      label:'Alphabetical (Z – A)' },
+  { val:'started-first', label:'Scene Start (Recent First)' },
+  { val:'started-last',  label:'Scene Start (Recent Last)' },
+];
+function showSortMenu(e) {
+  e.stopPropagation();
+  const existing = document.getElementById('sort-menu');
+  if (existing) { existing.remove(); return; }
+  const cur = getPrefs().navSceneSort || 'recent-first';
+  const menu = document.createElement('div');
+  menu.id = 'sort-menu';
+  SORT_OPTIONS.forEach(opt => {
+    const item = document.createElement('div');
+    item.className = 'sm-item' + (opt.val === cur ? ' sm-cur' : '');
+    item.innerHTML = (opt.val === cur ? ic('check') : '<span style="display:inline-block;width:1.05em"></span>') + ' ' + esc(opt.label);
+    item.onclick = ev => {
+      ev.stopPropagation();
+      S.settings.prefs = Object.assign({}, S.settings.prefs, { navSceneSort: opt.val });
+      persist();
+      renderNav();
+      menu.remove();
+    };
+    menu.appendChild(item);
+  });
+  document.body.appendChild(menu);
+  const btn = document.getElementById('sb-sort-btn');
+  const r = btn.getBoundingClientRect();
+  menu.style.top = (r.bottom + 4) + 'px';
+  menu.style.left = r.left + 'px';
+  document.addEventListener('click', function h() { menu.remove(); document.removeEventListener('click', h); }, { once: true });
+}
+
+function toggleCharsPanel() {
+  S.settings.charsOpen = !S.settings.charsOpen;
+  const cp = document.getElementById('cp');
+  cp.classList.toggle('collapsed', !S.settings.charsOpen);
+  document.getElementById('cp-toggle').innerHTML = ic(S.settings.charsOpen ? 'chevron-right' : 'chevron-left');
+  persist();
+}
+
+function startResize(e, side) {
+  e.preventDefault();
+  const el = document.getElementById(side==='left'?'sidebar':'cp');
+  if (el.classList.contains('collapsed')) return;
+  _resizing = {side, startX:e.clientX, startW:el.offsetWidth};
+  document.getElementById('rh-'+side).classList.add('rh-active');
+  document.body.style.cursor='col-resize';
+  document.body.style.userSelect='none';
+}
+
+document.addEventListener('mousemove', e => {
+  if (!_resizing) return;
+  const dx = e.clientX - _resizing.startX;
+  if (_resizing.side==='left') {
+    const w = Math.max(140, Math.min(480, _resizing.startW + dx));
+    document.documentElement.style.setProperty('--sidebar-w', w+'px');
+  } else {
+    const w = Math.max(120, Math.min(380, _resizing.startW - dx));
+    document.documentElement.style.setProperty('--chars-w', w+'px');
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  if (!_resizing) return;
+  const side = _resizing.side;
+  document.getElementById('rh-'+side).classList.remove('rh-active');
+  if (side==='left') {
+    S.settings.sidebarW = document.getElementById('sidebar').offsetWidth || 270;
+  } else {
+    S.settings.charsW = document.getElementById('cp').offsetWidth || 190;
+  }
+  _resizing = null;
+  document.body.style.cursor='';
+  document.body.style.userSelect='';
+  persist();
+});
+
+// ================================================================
+// CONTEXT MENUS
+// ================================================================
+function hideCtx(){document.getElementById('ctx').classList.add('hidden');}
+function showCtx(e,items,extraHtml){
+  e.preventDefault();e.stopPropagation();
+  const m=document.getElementById('ctx');
+  m.innerHTML=(extraHtml||'')+items.map(it=>
+    it==='-'?'<div class="csep"></div>':
+    `<div class="ci ${it.cls||''}" onclick="${it.fn||''}">${it.label}</div>`
+  ).join('');
+  const x=Math.min(e.clientX,window.innerWidth-220);
+  m.style.left=x+'px';
+  m.style.top=e.clientY+'px';
+  m.classList.remove('hidden');
+  requestAnimationFrame(()=>{
+    const rect=m.getBoundingClientRect();
+    if(rect.bottom>window.innerHeight-4){
+      m.style.top=Math.max(e.clientY-rect.height,4)+'px';
+    }
+  });
+}
+
+function ctxYear(e,y){
+  showCtx(e,[
+    {label:'+ New Mission in '+y, fn:`showNewMission('${esc(y)}');hideCtx()`},
+    '-',
+    {label:`${ic('trash')} Delete Year ${y}…`, cls:'dng', fn:`delYear('${esc(y)}');hideCtx()`},
+  ]);
+}
+
+function delYear(y) {
+  const missions = Object.values(S.missions).filter(m=>(m.year||'Unknown')===y);
+  const mIds = new Set(missions.map(m=>m.id));
+  const scenes = Object.values(S.scenes).filter(sc=>mIds.has(sc.missionId));
+  const docs = Object.values(S.docs).filter(d=>mIds.has(d.missionId));
+
+  const missionList = missions.map(m=>`<li style="color:var(--amber)">• ${esc(m.name)}</li>`).join('');
+
+  // First confirmation — modal with full breakdown
+  openModal(`DELETE YEAR ${y}`, `
+    <p style="color:var(--dim);font-size:0.87rem;line-height:1.7">
+      This will permanently delete <strong style="color:var(--text)">all content</strong> for the year <strong style="color:var(--amber)">${esc(y)}</strong>:
+    </p>
+    <ul style="font-size:0.87rem;line-height:1.9;list-style:none;padding:6px 0 6px 8px;margin:8px 0;border-left:2px solid var(--border)">
+      ${missionList}
+    </ul>
+    <div style="font-size:0.8rem;color:var(--dim);margin-bottom:4px">${scenes.length} scene(s) · ${docs.length} sim(s) total</div>
+    <p style="color:var(--red);font-size:0.8rem;font-weight:bold;margin-top:10px">This cannot be undone. A second confirmation will follow.</p>
+  `, () => {
+    // Second confirmation — native dialog as the hard gate
+    if (!confirm(`FINAL CONFIRMATION\n\nPermanently delete everything in year ${y}?\n(${missions.length} mission(s), ${scenes.length} scene(s), ${docs.length} sim(s))\n\nThis cannot be undone.`)) return false;
+
+    docs.forEach(d => delete S.docs[d.id]);
+    scenes.forEach(sc => delete S.scenes[sc.id]);
+    missions.forEach(m => delete S.missions[m.id]);
+
+    if ((curId && !S.docs[curId]) || (curViewId && (mIds.has(curViewId) || mIds.has(S.scenes[curViewId]?.missionId)))) {
+      curId = null; curView = null; curViewId = null;
+      showDashboard();
+    }
+    persist(); renderNav();
+  }, {ok:`Delete Year ${y}`});
+}
+function ctxMission(e,id){
+  const m=S.missions[id]; if (!m) return;
+  const st=m.simType;
+  showCtx(e,[
+    {label:'+ New Scene',fn:`showNewScene('${id}');hideCtx()`},
+    {label:'+ New Sim',fn:`showNewDoc(null,'${id}');hideCtx()`},
+    '-',
+    {label:st==='mission'?ic('check') + ' Mission type':'  Tag: Mission',cls:st==='mission'?'':'dim-item',
+      fn:`setSimType('${id}','mission');hideCtx()`},
+    {label:st==='shoreleave'?ic('check') + ' Shore Leave':'  Tag: Shore Leave',cls:st==='shoreleave'?'':'dim-item',
+      fn:`setSimType('${id}','shoreleave');hideCtx()`},
+    {label:st==='academy'?ic('check') + ' Academy':'  Tag: Academy',cls:st==='academy'?'':'dim-item',
+      fn:`setSimType('${id}','academy');hideCtx()`},
+    {label:(!st)?ic('check') + ' Regular (default)':'  Clear tag',cls:(!st)?'':'dim-item',
+      fn:`setSimType('${id}',null);hideCtx()`},
+    '-',
+    {label:m.status==='complete'?ic('circle') + ' Mark Active':ic('check') + ' Mark Complete',
+      fn:`setStatus('mission','${id}','${m.status==='complete'?'active':'complete'}');hideCtx()`},
+    {label:m.status==='archived'?ic('undo') + ' Unarchive':ic('archive') + ' Archive',
+      fn:`setStatus('mission','${id}','${m.status==='archived'?'active':'archived'}');hideCtx()`},
+    '-',
+    {label:ic('pencil') + ' Rename',fn:`renameItem('mission','${id}');hideCtx()`},
+    '-',
+    {label:ic('trash') + ' Delete Mission',cls:'dng',fn:`delMission('${id}');hideCtx()`},
+  ]);
+}
+function ctxScene(e,id){
+  const sc=S.scenes[id]; if (!sc) return;
+  showCtx(e,[
+    {label:'+ New Sim',fn:`showNewDoc('${id}',null);hideCtx()`},
+    '-',
+    {label:sc.status==='complete'?ic('circle') + ' Mark Active':ic('check') + ' Mark Complete',
+      fn:`setStatus('scene','${id}','${sc.status==='complete'?'active':'complete'}');hideCtx()`},
+    {label:sc.status==='archived'?ic('undo') + ' Unarchive':ic('archive') + ' Archive',
+      fn:`setStatus('scene','${id}','${sc.status==='archived'?'active':'archived'}');hideCtx()`},
+    '-',
+    {label:ic('pencil') + ' Edit Scene',fn:`editScene('${id}');hideCtx()`},
+    '-',
+    {label:ic('trash') + ' Delete Scene',cls:'dng',fn:`delScene('${id}');hideCtx()`},
+  ]);
+}
+function ctxDoc(e,id){
+  const d=S.docs[id]; if (!d) return;
+  const items = [
+    {label:d.status==='complete'?ic('circle') + ' Mark Active':ic('check') + ' Mark Complete',
+      fn:`setStatus('doc','${id}','${d.status==='complete'?'active':'complete'}');hideCtx()`},
+    {label:d.status==='archived'?ic('undo') + ' Unarchive':ic('archive') + ' Archive',
+      fn:`setStatus('doc','${id}','${d.status==='archived'?'active':'archived'}');hideCtx()`},
+  ];
+  // If title has multiple separators, offer display-title chooser
+  const title = d.title||'';
+  if (countTitleSeps(title) > 1 || d.displayTitle != null) {
+    items.push('-');
+    const opts = getTitleSplitOptions(title);
+    opts.forEach(opt => {
+      const label = opt === title ? ic('file-text') + ' Show full title' : `${ic('file-text')} Show: "${esc(opt.length>36?opt.slice(0,33)+'…':opt)}"`;
+      const safeOpt = opt.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      items.push({label, fn:`setDocDisplayTitle('${id}','${safeOpt}');hideCtx()`});
+    });
+  }
+  items.push('-');
+  items.push({label:ic('move-right') + ' Move to Scene…',fn:`moveDocToScene('${id}');hideCtx()`});
+  items.push('-');
+  items.push({label:ic('trash') + ' Delete Sim',cls:'dng',fn:`delDoc('${id}');hideCtx()`});
+  showCtx(e, items);
+}
+
+function moveDocToScene(id) {
+  const d = S.docs[id]; if (!d) return;
+  let opts = `<option value="">— No scene (unsorted within mission) —</option>`;
+  Object.values(S.missions)
+    .filter(m => m.status !== 'archived')
+    .sort((a,b) => a.name.localeCompare(b.name))
+    .forEach(m => {
+      const scenes = Object.values(S.scenes)
+        .filter(sc => sc.missionId === m.id && sc.status !== 'archived' && sc.id !== d.sceneId)
+        .sort((a,b) => a.name.localeCompare(b.name));
+      if (!scenes.length) return;
+      opts += `<optgroup label="${esc(m.name)} (${m.year})">`;
+      scenes.forEach(sc => { opts += `<option value="${sc.id}">${esc(sc.name)}</option>`; });
+      opts += `</optgroup>`;
+    });
+  openModal('MOVE SIM TO SCENE', `
+    <div style="font-size:0.8rem;color:var(--dim);margin-bottom:10px">"${esc((d.title||'Untitled').slice(0,60))}"</div>
+    <div class="mf"><label class="ml">TARGET SCENE</label><select class="ms" id="m-mv-sc">${opts}</select></div>
+  `, () => {
+    const sceneId = document.getElementById('m-mv-sc').value || null;
+    d.sceneId = sceneId;
+    if (sceneId) d.missionId = S.scenes[sceneId].missionId;
+    persist(); renderNav();
+  });
+}
+
+function setDocDisplayTitle(id, val) {
+  const d = S.docs[id]; if (!d) return;
+  // "Full title" option stores null (auto)
+  d.displayTitle = (val === (d.title||'')) ? null : val;
+  persist(); renderNav();
+}
+
+// ── STATUS WITH CASCADE ──
+function setStatus(type,id,status){
+  const now=Date.now();
+  function stampDoc(d){
+    d.status=status;
+    if(status==='complete') d.completedAt=now;
+    else if(status==='active'||status==='archived') d.completedAt=null;
+  }
+  if (type==='mission'){
+    S.missions[id].status=status;
+    Object.values(S.scenes).filter(sc=>sc.missionId===id).forEach(sc=>{
+      sc.status=status;
+      Object.values(S.docs).filter(d=>d.sceneId===sc.id).forEach(stampDoc);
+    });
+    Object.values(S.docs).filter(d=>d.missionId===id&&!d.sceneId).forEach(stampDoc);
+  } else if (type==='scene'){
+    S.scenes[id].status=status;
+    Object.values(S.docs).filter(d=>d.sceneId===id).forEach(stampDoc);
+  } else {
+    stampDoc(S.docs[id]);
+  }
+  if (type==='doc'&&id===curId) document.getElementById('doc-status').value=status;
+  persist(); renderNav(); schedSync(5000);
+}
+
+function renameItem(type,id){
+  const obj=type==='mission'?S.missions[id]:S.scenes[id]; if(!obj) return;
+  openModal('RENAME',`<div class="mf"><label class="ml">NAME</label><input class="mi" id="m-rn" value="${esc(obj.name)}"></div>`,()=>{
+    const v=document.getElementById('m-rn').value.trim();
+    if(!v) return false;
+    obj.name=v; persist(); renderNav();
+  });
+}
+function editScene(id){
+  const sc=S.scenes[id]; if(!sc) return;
+  const existingDate=sc.startedAt?new Date(sc.startedAt).toISOString().slice(0,10):'';
+  openModal('EDIT SCENE',`
+    <div class="mf"><label class="ml">SCENE NAME</label><input class="mi" id="sc-en" value="${esc(sc.name)}"></div>
+    <div class="mf"><label class="ml">STARTED (optional)</label><input class="mi" id="sc-ed" type="date" value="${existingDate}" placeholder="Leave blank if unknown"></div>
+  `,()=>{
+    const n=document.getElementById('sc-en').value.trim();
+    if(!n){alert('Please enter a scene name.');return false;}
+    const dv=document.getElementById('sc-ed').value;
+    const ts=dv?new Date(dv+'T00:00:00').getTime():null;
+    sc.name=n;
+    sc.startedAt=ts||null;
+    persist(); renderNav();
+    if(curView==='scene'&&curViewId===id) openScene(id);
+  });
+}
+function delMission(id){
+  const m = S.missions[id]; if(!m) return;
+  const scIds = Object.values(S.scenes).filter(sc=>sc.missionId===id).map(sc=>sc.id);
+  const dIds = Object.values(S.docs).filter(d=>d.missionId===id).map(d=>d.id);
+  let msg = `Delete mission "${m.name}"? This cannot be undone.`;
+  if(scIds.length||dIds.length) msg += `\n\nThis will also permanently delete ${scIds.length} scene(s) and ${dIds.length} sim(s).`;
+  if(!confirm(msg)) return;
+  dIds.forEach(did=>{ delete S.docs[did]; });
+  scIds.forEach(sid=>{ delete S.scenes[sid]; });
+  delete S.missions[id];
+  if((curId && !S.docs[curId])||(curViewId===id)){
+    curId=null; curView=null; curViewId=null;
+    showDashboard();
+  }
+  persist(); renderNav();
+}
+
+function delScene(id){
+  const sc = S.scenes[id]; if(!sc) return;
+  const dIds = Object.values(S.docs).filter(d=>d.sceneId===id).map(d=>d.id);
+  let msg = `Delete scene "${sc.name}"? This cannot be undone.`;
+  if(dIds.length) msg += `\n\nThis will also permanently delete ${dIds.length} sim(s).`;
+  if(!confirm(msg)) return;
+  dIds.forEach(did=>{ delete S.docs[did]; });
+  delete S.scenes[id];
+  if((curId && !S.docs[curId])||(curViewId===id)){
+    curId=null; curView=null; curViewId=null;
+    showDashboard();
+  }
+  persist(); renderNav();
+}
+
+function delDoc(id){
+  if(!confirm('Delete this sim? This cannot be undone.')) return;
+  if(curId===id){ curId=null; curView=null; curViewId=null; showDashboard(); }
+  delete S.docs[id]; persist(); renderNav();
+}
+
+// ================================================================
+// MODAL
+// ================================================================
+function openModal(title, body, cb, opts={}) {
+  document.getElementById('mo-title').textContent = title;
+  document.getElementById('mo-body').innerHTML = body;
+  document.getElementById('mo').classList.remove('hidden');
+  modalCb = cb;
+  const ma = document.getElementById('mo-actions');
+  let btns = opts.noCancel ? '' : `<button class="btn btn-s" onclick="closeModal()">Cancel</button>`;
+  (opts.extra||[]).forEach(b => {
+    btns += `<button class="btn ${b.cls||'btn-s'}" onclick="${b.fn}">${b.label}</button>`;
+  });
+  if (cb) btns += `<button class="btn btn-p" onclick="doModal()">${opts.ok||'OK'}</button>`;
+  ma.innerHTML = btns;
+  setTimeout(()=>{const f=document.querySelector('#mo-body input,#mo-body select');if(f)f.focus();},60);
+  // Style radio groups can appear in the intro modal or Settings — sync their state
+  if (body.indexOf('sty-sw') !== -1) setTimeout(updateStyleMenu, 0);
+}
+function closeModal(){document.getElementById('mo').classList.add('hidden');modalCb=null;}
+function doModal(){if(modalCb&&modalCb()===false)return;closeModal();}
+
+// ================================================================
+// NEW ITEM MODALS
+// ================================================================
+function showNewMission(preYear){
+  const y=preYear||new Date().getFullYear();
+  openModal('NEW MISSION',`
+    <div class="mf"><label class="ml">MISSION NAME</label><input class="mi" id="m-n" placeholder="e.g. The Artemis Initiative"></div>
+    <div class="mf"><label class="ml">OOC YEAR</label><input class="mi" id="m-y" value="${y}" placeholder="e.g. 2026"></div>
+    <div class="mf"><label class="ml">MISSION TYPE</label>
+      <select class="ms" id="m-st">
+        <option value="">Regular (default)</option>
+        <option value="mission">Mission</option>
+        <option value="shoreleave">Shore Leave</option>
+        <option value="academy">Academy</option>
+      </select>
+    </div>
+  `,()=>{
+    const n=document.getElementById('m-n').value.trim();
+    const yr=document.getElementById('m-y').value.trim()||String(new Date().getFullYear());
+    const st=document.getElementById('m-st').value;
+    if(!n){alert('Please enter a mission name.');return false;}
+    mkMission(n,yr,st||null);
+  });
+}
+function showNewScene(missionId){
+  const opts=Object.values(S.missions).map(m=>
+    `<option value="${m.id}" ${m.id===missionId?'selected':''}>${esc(m.name)} (${m.year})</option>`
+  ).join('');
+  if(!opts){openModal('NO MISSIONS','<p style="color:var(--dim);font-size:0.87rem">Create a mission first.</p>',()=>{});return;}
+  openModal('NEW SCENE',`
+    <div class="mf"><label class="ml">SCENE NAME</label><input class="mi" id="sc-n" placeholder="e.g. First Contact"></div>
+    <div class="mf"><label class="ml">MISSION</label><select class="ms" id="sc-m">${opts}</select></div>
+    <div class="mf"><label class="ml">STARTED (optional)</label><input class="mi" id="sc-d" type="date" placeholder="Leave blank if unknown"></div>
+  `,()=>{
+    const n=document.getElementById('sc-n').value.trim();
+    const m=document.getElementById('sc-m').value;
+    const dv=document.getElementById('sc-d').value;
+    if(!n){alert('Please enter a scene name.');return false;}
+    const ts=dv?new Date(dv+'T00:00:00').getTime():null;
+    mkScene(n,m,ts||null);
+  });
+}
+function _newDocMissionOpts(selectedId) {
+  return Object.values(S.missions)
+    .filter(m => m.status !== 'archived')
+    .sort((a,b) => a.name.localeCompare(b.name))
+    .map(m=>`<option value="${m.id}" ${m.id===selectedId?'selected':''}>${esc(m.name)} (${m.year})</option>`)
+    .join('') + '<option value="__new_mission__">+ Create new mission…</option>';
+}
+function _newDocSceneOpts(selectedId, missionId) {
+  // Only show scenes belonging to the selected mission (not archived)
+  const scenes = missionId
+    ? Object.values(S.scenes).filter(sc => sc.missionId === missionId && sc.status !== 'archived')
+    : [];
+  return '<option value="">— None —</option>' +
+    scenes.sort((a,b) => a.name.localeCompare(b.name))
+      .map(sc => `<option value="${sc.id}" ${sc.id===selectedId?'selected':''}>${esc(sc.name)}</option>`)
+      .join('') + '<option value="__new_scene__">+ Create new scene…</option>';
+}
+function _onNewDocMissionChange(sel) {
+  if (sel.value === '__new_mission__') {
+    const name = prompt('Mission name:','');
+    if (!name) { sel.value = Object.keys(S.missions).find(id => S.missions[id].status !== 'archived') || ''; }
+    else {
+      const year = prompt('Year (e.g. 2401):','2401') || '2401';
+      mkMission(name.trim(), year.trim());
+      const newId = Object.keys(S.missions).slice(-1)[0];
+      sel.innerHTML = _newDocMissionOpts(newId);
+      sel.value = newId;
+    }
+  }
+  // Always refresh scene list to match selected mission
+  const mId = sel.value;
+  const scSel = document.getElementById('d-s'); if (!scSel) return;
+  scSel.innerHTML = _newDocSceneOpts('', mId);
+}
+function _onNewDocSceneChange(sel) {
+  if (sel.value !== '__new_scene__') return;
+  const mId = document.getElementById('d-m')?.value || '';
+  const name = prompt('Scene name:','');
+  if (!name) { sel.value = ''; return; }
+  mkScene(name.trim(), mId || null);
+  const newId = Object.keys(S.scenes).slice(-1)[0];
+  sel.innerHTML = _newDocSceneOpts(newId, mId);
+  sel.value = newId;
+}
+function showNewDoc(sceneId,missionId,preTagCharId){
+  // Infer mission from scene when not supplied (e.g. right-click context menu)
+  const defaultMission = missionId || (sceneId && S.scenes[sceneId]?.missionId) || Object.values(S.missions).find(m=>m.status!=='archived')?.id || '';
+  const mOpts = _newDocMissionOpts(defaultMission);
+  const scOpts = _newDocSceneOpts(sceneId, defaultMission);
+  const tmplOpts='<option value="">— Blank sim —</option>'+(S.templates||[]).map(t=>
+    `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  openModal('NEW SIM',`
+    <div class="mf"><label class="ml">SIM TITLE</label><input class="mi" id="d-t" placeholder="e.g. JP: The Briefing"></div>
+    <div class="mf"><label class="ml">MISSION</label><select class="ms" id="d-m" onchange="_onNewDocMissionChange(this)">${mOpts||'<option value="__new_mission__">+ Create new mission…</option>'}</select></div>
+    <div class="mf"><label class="ml">SCENE (optional)</label><select class="ms" id="d-s" onchange="_onNewDocSceneChange(this)">${scOpts}</select></div>
+    <div class="mf"><label class="ml">POST TYPE</label>
+      <select class="ms" id="d-pt">
+        <option value="">Regular</option>
+        <option value="jp">JP (Joint Post)</option>
+        <option value="solo">Solo</option>
+      </select>
+    </div>
+    <div class="mf"><label class="ml">FROM TEMPLATE (optional)</label><select class="ms" id="d-tmpl" onchange="_onTmplChange(this)">${tmplOpts}</select></div>
+  `,()=>{
+    const t=document.getElementById('d-t').value.trim() || 'Character - Title';
+    const m=document.getElementById('d-m').value;
+    const sc=document.getElementById('d-s').value;
+    const pt=document.getElementById('d-pt').value;
+    const tmplId=document.getElementById('d-tmpl').value;
+    const tmpl=(S.templates||[]).find(x=>x.id===tmplId);
+    if(m==='__new_mission__'||m===''){alert('Please select or create a mission first.');return false;}
+    const id=uid();
+    const preChar = preTagCharId && S.characters ? S.characters[preTagCharId] : null;
+    const initMyChars = preChar ? [preChar.name] : [];
+    if (preChar) {
+      if (!S.settings.myChars) S.settings.myChars = [];
+      if (!S.settings.myChars.includes(preChar.name)) S.settings.myChars.push(preChar.name);
+    }
+    S.docs[id]={id,title:t,content:tmpl?tmpl.content:'',missionId:m||null,sceneId:(sc&&sc!=='__new_scene__')?sc:null,
+      chars:[],myChars:initMyChars,charColors:{},status:'active',postType:pt||null,postedAt:null,
+      snapshots:[],createdAt:Date.now(),updatedAt:Date.now()};
+    persist(); renderNav(); openDoc(id);
+  });
+}
+function _onTmplChange(sel) {
+  const tmpl = (S.templates||[]).find(x=>x.id===sel.value);
+  const titleInput = document.getElementById('d-t');
+  if (tmpl && tmpl.title && titleInput) titleInput.value = tmpl.title;
+}
+function onStatusChange(){
+  if(!curId) return;
+  const doc = S.docs[curId]; if(!doc) return;
+  const newStatus = document.getElementById('doc-status').value;
+  doc.status = newStatus;
+  if (newStatus === 'active' && doc.postedAt) {
+    doc.postedAt = null;
+    document.getElementById('doc-posted-input').value = '';
+    updatePostedMeta(doc);
+  }
+  persist(); renderNav();
+  updateTitleColor(doc);
+  updateStatusStyle(doc);
+}
+
+// ================================================================
+// SETTINGS
+// ================================================================
+function renderVersionHistory() {
+  return VERSIONS.slice().reverse().map(v => {
+    const isPending = v.version === 'pending';
+    const label = isPending ? `Since v${APP_VERSION} — Unreleased` : `v${v.version} — ${v.date}`;
+    return `<div style="margin-bottom:14px">
+      <div style="font-size:0.73rem;font-weight:bold;color:${isPending?'var(--amber2)':'var(--text)'};margin-bottom:4px">${label}</div>
+      <ul style="margin:0;padding-left:16px;font-size:0.72rem;color:var(--dim);line-height:1.7">
+        ${v.changes.map(c=>`<li>${c}</li>`).join('')}
+      </ul>
+    </div>`;
+  }).join('');
+}
+
+function openSettings() {
+  const p = getPrefs();
+  const theme = S.settings.theme || 'dark';
+  const skin = getStyle().skin;
+  openModal('SETTINGS', `
+    <div class="msec">VERSION</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-top:8px;margin-bottom:4px">
+      <span style="font-size:1.4rem;font-weight:bold;color:var(--accent)">v${APP_VERSION}</span>
+      <span style="font-size:0.73rem;color:var(--dim)">LCARS SB118 Writing Tool</span>
+      <button class="btn btn-s" style="margin-left:auto" onclick="document.getElementById('ver-hist').classList.toggle('hidden')">Changelog ${ic('chevron-down')}</button>
+    </div>
+    <div id="ver-hist" class="hidden" style="margin-top:8px;max-height:220px;overflow-y:auto;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px">
+      ${renderVersionHistory()}
+    </div>
+
+    <div class="msec" style="margin-top:18px">DATA MANAGEMENT</div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
+      <div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-s" style="flex:1" onclick="exportData()">${ic('download')} Backup Data</button>
+          <button class="btn btn-s" style="flex:1" onclick="importData()">${ic('upload')} Restore Data</button>
+        </div>
+        <div style="font-size:0.73rem;color:var(--dim);margin-top:5px">Saves or restores all your data — Sims, Character Manifest, and preferences. Use Backup regularly to keep a copy outside the browser. <strong>Restore replaces all current data.</strong></div>
+      </div>
+    </div>
+
+    <div class="msec" style="margin-top:18px">DANGER ZONE</div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px;padding:12px;border:1px solid var(--border);border-radius:6px">
+      <div>
+        <button class="btn btn-s" onclick="confirmEraseData()">${ic('trash')} Erase all my sims and characters</button>
+        <div style="font-size:0.73rem;color:var(--dim);margin-top:5px">Empties this copy of LCARS — every mission, scene, sim and character. ${isCloud() ? 'Your account stays, and the erase is synced, so it clears on your other devices too.' : 'Applies to this browser only.'} Cannot be undone. <strong>Take a backup first.</strong></div>
+      </div>
+      ${isCloud() ? `
+      <div style="border-top:1px solid var(--border,#333);padding-top:12px">
+        <button class="btn btn-s" onclick="confirmDeleteAccount()">${ic('alert')} Delete my account and all data</button>
+        <div style="font-size:0.73rem;color:var(--dim);margin-top:5px">Removes your sims, characters and revision history from the server and wipes this device's copy. Your Writer ID stays registered as a login. Cannot be undone.</div>
+      </div>` : ''}
+    </div>
+
+    <div class="msec" style="margin-top:18px">YOUR ACCOUNT</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+      ${isCloud() ? `
+      <div style="font-size:0.8rem;line-height:1.7">
+        Signed in as <strong>${getAuth().writerId||''}</strong>. Your work saves to your account a few seconds after each change, and follows you to any device you sign in on.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-s" onclick="saveToCloud()">${ic('arrow-up')} Save now</button>
+        <button class="btn btn-s" onclick="cloudSignOut()">Sign out</button>
+        <span id="sync-status" style="font-size:0.73rem;color:var(--dim);margin-left:4px">${syncStatus.msg||''}</span>
+      </div>
+      <div style="font-size:0.71rem;color:var(--dim);line-height:1.5">
+        Signing out leaves your work on this device untouched. Your online copy is unaffected.
+      </div>
+      ` : `
+      <div style="font-size:0.8rem;line-height:1.7">
+        You are working <strong>offline on this device only</strong>. Nothing is sent anywhere, and your sims live in this browser alone &mdash; clearing browser data will erase them, so keep taking backups.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-p" onclick="closeModal();showAuthGate(true)">Set up an account</button>
+        <span id="sync-status" style="font-size:0.73rem;color:var(--dim)"></span>
+      </div>
+      <div style="font-size:0.71rem;color:var(--dim);line-height:1.5">
+        An account keeps your sims backed up automatically and available on any device. Your work on this device will be carried across.
+      </div>
+      `}
+    </div>
+
+    <div class="msec" style="margin-top:18px">UI PREFERENCES</div>
+    <div style="margin-top:8px;margin-bottom:10px">
+      <div class="ml" style="margin-bottom:5px">VISUAL STYLE</div>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <button class="btn btn-s st-btn${skin==='prime'?' btn-p':''}" onclick="setStyleFromSettings('prime',this,event)" style="flex:1">${ic('sparkles')} Delta Prime (${STYLE_VERSION})</button>
+        <button class="btn btn-s st-btn${skin==='classic'?' btn-p':''}" onclick="setStyleFromSettings('classic',this,event)" style="flex:1">${ic('layout-grid')} Classic LCARS (4.21)</button>
+      </div>
+      ${skin==='prime' ? `
+      <div id="sty-settings" style="display:flex;flex-direction:column;gap:12px;margin-bottom:10px">
+        ${styleControlsHtml()}
+      </div>
+      <div style="font-size:0.67rem;color:var(--dim);line-height:1.5;margin-bottom:10px">
+        <strong style="color:var(--amber)">Delta Prime is new in ${STYLE_VERSION}</strong> and still
+        being tuned — Classic LCARS stays available for now, and feedback on either is welcome.
+      </div>` : `
+      <div class="ml" style="margin-bottom:5px">THEME</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-s st-btn${theme==='dark'?' btn-p':''}" data-theme="dark" onclick="setThemeFromSettings('dark')" style="flex:1"><svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg> Dark</button>
+        <button class="btn btn-s st-btn${theme==='light'?' btn-p':''}" data-theme="light" onclick="setThemeFromSettings('light')" style="flex:1"><svg class="ic" aria-hidden="true"><use href="#i-sun"/></svg> Light</button>
+        <button class="btn btn-s st-btn${theme==='hc'?' btn-p':''}" data-theme="hc" onclick="setThemeFromSettings('hc')" style="flex:1"><svg class="ic" aria-hidden="true"><use href="#i-contrast"/></svg> High Contrast</button>
+      </div>`}
+    </div>
+    <div class="mrow">
+      <div class="mf">
+        <label class="ml">LINE SPACING</label>
+        <input class="mi" id="pf-ls" type="number" min="1" max="3" step="0.05" value="${p.lineSpacing}">
+      </div>
+      <div class="mf">
+        <label class="ml">EDITOR FONT (pt)</label>
+        <input class="mi" id="pf-efs" type="number" min="8" max="24" step="1" value="${p.editorFontSize}">
+      </div>
+      <div class="mf">
+        <label class="ml">UI FONT (px)</label>
+        <input class="mi" id="pf-ufs" type="number" min="10" max="22" step="1" value="${p.uiFontSize}">
+      </div>
+    </div>
+
+    <div class="mrow" style="margin-top:8px">
+      <div class="mf" style="flex:2">
+        <label class="ml">UI FONT</label>
+        <select class="mi" id="pf-uifont">
+          <option value="">Default (system font)</option>
+          ${GOOGLE_FONTS.map(f=>`<option value="${f}"${p.uiFont===f?' selected':''}>${f}</option>`).join('')}
+        </select>
+      </div>
+      <div class="mf" style="flex:2">
+        <label class="ml">EDITOR FONT</label>
+        <select class="mi" id="pf-editorfont" ${p.editorFontSameAsUI?'disabled':''}>
+          <option value="">Default (system font)</option>
+          ${GOOGLE_FONTS.map(f=>`<option value="${f}"${(!p.editorFontSameAsUI&&p.editorFont===f)?' selected':''}>${f}</option>`).join('')}
+        </select>
+      </div>
+      <div class="mf" style="flex:1;display:flex;align-items:flex-end;padding-bottom:6px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.73rem;color:var(--dim);cursor:pointer;white-space:nowrap">
+          <input type="checkbox" id="pf-ef-same" style="width:auto" ${p.editorFontSameAsUI?'checked':''} onchange="document.getElementById('pf-editorfont').disabled=this.checked;">
+          Same as UI
+        </label>
+      </div>
+    </div>
+
+    <div class="msec" style="margin-top:18px">SIM EDITOR PREFERENCES</div>
+
+    <div class="msub">VISUAL AIDS</div>
+    <div style="font-size:0.73rem;color:var(--dim);margin-bottom:10px">Colour-highlight special lines in the editor. Toggle each aid on/off from the toolbar or here.</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <input type="checkbox" id="pf-ao" ${p.actionOn!==false?'checked':''} style="width:auto;flex-shrink:0;margin-top:3px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;font-size:0.73rem;font-weight:bold;color:var(--text)">
+            Action Lines &nbsp;<code>::text::</code>
+            <input class="mi-color-sm" id="pf-ac" type="color" value="${p.actionAccent}">
+          </div>
+          <div style="font-size:0.73rem;color:var(--dim)">Lines surrounded by <code>::</code> are highlighted as stage directions or action beats.</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <input type="checkbox" id="pf-co" ${p.commsOn!==false?'checked':''} style="width:auto;flex-shrink:0;margin-top:3px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;font-size:0.73rem;font-weight:bold;color:var(--text)">
+            Comms Lines &nbsp;<code>=/\\=text=/\\=</code>
+            <input class="mi-color-sm" id="pf-cc" type="color" value="${p.commsAccent}">
+          </div>
+          <div style="font-size:0.73rem;color:var(--dim)">Lines surrounded by <code>=/\\=</code> are highlighted as communications or transmissions.</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <input type="checkbox" id="pf-to" ${p.thoughtOn!==false?'checked':''} style="width:auto;flex-shrink:0;margin-top:3px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;font-size:0.73rem;font-weight:bold;color:var(--text)">
+            Thought Lines &nbsp;<code>oO text Oo</code>
+            <input class="mi-color-sm" id="pf-tc" type="color" value="${p.thoughtAccent}">
+          </div>
+          <div style="font-size:0.73rem;color:var(--dim)">Lines surrounded by <code>oO…Oo</code> are highlighted. Italicised when Auto-Formatting is enabled.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="msub" style="margin-top:14px">TOOLBAR</div>
+    <div class="mrow" style="margin-top:6px">
+      <div class="mf">
+        <label class="ml">MARKER BUTTONS</label>
+        <select class="ms" id="pf-ml">
+          <option value="dropdown" ${p.markerLayout!=='buttons'?'selected':''}>Insert ▾ dropdown (compact)</option>
+          <option value="buttons"  ${p.markerLayout==='buttons'?'selected':''}>Individual buttons (expanded)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="msub" style="margin-top:14px">AUTO-FORMATTING</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <input type="checkbox" id="pf-abn" ${p.autoBoldNames?'checked':''} style="width:auto;flex-shrink:0;margin-top:3px">
+        <div>
+          <div style="font-size:0.73rem;font-weight:bold;color:var(--text)">Bold Names</div>
+          <div style="font-size:0.73rem;color:var(--dim)">Automatically bolds character names when detected at the start of a line (e.g. <code>Name:</code>). Formatting persists in copy-paste.</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <input type="checkbox" id="pf-ti" ${p.thoughtItalic?'checked':''} style="width:auto;flex-shrink:0;margin-top:3px">
+        <div>
+          <div style="font-size:0.73rem;font-weight:bold;color:var(--text)">Italicize Thoughts</div>
+          <div style="font-size:0.73rem;color:var(--dim)">Automatically italicizes lines marked with <code>oO…Oo</code>. Formatting persists in copy-paste.</div>
+        </div>
+      </div>
+    </div>
+  `, () => {
+    const ls = parseFloat(document.getElementById('pf-ls').value);
+    const efs = parseInt(document.getElementById('pf-efs').value);
+    const ufs = parseInt(document.getElementById('pf-ufs').value);
+    const ac = document.getElementById('pf-ac').value;
+    const cc = document.getElementById('pf-cc').value;
+    const tc = document.getElementById('pf-tc').value;
+    const ao = document.getElementById('pf-ao').checked;
+    const co = document.getElementById('pf-co').checked;
+    const to_ = document.getElementById('pf-to').checked;
+    const abn = document.getElementById('pf-abn').checked;
+    const ti = document.getElementById('pf-ti').checked;
+    const ml = document.getElementById('pf-ml').value;
+    const uiFont = document.getElementById('pf-uifont').value.trim();
+    const efSame = document.getElementById('pf-ef-same').checked;
+    const editorFont = efSame ? '' : document.getElementById('pf-editorfont').value.trim();
+    if (isNaN(ls)||isNaN(efs)||isNaN(ufs)) { alert('Please enter valid numbers.'); return false; }
+    // Merge so toggles set outside this modal (boldLocations, italicOOC, etc.) are preserved
+    S.settings.prefs = Object.assign({}, S.settings.prefs, {
+      lineSpacing:ls, editorFontSize:efs, uiFontSize:ufs,
+      uiFont, editorFont, editorFontSameAsUI:efSame,
+      actionAccent:ac, commsAccent:cc, thoughtAccent:tc,
+      actionOn:ao, commsOn:co, thoughtOn:to_,
+      autoBoldNames:abn, thoughtItalic:ti, markerLayout:ml
+    });
+    applyPrefs();
+    persist();
+    if (curId) transformNow();
+  }, { ok:'Save', extra:[{label:'Reset to Defaults', cls:'btn-s', fn:'resetPrefsForm()'}] });
+}
+
+// ================================================================
+// ARCHIVE TOGGLE
+// ================================================================
+function toggleShowArchived(){
+  showArchived=!showArchived;
+  const btn=document.getElementById('btn-archive-toggle');
+  btn.classList.toggle('btn-p',showArchived);
+  btn.classList.toggle('btn-s',!showArchived);
+  renderNav();
+}
+
+// ================================================================
+// KEYBOARD SHORTCUTS
+// ================================================================
+document.addEventListener('keydown',e=>{
+  const inEditor=e.target.id==='editor';
+  if(e.key==='Escape'){
+    closeModal();hideCtx();
+    document.getElementById('char-manifest').classList.add('hidden');
+    return;
+  }
+  if(e.key==='Enter'&&!document.getElementById('mo').classList.contains('hidden')){
+    if(!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)){doModal();e.preventDefault();}
+    return;
+  }
+  // Ctrl/Cmd+S — save a snapshot + sync (works whenever a sim is open, not just editor focus)
+  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&(e.key==='s'||e.key==='S')){
+    if(curId){e.preventDefault();manualSaveAndSync();}
+    return;
+  }
+  if(!inEditor) return;
+  // Tab = indent / Shift+Tab = outdent (blocked in Academy sims)
+  const acad = curId && isAcademyDoc(S.docs[curId]);
+  if(e.key==='Tab'){
+    e.preventDefault();
+    if(!acad){ if(e.shiftKey) doOutdent(); else doIndent(); }
+    return;
+  }
+  if(e.ctrlKey&&!e.shiftKey){
+    if(e.key==='b'){e.preventDefault();if(!acad)ec('bold');}
+    if(e.key==='i'){e.preventDefault();if(!acad)ec('italic');}
+    if(e.key==='k'){e.preventDefault();if(!acad)doLink();}
+    // Intercept Ctrl+Z when there are pending indent undo entries
+    if(e.key==='z'&&_indentUndo.length){
+      const entry = _indentUndo.pop();
+      // Verify el is still in the editor before applying
+      if(entry.el && document.getElementById('editor').contains(entry.el)){
+        e.preventDefault();
+        setIndentLevel(entry.el, entry.fromLevel);
+        schedSave();
+      }
+    }
+  }
+});
+
+// ================================================================
+// CHARACTER MANIFEST
+// ================================================================
+const TYPE_ORDER = {'Primary':0,'Secondary':1,'PNPC':2,'MSPNPC':3,'NPC':4,'':5};
+const TYPE_CSS   = {'Primary':'cmt-primary','Secondary':'cmt-secondary','PNPC':'cmt-pnpc','MSPNPC':'cmt-mspnpc','NPC':'cmt-npc'};
+
+const DIVISION_COLORS = {
+  'Command':'#cc2233','Operations':'#ffaa00','Security/Tactical':'#ffaa00',
+  'Science':'#3366cc','Medical':'#3366cc','Diplomat':'#8844bb',
+  'Marines':'#3cb521','Other':'#667788'
+};
+
+const RIBBON_CATALOG = {
+  'General': [
+    {name:'Purple Heart',img:'Awards ServiceRibbons PurpleHeart 2011.jpg'},
+    {name:'Prisoner of War Ribbon',img:'Awards ServiceRibbons POW 2011.jpg'},
+    {name:"Captain's Commendation",img:'Awards ServiceRibbons Commendation.jpg'},
+    {name:"Explorer's Ribbon",img:'Awards ServiceRibbons Explorers 2011.jpg'},
+    {name:'Scientific Discovery Ribbon',img:'Scientific Discovery Ribbon.png'},
+    {name:'Medical Science Ribbon',img:'Awards ServiceRibbons medicalscience 2013.jpg'},
+    {name:'Diplomacy Ribbon',img:'Awards ServiceRibbons diplomacyribbon 2014.jpg'},
+    {name:'Innovation Ribbon',img:'Awards ServiceRibbons Innovationribbon 2014.jpg'},
+    {name:'Leadership Excellence Ribbon',img:'Leadership Excellence Ribbon.png'},
+    {name:'Defense of Temporal Flow Ribbon',img:'Awards ServiceRibbons TemporalFlow 2011.jpg'},
+    {name:'Joint Meritorious Unit Award',img:'Awards ServiceRibbons JointMeritoriousUnit 2011.jpg'},
+    {name:'First Contact Ribbon',img:'Awards ServiceRibbons FirstContact 2011.jpg'},
+    {name:'Extended Service Ribbon',img:'Awards ServiceRibbons ExtendedService 2011.jpg'},
+    {name:'Peacekeeper Service Ribbon',img:'Awards ServiceRibbons Peacekeeper 2011.jpg'},
+    {name:'Intelligence Star',img:'Intelligence Star.png'},
+    {name:'Recovery Ribbon',img:'Ribbon-Recovery Ribbon.png'},
+    {name:'Unity Ribbon',img:'Unity Ribbon.png'},
+    {name:'Starfleet Investigation Ribbon',img:'Starfleet Investigation Ribbon.png'},
+    {name:'Superior Support Ribbon',img:'Superior Support Ribbon.png'},
+    {name:'Excellence In Adaptability Ribbon',img:'Excellence In Adaptability Ribbon.png'},
+    {name:'Spliced Mainbrace Distinction',img:'Spliced Mainbrace Distinction.png'},
+    {name:'Wilderness Deployment Ribbon',img:'Wilderness Deployment Ribbon.png'},
+    {name:'Caretaker of the Prime Directive Ribbon',img:'Caretaker of the Prime Directive Ribbon.png'},
+    {name:'Cultural Harmony Ribbon',img:'Cultural Harmony Ribbon.png'},
+  ],
+  'Service Milestones': [
+    {name:'Starfleet Academy Graduate Ribbon',img:'Awards ServiceRibbons Graduate.jpg'},
+    {name:'Maiden Voyage Ribbon',img:'Maiden Voyage Ribbon.png'},
+    {name:'Legacy Ribbon',img:'Legacy Ribbon.png'},
+    {name:'Department Chief Ribbon',img:'Awards ServiceRibbons DepartmentChief.jpg'},
+    {name:'First Officer Ribbon',img:'First Officer Ribbon.png'},
+    {name:'Starship Commander Ribbon',img:'Awards ServiceRibbons Starship Commander.jpg'},
+  ],
+  'Gallantry & Heroism': [
+    {name:'Federation Cross',img:'Awards ServiceRibbons FederationCross 2011.jpg'},
+    {name:'Starfleet Medal of Valour',img:'Starfleet Medal of Valour.png'},
+    {name:'Distinguished Service Ribbon',img:'Awards ServiceRibbons DistinguishedService 2011.jpg'},
+    {name:'Starfleet Medal of Commendation',img:'Starfleet Medal of Commendation.png'},
+    {name:'Silver Star',img:'Awards ServiceRibbons SilverStar 2011.jpg'},
+    {name:'Good Conduct Ribbon',img:'Awards ServiceRibbons GoodConduct 2011.jpg'},
+    {name:'Legion of Merit',img:'Awards ServiceRibbons LegionOfMerit 2011.jpg'},
+    {name:'UFP Medal of Freedom',img:'Awards ServiceRibbons MedalOfFreedom 2011.jpg'},
+  ],
+  'Lifesaving': [
+    {name:'Gold Lifesaving Ribbon',img:'Awards ServiceRibbons LifesavingGold 2011.jpg'},
+    {name:'Silver Lifesaving Ribbon',img:'Awards ServiceRibbons LifesavingSilver 2011.jpg'},
+    {name:'Lifesaving Ribbon',img:'Awards ServiceRibbons LifesavingBasic 2011.jpg'},
+    {name:'Trauma Support Advocate',img:'Ribbon-Trauma Support Advocate.png'},
+  ],
+  'Campaign': [
+    {name:'Quantum Reality Service Ribbon',img:'Quantum Reality Service Ribbon.png'},
+    {name:'Galactic War with the Borg Service Medal',img:'Awards ServiceRibbons WarWithBorg 2011.jpg'},
+    {name:'Changeling Campaign Ribbon',img:'Changeling Campaign Ribbon.png'},
+    {name:'Frontier Day Ribbon',img:'Frontier Day Ribbon.png'},
+    {name:'Ithassa Region Campaign Medal',img:'Awards ServiceRibbons Ithassa 2011.jpg'},
+    {name:'Romulan Campaign Medal',img:'Awards ServiceRibbons RomulanCampaign 2011.jpg'},
+    {name:'Tholian Campaign Ribbon',img:'Tholian Campaign Ribbon.png'},
+    {name:'Gorn Campaign Ribbon',img:'Awards ServiceRibbons GornCampaign 2011.jpg'},
+    {name:'Maquis Reborn Service Medal',img:'Awards ServiceRibbons Maquis Reborn.jpg'},
+    {name:'Orion Syndicate Service Medal',img:'Orion Syndicate Service Medal.png'},
+    {name:'Operation Safe Harbor Service Medal',img:'Operation Safe Harbor Service Medal.png'},
+    {name:"Par'tha Expanse Colonization Ribbon",img:"Par'tha Expanse Colonization Ribbon.png"},
+    {name:'Defense of The Isles',img:'Defense of The Isles.png'},
+    {name:'Vaadwaur Invasion Campaign Ribbon',img:'Awards-ServiceRibbon-VaadwaurInvasion.jpg'},
+    {name:'Hobus Heroism Ribbon',img:'Awards ServiceRibbons HobusHeroism 2011.jpg'},
+    {name:'Klingon Invasion Ribbon',img:'KlingonInvasion.jpg'},
+    {name:'Prometheus Ribbon',img:'Awards ServiceRibbons Prometheus Incident 2014.jpg'},
+    {name:'War of Shadows Ribbon',img:'Awards ServiceRibbons War of Shadows 2016.png'},
+    {name:'Warp XV Drive Pioneer',img:'Warp XV Drive Pioneer.png'},
+    {name:'Denali Invitational Ribbon',img:'Denali Invitational Ribbon.png'},
+    {name:'Gorn Invasion Ribbon',img:'GornInvasion.jpg'},
+    {name:'Grendellai Operations Ribbon',img:'GrendellaiRibbon.jpg'},
+    {name:'Bajoran Campaign Ribbon',img:'Awards ServiceRibbons battleforbajor 2011.jpg'},
+    {name:'Gateway Ribbon',img:'Gateway.jpg'},
+    {name:'Project Capstone Ribbon',img:'Project Capstone Ribbon.png'},
+  ],
+};
+const RIBBON_IMG_BASE = 'https://wiki.starbase118.net/wiki/Special:FilePath/';
+const SR_RANKS = [
+  '','Cadet, 4th Class','Cadet, 3rd Class','Cadet, 2nd Class','Cadet, 1st Class',
+  'Crewman','Petty Officer','Chief Petty Officer',
+  'Ensign','Lieutenant JG','Lieutenant','Lt. Commander',
+  'Commander','Captain','Fleet Captain','Commodore',
+  'Rear Admiral','Vice Admiral','Admiral','Fleet Admiral','Civilian'
+];
+const SR_DIVISIONS = ['Black','Blue','Gold','Green','Red','Silver','Teal'];
+const SR_RANK_CODE = {
+  'Cadet, 4th Class':'cadet1','Cadet, 3rd Class':'cadet2',
+  'Cadet, 2nd Class':'cadet3','Cadet, 1st Class':'cadet4',
+  'Crewman':'crew1','Petty Officer':'po1','Chief Petty Officer':'cpo',
+  'Ensign':'ens','Lieutenant JG':'ltjg','Lieutenant':'lt',
+  'Lt. Commander':'ltcmdr','Commander':'cmdr','Captain':'cpt',
+  'Fleet Captain':'fcpt','Commodore':'cdore',
+  'Rear Admiral':'radm','Vice Admiral':'vadm',
+  'Admiral':'adm','Fleet Admiral':'fadm',
+};
+function srRankImgFile(rank, division) {
+  const code = SR_RANK_CODE[rank];
+  if (!code) return '';
+  return `PICstyle-${code}_${(division || 'Red').toLowerCase()}.png`;
+}
+const SR_INSIGNIA_MAP = {
+  'Cadet, 4th Class':'Cadet Fourth Class','Cadet, 3rd Class':'Cadet Third Class',
+  'Cadet, 2nd Class':'Cadet Second Class','Cadet, 1st Class':'Cadet First Class',
+  'Lt. Commander':'Lieutenant Commander','Fleet Admiral':'Fleet Admiral',
+};
+function srInsigniaName(rank) { return SR_INSIGNIA_MAP[rank] || rank; }
+
+const RANK_PIPS = {
+  'Civilian':[],'Cadet':[],
+  'Crewman':[],'Petty Officer':[],'Chief Petty Officer':[],
+  'Ensign':[{t:'full'}],
+  'Lieutenant JG':[{t:'hollow'},{t:'full'}],
+  'Lieutenant':[{t:'full'},{t:'full'}],
+  'Lt. Commander':[{t:'hollow'},{t:'full'},{t:'full'}],
+  'Commander':[{t:'full'},{t:'full'},{t:'full'}],
+  'Captain':[{t:'full'},{t:'full'},{t:'full'},{t:'full'}],
+  'Fleet Captain':[{t:'full'},{t:'full'},{t:'full'},{t:'full'}],
+  'Commodore':[{t:'full'},{t:'full'},{t:'full'},{t:'full'}],
+  'Admiral':[{t:'full'},{t:'full'},{t:'full'},{t:'full'}],
+  'Fleet Admiral':[{t:'full'},{t:'full'},{t:'full'},{t:'full'}],
+};
+
+function renderPips(rank) {
+  const pips = RANK_PIPS[rank];
+  if (!pips || !pips.length) return '';
+  const useBox = rank==='Admiral'||rank==='Fleet Admiral';
+  const inner = pips.map(p=>`<span class="pip ${p.t}"></span>`).join('');
+  return useBox
+    ? `<span class="pip-box">${inner}</span>`
+    : `<span class="pip-row">${inner}</span>`;
+}
+
+function getDivColor(c) {
+  if (c.divisionColor) return c.divisionColor;
+  return DIVISION_COLORS[c.division]||'#667788';
+}
+
+function getCharInitials(name) {
+  return (name||'').split(/\s+/).map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
+}
+
+function updateManifestThemeBtn() {
+  const t = S.settings?.theme || 'dark';
+  const btn = document.getElementById('cm-theme-btn');
+  if (btn) btn.innerHTML = ic(t === 'light' ? 'sun' : t === 'hc' ? 'contrast' : 'moon');
+}
+
+function _setManifestToggleBtn(manifestOpen) {
+  const btn = document.getElementById('btn-manifest-toggle');
+  if (!btn) return;
+  if (manifestOpen) {
+    btn.innerHTML = ic('pencil') + ' Sim Editor';
+    btn.onclick = closeManifest;
+  } else {
+    btn.innerHTML = ic('user') + ' Character Manifest';
+    btn.onclick = openManifest;
+  }
+}
+
+function openManifest() {
+  if (curId) flushSave(); // prune stale myChars before auto-seeding manifest
+  if (!S.characters) S.characters = {};
+  // Auto-seed from myChars (checks primary name + aliases)
+  (S.settings.myChars||[]).forEach(name => {
+    if (!findCharByAnyName(name)) {
+      const id = uid();
+      S.characters[id] = {id, name, aliases:[], charType:'', rank:'', division:'', divisionColor:'',
+        species:'', pictureDataUrl:null, wikiUrl:'', notes:'', addedAt:Date.now(), updatedAt:Date.now()};
+    }
+  });
+  persist();
+  _manifestActiveTab = 'sims';
+  _srEditMode = false;
+  _ribbonEditMode = false;
+  renderManifestList();
+  document.getElementById('char-manifest').classList.remove('hidden');
+  updateManifestThemeBtn();
+  // Auto-open the alphabetically first Primary character
+  const firstPrimary = Object.values(S.characters)
+    .filter(c => c.charType === 'Primary')
+    .sort((a, b) => a.name.localeCompare(b.name))[0];
+  if (firstPrimary) selectCharacter(firstPrimary.id);
+}
+
+function closeManifest() {
+  document.getElementById('char-manifest').classList.add('hidden');
+}
+
+function openManifestToChar(charId) {
+  openManifest();
+  if (S.characters && S.characters[charId]) {
+    _curCharId = charId;
+    _manifestActiveTab = 'sims';
+    _srEditMode = false;
+    _ribbonEditMode = false;
+    renderManifestList();  // re-render to show active state
+    renderCharProfile(charId);
+  }
+}
+
+function refreshManifest() {
+  renderManifestList();
+  if (_curCharId) renderCharProfile(_curCharId);
+}
+
+// ── Helpers ──
+
+function getAllNamesForChar(c) {
+  return [c.name, ...(c.aliases||[])].filter(Boolean);
+}
+
+function findCharByAnyName(name) {
+  const nl = name.toLowerCase();
+  return Object.values(S.characters||{}).find(c =>
+    getAllNamesForChar(c).some(n => n.toLowerCase()===nl)
+  );
+}
+
+function charDocsForChar(c) {
+  const names = getAllNamesForChar(c).map(n=>n.toLowerCase());
+  return Object.values(S.docs).filter(d =>
+    (d.myChars||[]).some(n => names.includes(n.toLowerCase()))
+  );
+}
+
+function charSimCount(c) {
+  if (typeof c === 'string') return Object.values(S.docs).filter(d=>(d.myChars||[]).includes(c)).length;
+  return charDocsForChar(c).length;
+}
+
+// ── List ──
+
+function addNewCharacter() {
+  openModal('NEW CHARACTER',`
+    <div class="mf"><label class="ml">CHARACTER NAME</label><input class="mi" id="cm-new-name" placeholder="e.g. Skyfire Cade"></div>
+    <div class="mf"><label class="ml">TYPE</label>
+      <select class="mi" id="cm-new-type">
+        <option value="">— Select type —</option>
+        <option value="Primary">Primary</option>
+        <option value="Secondary">Secondary</option>
+        <option value="PNPC">PNPC (Personal NPC)</option>
+        <option value="MSPNPC">MSPNPC (Mission-specific PNPC)</option>
+        <option value="NPC">NPC</option>
+      </select>
+    </div>
+  `,()=>{
+    const name = document.getElementById('cm-new-name').value.trim();
+    if (!name) { alert('Please enter a name.'); return false; }
+    if (!S.characters) S.characters = {};
+    const id = uid();
+    const charType = document.getElementById('cm-new-type').value;
+    S.characters[id] = {id, name, aliases:[], charType, rank:'', division:'', divisionColor:'',
+      species:'', pictureDataUrl:null, wikiUrl:'', notes:'', addedAt:Date.now(), updatedAt:Date.now()};
+    persist();
+    renderManifestList();
+    selectCharacter(id);
+  });
+}
+
+function setTypeFilter(type) {
+  _manifestTypeFilter = type;
+  document.querySelectorAll('#cm-type-chips .cmtc').forEach(btn => {
+    btn.classList.toggle('on', btn.dataset.type === type);
+  });
+  renderManifestList();
+}
+
+function setManifestSort(s) {
+  _manifestSort = s;
+  renderManifestList();
+}
+
+function detectAliasCollisions() {
+  const nameMap = {};
+  Object.values(S.characters || {}).forEach(c => {
+    getAllNamesForChar(c).forEach(n => {
+      const key = n.toLowerCase();
+      if (!nameMap[key]) nameMap[key] = [];
+      if (!nameMap[key].includes(c.id)) nameMap[key].push(c.id);
+    });
+  });
+  const result = {};
+  Object.entries(nameMap).forEach(([name, ids]) => {
+    if (ids.length > 1) {
+      ids.forEach(id => {
+        if (!result[id]) result[id] = [];
+        result[id].push({ name, clashWith: ids.filter(i => i !== id) });
+      });
+    }
+  });
+  return result;
+}
+
+function renderManifestList() {
+  if (!S.characters) S.characters = {};
+  const filterEl = document.getElementById('cm-filter-input');
+  const fl = filterEl ? filterEl.value.toLowerCase() : '';
+  let chars = Object.values(S.characters);
+  if (_manifestTypeFilter) chars = chars.filter(c=>(c.charType||'')===_manifestTypeFilter);
+  if (fl) chars = chars.filter(c=>getAllNamesForChar(c).some(n=>n.toLowerCase().includes(fl)));
+  if (_manifestSort==='sims') {
+    chars.sort((a,b)=>charSimCount(b)-charSimCount(a)||a.name.localeCompare(b.name));
+  } else if (_manifestSort==='recent') {
+    const lastDate = c => {
+      const docs = charDocsForChar(c);
+      if (!docs.length) return 0;
+      return Math.max(...docs.map(d => d.postedAt ? new Date(d.postedAt).getTime() : (d.updatedAt||0)));
+    };
+    chars.sort((a,b)=>lastDate(b)-lastDate(a)||a.name.localeCompare(b.name));
+  } else if (_manifestSort==='name') {
+    chars.sort((a,b)=>a.name.localeCompare(b.name));
+  } else {
+    chars.sort((a,b)=>(TYPE_ORDER[a.charType||'']??5)-(TYPE_ORDER[b.charType||'']??5)||a.name.localeCompare(b.name));
+  }
+  const collisions = detectAliasCollisions();
+  const list = document.getElementById('cm-char-list');
+  if (!chars.length) {
+    list.innerHTML = `<div style="padding:12px;font-size:0.8rem;color:var(--dim);text-align:center">${fl||_manifestTypeFilter?'No matching characters.':'No characters yet.<br>Click + Add to create one.'}</div>`;
+    return;
+  }
+  list.innerHTML = chars.map(c => {
+    const active = c.id===_curCharId ? ' active' : '';
+    const clr = getDivColor(c);
+    const initials = getCharInitials(c.name);
+    const avatarContent = c.pictureDataUrl
+      ? `<img src="${c.pictureDataUrl}" alt="${esc(c.name)}">`
+      : initials;
+    const avatarBg = c.pictureDataUrl ? '' : `background:${clr}`;
+    const pips = renderPips(c.rank);
+    const typeCss = TYPE_CSS[c.charType||''] || '';
+    const typeBadge = c.charType ? `<span class="cm-type-tag ${typeCss}">${esc(c.charType)}</span>` : '';
+    const simCnt = charSimCount(c);
+    const hasCollision = !!collisions[c.id];
+    return `<div class="cm-char-item${active}" onclick="selectCharacter('${c.id}')">
+      <div class="cm-avatar" style="${avatarBg}">${avatarContent}</div>
+      <div class="cm-char-info">
+        <div class="cm-char-name">${esc(c.name)}${hasCollision?` <span class="cm-alias-warn" title="Alias collision detected — click to view">${ic('alert','ic-sm')}</span>`:''}</div>
+        <div class="cm-char-sub">
+          ${c.division?`<span class="cm-div-dot" style="background:${clr}"></span>`:''}
+          <span>${esc(c.rank||'')}</span>
+          ${pips?`<span style="color:${clr}">${pips}</span>`:''}
+          ${typeBadge}
+          ${simCnt?`<span style="margin-left:auto;color:var(--dim);font-size:0.67rem">${simCnt} sim${simCnt!==1?'s':''}</span>`:''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectCharacter(id) {
+  _curCharId = id;
+  if (_manifestActiveTab === 'edit') _manifestActiveTab = 'sims';
+  _srEditMode = false;
+  _ribbonEditMode = false;
+  renderManifestList();
+  renderCharProfile(id);
+}
+
+// ── Profile ──
+
+function renderCharProfile(id) {
+  const right = document.getElementById('cm-profile');
+  right.className = '';
+  if (!S.characters) { right.innerHTML = '<div class="cm-empty-msg" style="margin-top:60px;text-align:center">No characters.</div>'; return; }
+  const c = S.characters[id];
+  if (!c) { right.innerHTML = '<div class="cm-empty-msg" style="margin-top:60px;text-align:center">Character not found.</div>'; return; }
+
+  const myDocs = charDocsForChar(c).sort((a,b)=>simSortKey(b)-simSortKey(a));
+  const allDocCount = Object.values(S.docs).filter(d=>{
+    const names = getAllNamesForChar(c).map(n=>n.toLowerCase());
+    return (d.chars||[]).some(n=>names.includes(n.toLowerCase()));
+  }).length;
+  let totalW = 0;
+  myDocs.forEach(d=>{const tmp=document.createElement('div');tmp.innerHTML=d.content||'';totalW+=wc(tmp.innerText||'');});
+  const avgW = myDocs.length ? Math.round(totalW/myDocs.length) : 0;
+  const lastDoc = myDocs[0];
+  const clr = getDivColor(c);
+  const initials = getCharInitials(c.name);
+  const typeCss = TYPE_CSS[c.charType||''] || 'cmt-npc';
+
+  if (_manifestActiveTab === 'edit') {
+    right.innerHTML = renderEditMode(c, clr, initials);
+  } else {
+    const bioHtml = renderBioCol(c, clr, initials, myDocs, allDocCount, avgW, lastDoc, typeCss);
+    let tabContent = '';
+    if (_manifestActiveTab === 'service') tabContent = renderServiceTab(c, myDocs);
+    else if (_manifestActiveTab === 'ribbons') tabContent = renderRibbonsTab(c);
+    else tabContent = renderSimsTab(c, myDocs);
+    right.innerHTML = `<div id="cm-profile-wrap">${bioHtml}<div id="cm-sims-col">${renderTabBar()}${tabContent}</div></div>`;
+  }
+}
+
+function renderEditMode(c, clr, initials) {
+  const rankOpts = ['','Civilian','Cadet','Crewman','Petty Officer','Chief Petty Officer',
+    'Ensign','Lieutenant JG','Lieutenant','Lt. Commander',
+    'Commander','Captain','Fleet Captain','Commodore','Admiral','Fleet Admiral']
+    .map(r=>`<option value="${r}" ${c.rank===r?'selected':''}>${r||'— Select rank —'}</option>`).join('');
+  const divOpts = ['','Command','Operations','Security/Tactical','Science','Medical','Diplomat','Marines','Other']
+    .map(d=>`<option value="${d}" ${c.division===d?'selected':''}>${d||'— None —'}</option>`).join('')
+    + `<option value="__custom__">Custom…</option>`;
+  const typeOpts = ['','Primary','Secondary','PNPC','MSPNPC','NPC']
+    .map(t=>`<option value="${t}" ${(c.charType||'')===t?'selected':''}>${t||'— Type —'}</option>`).join('');
+
+  const avatarHtml = c.pictureDataUrl
+    ? `<img src="${c.pictureDataUrl}" alt="${esc(c.name)}">`
+    : `<span>${initials}</span>`;
+
+  const aliasesHtml = (c.aliases||[]).map((a,i)=>`
+    <div class="cm-alias-row">
+      <input type="text" value="${esc(a)}" placeholder="Alias or alternate name…" onblur="saveAlias(${i},this.value)">
+      <button class="cm-alias-del" onclick="removeAlias(${i})" title="Remove alias">${ic('x','ic-sm')}</button>
+    </div>`).join('');
+
+  return `<div id="cm-profile-wrap">
+    <div id="cm-bio-col">
+      <div class="cm-bio-avatar" style="${c.pictureDataUrl?'':'background:'+clr}" onclick="document.getElementById('cm-pic-file-e').click()" title="Click to change photo">${avatarHtml}</div>
+      <input type="file" id="cm-pic-file-e" class="cm-pic-file" accept="image/*" onchange="onCharPicFile(event)">
+      <div class="cm-pic-controls" style="margin-top:6px">
+        <div class="cm-pic-urlrow">
+          <input type="text" id="cm-pic-url" placeholder="Image URL…">
+          <button onclick="loadCharPicFromUrl()">Load</button>
+        </div>
+        ${c.pictureDataUrl?`<button class="cm-pic-file-btn" onclick="removeCharPic()">${ic('x','ic-sm')} Remove photo</button>`:''}
+      </div>
+      <div class="cm-edit-section">IDENTITY</div>
+      <label class="cm-label">PRIMARY NAME</label>
+      <input class="cm-input" id="cm-e-name" value="${esc(c.name)}" placeholder="Character name" onblur="saveCharField('name',this.value)">
+      <label class="cm-label">TYPE</label>
+      <select class="cm-select" id="cm-e-type" onchange="saveCharField('charType',this.value)">${typeOpts}</select>
+      <label class="cm-label">RANK</label>
+      <select class="cm-select" id="cm-e-rank" onchange="saveCharField('rank',this.value)">${rankOpts}</select>
+      <label class="cm-label">DIVISION</label>
+      <select class="cm-select" id="cm-e-division" onchange="saveCharDivision(this.value)">${divOpts}</select>
+      <label class="cm-label">SPECIES</label>
+      <input class="cm-input" id="cm-e-species" value="${esc(c.species||'')}" placeholder="e.g. Vulcan" onblur="saveCharField('species',this.value)">
+      <label class="cm-label">WIKI URL</label>
+      <input class="cm-input" id="cm-e-wiki" value="${esc(c.wikiUrl||'')}" placeholder="https://wiki.starbase118.net/…" onblur="saveCharField('wikiUrl',this.value)">
+      <div class="cm-edit-section">ALIASES</div>
+      <div style="font-size:0.73rem;color:var(--dim);margin-bottom:6px">Names this character also goes by (all are matched when tagging in sims).</div>
+      <div id="cm-aliases-list">${aliasesHtml}</div>
+      <button class="cm-alias-add" onclick="addAlias()">+ Add alias</button>
+      <label class="cm-label" style="margin-top:10px">NOTES</label>
+      <textarea class="cm-input" id="cm-e-notes" rows="3" placeholder="Brief notes…" onblur="saveCharField('notes',this.value)">${esc(c.notes||'')}</textarea>
+      <button class="cm-done-btn" onclick="exitEditMode()">${ic('check')} Done Editing</button>
+    </div>
+    <div id="cm-sims-col" style="display:flex;align-items:center;justify-content:center">
+      <div style="color:var(--dim);font-size:0.8rem;text-align:center;line-height:1.6">Editing profile.<br>Click <strong>Done Editing</strong> to<br>return to the sims view.</div>
+    </div>
+  </div>`;
+}
+
+function enterEditMode() {
+  _manifestActiveTab = 'edit';
+  if (_curCharId) renderCharProfile(_curCharId);
+}
+
+function exitEditMode() {
+  _manifestActiveTab = 'sims';
+  if (_curCharId) renderCharProfile(_curCharId);
+}
+
+// Re-render while preserving scroll. #cm-right has overflow:hidden;
+// the actual scrolling element is #cm-sims-col which lives inside it.
+// We save its scrollTop before replacing innerHTML, then restore on the
+// newly-created element after the render.
+function _rerenderKeepScroll(charId) {
+  const col = document.getElementById('cm-sims-col');
+  const scroll = col ? col.scrollTop : 0;
+  renderCharProfile(charId);
+  const newCol = document.getElementById('cm-sims-col');
+  if (newCol && scroll) newCol.scrollTop = scroll;
+}
+
+function switchManifestTab(tab) {
+  _manifestActiveTab = tab;
+  _srEditMode = false;
+  _ribbonEditMode = false;
+  _ribbonAddFormOpen = false;
+  _expandedRibbonIdx = -1;
+  _activeRibbonCats.clear();
+  if (_curCharId) renderCharProfile(_curCharId);
+}
+
+// ── Tab bar ──
+
+function renderTabBar() {
+  const tabs = [['sims','Sims'],['service','Service History'],['ribbons','Ribbons']];
+  return `<div class="cm-tabs">${tabs.map(([t,lbl])=>`<button class="cm-tab${_manifestActiveTab===t?' cm-tab-active':''}" onclick="switchManifestTab('${t}')">${lbl}</button>`).join('')}</div>`;
+}
+
+// ── Bio column (shared across all view tabs) ──
+
+function renderBioCol(c, clr, initials, myDocs, allDocCount, avgW, lastDoc, typeCss) {
+  const pips = renderPips(c.rank);
+  const aliasStr = (c.aliases||[]).filter(Boolean).join(', ');
+  const wikiDisplay = c.wikiUrl ? c.name + ' (118 Wiki)' : '';
+  const avatarHtml = c.pictureDataUrl
+    ? `<img src="${c.pictureDataUrl}" alt="${esc(c.name)}">`
+    : `<span>${initials}</span>`;
+  const col = detectAliasCollisions()[c.id];
+  const collisionHtml = (col&&col.length)
+    ? (()=>{const lines=col.map(({name,clashWith})=>{const others=clashWith.map(id=>S.characters[id]?.name||id).join(', ');return`<span style="color:var(--text)">"${esc(name)}"</span> also used by <strong>${esc(others)}</strong>`;});return`<div class="cm-collision-warn">⚠ Alias collision: ${lines.join('; ')}. Sims may be misattributed — edit aliases to resolve.</div>`;})()
+    : '';
+  return `<div id="cm-bio-col">
+    <div class="cm-bio-avatar" style="${c.pictureDataUrl?'':'background:'+clr}" onclick="document.getElementById('cm-pic-file-v')&&document.getElementById('cm-pic-file-v').click()">${avatarHtml}</div>
+    <input type="file" id="cm-pic-file-v" class="cm-pic-file" accept="image/*" onchange="onCharPicFile(event)">
+    <div class="cm-bio-name">${esc(c.name)}</div>
+    <div class="cm-bio-rank">
+      ${c.rank?`<span>${esc(c.rank)}</span>`:''}
+      ${pips?`<span style="color:${clr}">${pips}</span>`:''}
+      ${!c.rank&&!pips?'<span style="color:var(--dim);font-size:0.73rem">No rank</span>':''}
+    </div>
+    ${c.charType?`<div class="cm-bio-type"><span class="cm-type-tag ${typeCss}">${esc(c.charType)}</span></div>`:''}
+    <hr class="cm-bio-divider">
+    ${c.division?`<div class="cm-bio-row"><span class="cm-bio-lbl">DIVISION</span><span class="cm-bio-val"><span class="cm-div-dot" style="background:${clr};vertical-align:middle;margin-right:4px;display:inline-block"></span>${esc(c.division)}</span></div>`:''}
+    ${c.species?`<div class="cm-bio-row"><span class="cm-bio-lbl">SPECIES</span><span class="cm-bio-val">${esc(c.species)}</span></div>`:''}
+    ${aliasStr?`<div class="cm-bio-row"><span class="cm-bio-lbl">ALIASES</span><span class="cm-bio-val">${esc(aliasStr)}</span></div>`:''}
+    ${c.wikiUrl?`<div class="cm-bio-row"><span class="cm-bio-lbl">WIKI</span><span class="cm-bio-val"><a href="${esc(c.wikiUrl)}" target="_blank" rel="noopener">${esc(wikiDisplay)}</a></span></div>`:''}
+    ${c.notes?`<div class="cm-bio-notes">${esc(c.notes)}</div>`:''}
+    ${collisionHtml}
+    <div class="cm-mini-stats">
+      <div class="cm-mini-stat"><div class="cm-mini-num">${myDocs.length}</div><div class="cm-mini-lbl">MY SIMS</div></div>
+      <div class="cm-mini-stat"><div class="cm-mini-num">${allDocCount}</div><div class="cm-mini-lbl">ALL SIMS</div></div>
+      <div class="cm-mini-stat"><div class="cm-mini-num">${avgW||'—'}</div><div class="cm-mini-lbl">AVG WORDS</div></div>
+      <div class="cm-mini-stat"><div class="cm-mini-num" style="font-size:0.73rem">${lastDoc?new Date(lastDoc.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'}):'—'}</div><div class="cm-mini-lbl">LAST SIM</div></div>
+    </div>
+    <button class="cm-new-sim-btn" onclick="closeManifest();showNewDoc(null,null,'${c.id}')">+ New Sim</button>
+    <button class="cm-edit-btn" onclick="enterEditMode()">${ic('pencil')} Edit Profile</button>
+    <button class="cm-del-btn" onclick="deleteCharacter('${c.id}')">${ic('trash')} Remove</button>
+    ${(()=>{const top=computeCharacterPartners(c,5);if(!top.length)return'';return`<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px"><div style="font-size:0.67rem;font-weight:bold;letter-spacing:1px;color:var(--dim);margin-bottom:6px">TOP SCENE PARTNERS</div>${top.map(p=>`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.78rem"><span style="color:var(--text)">${esc(p.name)}</span><span style="color:var(--dim)">${p.scenes}sc / ${p.sims}sim</span></div>`).join('')}</div>`;})()}
+  </div>`;
+}
+
+// ── Sims tab ──
+
+function renderSimsTab(c, myDocs) {
+  if (!myDocs.length) {
+    return `<div style="color:var(--dim);font-size:0.8rem;padding:16px 0">No sims recorded yet. Tag this character using the Characters panel while editing a sim.</div>`;
+  }
+  // Group by mission
+  const missionMap = new Map(); // missionId -> { mission, docs }
+  const noMissionDocs = [];
+  myDocs.forEach(d => {
+    if (!d.missionId) { noMissionDocs.push(d); return; }
+    if (!missionMap.has(d.missionId)) missionMap.set(d.missionId, { mission: S.missions[d.missionId]||null, docs: [] });
+    missionMap.get(d.missionId).docs.push(d);
+  });
+  // Sort missions by most recent sim
+  const missionGroups = [...missionMap.values()].sort((a,b) => {
+    const aDate = Math.max(...a.docs.map(d=>new Date(d.postedAt||d.updatedAt||0).getTime()));
+    const bDate = Math.max(...b.docs.map(d=>new Date(d.postedAt||d.updatedAt||0).getTime()));
+    return bDate - aDate;
+  });
+  if (noMissionDocs.length) missionGroups.push({ mission: null, docs: noMissionDocs });
+
+  function renderSceneGroup(docs, sceneLabel) {
+    const sorted = [...docs].sort((a,b)=>{
+      const ad = new Date(a.postedAt||a.updatedAt||0).getTime();
+      const bd = new Date(b.postedAt||b.updatedAt||0).getTime();
+      return bd - ad;
+    });
+    return sorted.map(d => {
+      const tmp = document.createElement('div'); tmp.innerHTML = d.content||''; const w = wc(tmp.innerText||'');
+      const posted = d.postedAt ? fmtPostedDate(d.postedAt) : '—';
+      return `<div class="cm-sim-row" onclick="closeManifest();openDoc('${d.id}')">
+        <span class="cm-sim-title">${esc(d.title||'Untitled')}</span>
+        <span class="cm-sim-meta">${posted}</span>
+        <span class="cm-sim-wc">${w}</span>
+      </div>`;
+    }).join('');
+  }
+
+  let html = `<div class="cm-sim-col-hdr"><span>TITLE</span><span>POSTED</span><span>WORDS</span></div>`;
+  missionGroups.forEach(({ mission, docs }) => {
+    const mName = mission ? mission.name : 'No Mission';
+    // Group by scene
+    const sceneMap = new Map();
+    const noSceneDocs = [];
+    docs.forEach(d => {
+      if (!d.sceneId) { noSceneDocs.push(d); return; }
+      if (!sceneMap.has(d.sceneId)) sceneMap.set(d.sceneId, { scene: S.scenes[d.sceneId]||null, docs: [] });
+      sceneMap.get(d.sceneId).docs.push(d);
+    });
+    const sceneGroups = [...sceneMap.values()].sort((a,b) => {
+      const aDate = Math.max(...a.docs.map(d=>new Date(d.postedAt||d.updatedAt||0).getTime()));
+      const bDate = Math.max(...b.docs.map(d=>new Date(d.postedAt||d.updatedAt||0).getTime()));
+      return bDate - aDate;
+    });
+
+    html += `<div class="cm-mission-group">
+      <div class="cm-mission-hdr">${esc(mName)} <span class="cm-mission-count">${docs.length} sim${docs.length!==1?'s':''}</span></div>`;
+    if (noSceneDocs.length) html += renderSceneGroup(noSceneDocs, null);
+    sceneGroups.forEach(({ scene, docs: sDocs }) => {
+      const sName = scene ? scene.name : 'Unknown Scene';
+      html += `<div class="cm-scene-label">${esc(sName)}</div>${renderSceneGroup(sDocs, sName)}`;
+    });
+    html += `</div>`;
+  });
+  return html;
+}
+
+// ── Service Record tab ──
+
+function renderServiceTab(c, myDocs) {
+  c.serviceRecord = c.serviceRecord || [];
+  c.missionNotes = c.missionNotes || {};
+  c.srMissionSortDesc = c.srMissionSortDesc !== false;
+
+  const topBar = `<div class="cm-tab-toolbar">
+    <span class="cm-section-title" style="margin:0;margin-right:auto">SERVICE RECORD</span>
+    <button class="cm-tab-action" onclick="copySRWikitext('${c.id}')">${ic('copy')} Copy Wikitext</button>
+    <button class="cm-tab-action" onclick="toggleSREditMode('${c.id}')">${_srEditMode?ic('check') + ' Done Editing':ic('pencil') + ' Edit'}</button>
+  </div>`;
+
+  let srSection = '';
+  if (_srEditMode) {
+    srSection = renderSREditTable(c);
+  } else {
+    if (!c.serviceRecord.length) {
+      srSection = `<div class="cm-tab-empty">No service record entries yet. Click <strong>Edit</strong> to add rows.</div>`;
+    } else {
+      const sr = c.serviceRecord;
+      const rankSpans    = computeSpans(sr, 'rank');
+      const postingSpans = computeSpans(sr, 'posting');
+      const assignSpans  = computeSpans(sr, 'assignment');
+      const rows = sr.map((r,i) => {
+        const rs = rankSpans[i], ps = postingSpans[i], as_ = assignSpans[i];
+        const rankImgFile = rs !== null ? srRankImgFile(r.rank, r.division) : '';
+        const rankImg = rankImgFile ? `<img src="${RIBBON_IMG_BASE}${rankImgFile}" style="height:28px;width:auto;display:block;margin:0 auto 3px" alt="" onerror="this.style.display='none'">` : '';
+        return `<tr>
+          ${rs!==null ? `<td${rs>1?` rowspan="${rs}"`:''}>${rankImg}<div style="font-size:0.78rem">${esc(r.rank||'')}</div></td>` : ''}
+          <td style="white-space:nowrap;font-size:0.73rem;color:var(--dim)">${esc(r.startDate||'')}${r.endDate?' – '+esc(r.endDate):''}</td>
+          ${ps!==null ? `<td${ps>1?` rowspan="${ps}"`:''} class="cm-sr-posting">${r.postingLogoFile?`<img src="${RIBBON_IMG_BASE}${r.postingLogoFile}" class="cm-sr-logo" alt="" onerror="this.style.display='none'"><br>`:''}${esc(r.posting||'')}</td>` : ''}
+          ${as_!==null ? `<td${as_>1?` rowspan="${as_}"`:''} class="cm-sr-assign">${sanitizeSRHtml(r.assignment||'')}</td>` : ''}
+        </tr>`;
+      }).join('');
+      srSection = `<table class="cm-sr-table"><tr><th>RANK</th><th>DATES</th><th>POSTING</th><th>ASSIGNMENT</th></tr>${rows}</table>`;
+    }
+  }
+
+  const missionLogHtml = renderMissionLog(c, myDocs);
+  return `${topBar}${srSection}${missionLogHtml}`;
+}
+
+function renderSREditTable(c) {
+  const sr = c.serviceRecord;
+  let html = `<div class="cm-sr-edit-list" id="cm-sr-edit-list">`;
+  sr.forEach((r,i) => {
+    const rankOpts = SR_RANKS.map(rk=>`<option value="${rk}" ${r.rank===rk?'selected':''}>${rk||'— Rank —'}</option>`).join('');
+    const divOpts = `<option value="">— Division Colour —</option>` + SR_DIVISIONS.map(dv=>`<option value="${dv}" ${r.division===dv?'selected':''}>${dv}</option>`).join('');
+    const prevPosting = i>0 ? sr[i-1].posting||'' : '';
+    const prevLogo = i>0 ? sr[i-1].postingLogoFile||'' : '';
+    const prevAssign = i>0 ? sr[i-1].assignment||'' : '';
+    html += `<div class="cm-sr-edit-row" data-idx="${i}">
+      <div class="cm-sr-edit-controls">
+        <button onclick="moveSRRow('${c.id}',${i},-1)" ${i===0?'disabled':''}>${ic('arrow-up','ic-sm')}</button>
+        <button onclick="moveSRRow('${c.id}',${i},1)" ${i===sr.length-1?'disabled':''}>${ic('arrow-down','ic-sm')}</button>
+        <button class="cm-sr-del" onclick="deleteSRRow('${c.id}',${i})">${ic('x','ic-sm')}</button>
+      </div>
+      <div class="cm-sr-edit-fields">
+        <select class="cm-sr-f" onchange="saveSRField('${c.id}',${i},'rank',this.value)">${rankOpts}</select>
+        <select class="cm-sr-f" onchange="saveSRField('${c.id}',${i},'division',this.value)">${divOpts}</select>
+        <input class="cm-sr-f" placeholder="Start stardate" value="${esc(r.startDate||'')}" onblur="saveSRField('${c.id}',${i},'startDate',this.value)">
+        <input class="cm-sr-f" placeholder="End stardate (or Present)" value="${esc(r.endDate||'')}" onblur="saveSRField('${c.id}',${i},'endDate',this.value)">
+        <div class="cm-sr-field-row">
+          <input class="cm-sr-f" placeholder="Posting (ship/station name)" value="${esc(r.posting||'')}" onblur="saveSRField('${c.id}',${i},'posting',this.value)" id="sr-posting-${i}">
+          ${i>0?`<button class="cm-sr-copy-btn" title="Copy posting from row above" onclick="copySRFieldFromAbove('${c.id}',${i},'posting','postingLogoFile')">${ic('arrow-up','ic-sm')} same</button>`:''}
+        </div>
+        <input class="cm-sr-f" placeholder="Logo file (e.g. USS Ship-logo.png) — leave blank if none" value="${esc(r.postingLogoFile||'')}" onblur="saveSRField('${c.id}',${i},'postingLogoFile',this.value)" id="sr-logo-${i}">
+        <div class="cm-sr-field-row">
+          <textarea class="cm-sr-f" rows="2" placeholder="Assignment / duty post (HTML allowed: &lt;b&gt; &lt;i&gt; &lt;br&gt;)" onblur="saveSRField('${c.id}',${i},'assignment',this.value)" id="sr-assign-${i}">${esc(r.assignment||'')}</textarea>
+          ${i>0?`<button class="cm-sr-copy-btn" title="Copy assignment from row above" onclick="copySRFieldFromAbove('${c.id}',${i},'assignment')">${ic('arrow-up','ic-sm')} same</button>`:''}
+        </div>
+      </div>
+    </div>`;
+  });
+  html += `</div><button class="cm-tab-add-btn" onclick="addSRRow('${c.id}')">+ Add Row</button>`;
+  return html;
+}
+
+function toggleSREditMode(charId) {
+  _srEditMode = !_srEditMode;
+  if (charId === _curCharId) _rerenderKeepScroll(charId);
+}
+
+function saveSRField(charId, idx, field, value) {
+  const c = S.characters[charId]; if (!c) return;
+  c.serviceRecord = c.serviceRecord || [];
+  if (!c.serviceRecord[idx]) return;
+  c.serviceRecord[idx][field] = value;
+  persist();
+}
+
+function addSRRow(charId) {
+  const c = S.characters[charId]; if (!c) return;
+  c.serviceRecord = c.serviceRecord || [];
+  c.serviceRecord.push({ id: uid(), rank:'', division:'', startDate:'', endDate:'', posting:'', postingLogoFile:'', assignment:'' });
+  persist();
+  _rerenderKeepScroll(charId);
+}
+
+function copySRFieldFromAbove(charId, idx, ...fields) {
+  const c = S.characters[charId]; if (!c) return;
+  const sr = c.serviceRecord; if (!sr || idx < 1) return;
+  fields.forEach(f => { sr[idx][f] = sr[idx-1][f] || ''; });
+  persist();
+  _rerenderKeepScroll(charId);
+}
+
+function deleteSRRow(charId, idx) {
+  const c = S.characters[charId]; if (!c) return;
+  c.serviceRecord = c.serviceRecord || [];
+  c.serviceRecord.splice(idx, 1);
+  persist();
+  _rerenderKeepScroll(charId);
+}
+
+function moveSRRow(charId, idx, dir) {
+  const c = S.characters[charId]; if (!c) return;
+  const sr = c.serviceRecord || [];
+  const ni = idx + dir;
+  if (ni < 0 || ni >= sr.length) return;
+  [sr[idx], sr[ni]] = [sr[ni], sr[idx]];
+  persist();
+  _rerenderKeepScroll(charId);
+}
+
+function copySRWikitext(charId) {
+  const c = S.characters[charId]; if (!c) return;
+  const sr = c.serviceRecord || [];
+  if (!sr.length) { showToast('No service record entries to export.'); return; }
+  const lines = ['{{Service Record}}'];
+  const rankSpans    = computeSpans(sr, 'rank');
+  const postingSpans = computeSpans(sr, 'posting');
+  const assignSpans  = computeSpans(sr, 'assignment');
+  sr.forEach((r, i) => {
+    if (i > 0) lines.push('|-');
+    // Insignia & Rank only on first row of a rank span
+    if (rankSpans[i] !== null) {
+      const rs = rankSpans[i] > 1 ? `|ROWS=${rankSpans[i]}` : '';
+      lines.push(`{{SR Insignia|${srInsigniaName(r.rank||'')}|${r.division||''}|STYLE=PIC${rs}}}`);
+      lines.push(`{{SR Rank|${r.rank||''}${rs}}}`);
+    }
+    lines.push(`{{SR Dates|<small>${r.startDate||''} - ${r.endDate||'Present'}</small>}}`);
+    // Posting only on first row of a posting span
+    if (postingSpans[i] !== null) {
+      const ps = postingSpans[i] > 1 ? `|ROWS=${postingSpans[i]}` : '';
+      const logoStr = r.postingLogoFile ? `[[File:${r.postingLogoFile}|60px|none]]` : '';
+      const postingName = r.posting ? `[[${r.posting}]]` : '';
+      if (logoStr || postingName) {
+        lines.push(`{{SR Posting|\n${logoStr}${postingName}${ps}}}`);
+      }
+    }
+    // Assignment only on first row of an assignment span
+    if (assignSpans[i] !== null) {
+      const as = assignSpans[i] > 1 ? `|ROWS=${assignSpans[i]}` : '';
+      lines.push(`{{SR Assignment|${r.assignment||''}|${r.division||''}${as}}}`);
+    }
+  });
+  lines.push('{{Service Record End}}');
+  navigator.clipboard.writeText(lines.join('\n')).then(()=>showToast('Service Record wikitext copied!')).catch(()=>showToast('Copy failed — check clipboard permissions.'));
+}
+
+function computeSpans(arr, field) {
+  // Returns array where index i = span size if this is the START of a run, null if mid-run, 1 if no run
+  const result = new Array(arr.length).fill(1);
+  let i = 0;
+  while (i < arr.length) {
+    let j = i + 1;
+    while (j < arr.length && arr[j][field] === arr[i][field] && arr[j][field]) j++;
+    const span = j - i;
+    result[i] = span;
+    for (let k = i+1; k < j; k++) result[k] = null;
+    i = j;
+  }
+  return result;
+}
+
+// ── Mission Log (part of Service tab) ──
+
+function renderMissionLog(c, myDocs) {
+  c.missionNotes = c.missionNotes || {};
+  c.srMissionSortDesc = c.srMissionSortDesc !== false;
+
+  if (!myDocs.length) return '';
+
+  // Group docs by mission
+  const mMap = new Map();
+  myDocs.forEach(d => {
+    const mid = d.missionId || '__none__';
+    if (!mMap.has(mid)) mMap.set(mid, { mission: d.missionId?(S.missions[d.missionId]||null):null, docs:[] });
+    mMap.get(mid).docs.push(d);
+  });
+
+  let groups = [...mMap.values()].map(g => {
+    const dates = g.docs.map(d=>d.postedAt).filter(Boolean).sort();
+    return { ...g, earliest: dates[0]||'', latest: dates[dates.length-1]||'' };
+  });
+
+  groups.sort((a,b) => {
+    const ad = a.latest||a.earliest||'';
+    const bd = b.latest||b.earliest||'';
+    return c.srMissionSortDesc ? bd.localeCompare(ad) : ad.localeCompare(bd);
+  });
+
+  const mids = [...mMap.keys()];
+  const sortLabel = c.srMissionSortDesc ? 'Newest first' : 'Oldest first';
+
+  let rows = groups.map(g => {
+    const mid = g.mission ? g.mission.id : '__none__';
+    const mName = g.mission ? g.mission.name : 'No Mission';
+    const sd1 = g.earliest ? toStardate(g.earliest) : '—';
+    const sd2 = g.latest && g.latest !== g.earliest ? toStardate(g.latest) : '';
+    const dateStr = sd2 ? `${sd1} – ${sd2}` : sd1;
+    const note = c.missionNotes[mid] || '';
+    return `<div class="cm-mlog-row">
+      <div class="cm-mlog-header">
+        <span class="cm-mlog-name">${esc(mName)}</span>
+        <span class="cm-mlog-dates">${dateStr}</span>
+        <span class="cm-mlog-count">${g.docs.length} sim${g.docs.length!==1?'s':''}</span>
+      </div>
+      <textarea class="cm-mlog-note" placeholder="Mission notes…" onblur="saveMissionNote('${c.id}','${mid}',this.value)">${esc(note)}</textarea>
+    </div>`;
+  }).join('');
+
+  return `<div class="cm-mission-log">
+    <div class="cm-mlog-toolbar">
+      <span class="cm-mlog-title">MISSION LOG</span>
+      <button class="cm-tab-action" onclick="toggleMissionLogSort('${c.id}')">${sortLabel}</button>
+      <button class="cm-tab-action" onclick="copyMissionLogWikitext('${c.id}')">${ic('copy')} Copy Wikitext</button>
+    </div>
+    ${rows}
+  </div>`;
+}
+
+function saveMissionNote(charId, missionId, value) {
+  const c = S.characters[charId]; if (!c) return;
+  c.missionNotes = c.missionNotes || {};
+  c.missionNotes[missionId] = value;
+  persist();
+}
+
+function toggleMissionLogSort(charId) {
+  const c = S.characters[charId]; if (!c) return;
+  c.srMissionSortDesc = !c.srMissionSortDesc;
+  persist();
+  renderCharProfile(charId);
+}
+
+function copyMissionLogWikitext(charId) {
+  const c = S.characters[charId]; if (!c) return;
+  const myDocs = charDocsForChar(c);
+  if (!myDocs.length) { showToast('No missions to export.'); return; }
+  const mMap = new Map();
+  myDocs.forEach(d => {
+    const mid = d.missionId || '__none__';
+    if (!mMap.has(mid)) mMap.set(mid, { mission: d.missionId?(S.missions[d.missionId]||null):null, docs:[] });
+    mMap.get(mid).docs.push(d);
+  });
+  const groups = [...mMap.values()].map(g => {
+    const dates = g.docs.map(d=>d.postedAt).filter(Boolean).sort();
+    return { ...g, earliest: dates[0]||'', latest: dates[dates.length-1]||'' };
+  }).sort((a,b)=>{
+    const ad = a.latest||a.earliest||'';
+    const bd = b.latest||b.earliest||'';
+    return c.srMissionSortDesc ? bd.localeCompare(ad) : ad.localeCompare(bd);
+  });
+  const lines = ['== Mission History ==',''];
+  groups.forEach(g => {
+    const mid = g.mission ? g.mission.id : '__none__';
+    const mName = g.mission ? g.mission.name : 'No Mission';
+    const sd1 = g.earliest ? toStardate(g.earliest) : '—';
+    const sd2 = g.latest && g.latest !== g.earliest ? toStardate(g.latest) : '';
+    const dateStr = sd2 ? `${sd1} – ${sd2}` : sd1;
+    const note = (c.missionNotes||{})[mid] || '';
+    lines.push(`=== ${mName} ===`);
+    lines.push(`''${dateStr}''`);
+    if (note) lines.push('', note);
+    lines.push('');
+  });
+  navigator.clipboard.writeText(lines.join('\n')).then(()=>showToast('Mission log wikitext copied!')).catch(()=>showToast('Copy failed.'));
+}
+
+// ── Ribbons tab ──
+
+// Build a flat name→{img,category} lookup for the ribbon search
+function buildRibbonLookup() {
+  const map = {};
+  Object.entries(RIBBON_CATALOG).forEach(([cat, entries]) => {
+    entries.forEach(e => { map[e.name] = { img: e.img, category: cat }; });
+  });
+  return map;
+}
+
+// MediaWiki-safe URL. Checks user-saved overrides first (stored in S.settings.ribbonFileOverrides).
+function ribbonImgUrl(imageFile) {
+  if (!imageFile) return '';
+  const overrides = S.settings?.ribbonFileOverrides || {};
+  const file = overrides[imageFile] || imageFile;
+  return RIBBON_IMG_BASE + file.replace(/ /g, '_');
+}
+
+function saveRibbonFileOverride(origFile, newFile) {
+  if (!S.settings) S.settings = {};
+  if (!S.settings.ribbonFileOverrides) S.settings.ribbonFileOverrides = {};
+  if (newFile && newFile !== origFile) {
+    S.settings.ribbonFileOverrides[origFile] = newFile.trim();
+  } else {
+    delete S.settings.ribbonFileOverrides[origFile];
+  }
+  persist();
+  showToast('Filename override saved.');
+}
+
+function ribbonSortedList(c) {
+  const ribbons = [...(c.ribbons || [])];
+  const order = c.ribbonSortOrder || 'oldest';
+  if (order === 'alpha') ribbons.sort((a,b)=>(a.ribbonName||'').localeCompare(b.ribbonName||''));
+  else if (order === 'newest') ribbons.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  else if (order === 'oldest') ribbons.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  // 'default' keeps insertion order
+  return ribbons;
+}
+
+function renderRibbonsTab(c) {
+  c.ribbons = c.ribbons || [];
+  c.ribbonSortOrder = c.ribbonSortOrder || 'oldest';
+
+  const sortOrder = c.ribbonSortOrder;
+  const sortBtns = ['oldest','newest','alpha','custom'].map(s => {
+    const labels = {oldest:'Oldest first', newest:'Newest first', alpha:'A → Z', custom:'Custom'};
+    const active = sortOrder === s ? ' cm-tab-sort-active' : '';
+    return `<button class="cm-tab-action${active}" onclick="setRibbonSort('${c.id}','${s}')">${labels[s]}</button>`;
+  }).join('');
+
+  const topBar = `<div class="cm-tab-toolbar">
+    ${sortBtns}
+    <button class="cm-tab-action" onclick="copyRibbonsWikitext('${c.id}')">${ic('copy')} Copy Wikitext</button>
+    <button class="cm-tab-action" onclick="toggleRibbonEditMode('${c.id}')">${_ribbonEditMode?ic('check') + ' Done Editing':ic('pencil') + ' Edit'}</button>
+  </div>`;
+
+  if (_ribbonEditMode) return topBar + renderRibbonsEditMode(c);
+
+  if (!c.ribbons.length) {
+    return topBar + `<div class="cm-tab-empty">No ribbons yet. Click <strong>Edit</strong> to add ribbons.</div>`;
+  }
+  const sorted = ribbonSortedList(c);
+  const rows = sorted.map(r => {
+    const imgUrl = ribbonImgUrl(r.imageFile||'');
+    return `<tr>
+      <td class="cm-rib-img-cell"><img src="${imgUrl}" class="cm-rib-img" alt="${esc(r.ribbonName||'')}" onerror="this.outerHTML='<span class=cm-rib-noimg>[No Internet]</span>'"></td>
+      <td><strong>${esc(r.ribbonName||'')}</strong><div style="font-size:0.72rem;color:var(--dim)">${esc(r.category||'')}</div></td>
+      <td style="font-size:0.73rem;color:var(--dim);white-space:nowrap">${esc(r.date||'')}${r.assignment?'<br>'+esc(r.assignment):''}</td>
+      <td style="font-size:0.73rem">${renderWikiLinks(r.citation||'')}</td>
+    </tr>`;
+  }).join('');
+  return topBar + `<table class="cm-ribbon-table"><tr><th></th><th>RIBBON</th><th>DATE / POSTING</th><th>CITATION</th></tr>${rows}</table>`;
+}
+
+function renderRibbonsEditMode(c) {
+  const ribbons = c.ribbons || [];
+  // Collect existing assignments for autocomplete
+  const usedAssignments = [...new Set(ribbons.map(r=>r.assignment).filter(Boolean))];
+  const assignOpts = usedAssignments.map(a=>`<option value="${esc(a)}">`).join('');
+
+  let html = `<div class="cm-rib-edit-list">`;
+  ribbons.forEach((r,i) => {
+    const imgUrl = ribbonImgUrl(r.imageFile||'');
+    const imgTag = `<img src="${imgUrl}" class="cm-rib-img" alt="" onerror="this.outerHTML='<span class=cm-rib-noimg>[img]</span>'">`;
+    if (i === _expandedRibbonIdx) {
+      html += `<div class="cm-rib-edit-row">
+        <div class="cm-rib-edit-preview">${imgTag}</div>
+        <div class="cm-rib-edit-fields">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+            <strong style="font-size:0.82rem">${esc(r.ribbonName||'Unknown')}</strong>
+            <button onclick="collapseRibbonEdit('${c.id}')" style="background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:3px;padding:2px 8px;font-size:0.75rem;cursor:pointer">${ic('check','ic-sm')} Done</button>
+          </div>
+          <input class="cm-sr-f" placeholder="Date (stardate)" value="${esc(r.date||'')}" onblur="saveRibbonField('${c.id}',${i},'date',this.value)">
+          <input class="cm-sr-f" list="rib-edit-assign-list" placeholder="Assignment / posting" value="${esc(r.assignment||'')}" onblur="saveRibbonField('${c.id}',${i},'assignment',this.value)">
+          <datalist id="rib-edit-assign-list">${assignOpts}</datalist>
+          <textarea class="cm-sr-f" rows="2" placeholder="Citation… use [[Article]] for wiki links" onblur="saveRibbonField('${c.id}',${i},'citation',this.value)">${esc(r.citation||'')}</textarea>
+        </div>
+        <div class="cm-rib-edit-ctrl">
+          <button onclick="moveRibbon('${c.id}',${i},-1)" ${i===0?'disabled':''}>${ic('arrow-up','ic-sm')}</button>
+          <button onclick="moveRibbon('${c.id}',${i},1)" ${i===ribbons.length-1?'disabled':''}>${ic('arrow-down','ic-sm')}</button>
+          <button class="cm-sr-del" onclick="deleteRibbon('${c.id}',${i})">${ic('x','ic-sm')}</button>
+        </div>
+      </div>`;
+    } else {
+      const meta = [r.date, r.assignment].filter(Boolean).join(' · ');
+      html += `<div class="cm-rib-edit-row cm-rib-row-collapsed">
+        <div class="cm-rib-edit-preview">${imgTag}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:0.82rem;font-weight:600">${esc(r.ribbonName||'Unknown')}</div>
+          ${meta?`<div style="font-size:0.72rem;color:var(--dim)">${esc(meta)}</div>`:''}
+        </div>
+        <div class="cm-rib-edit-ctrl">
+          <button onclick="expandRibbonEdit('${c.id}',${i})" title="Edit details">${ic('pencil','ic-sm')}</button>
+          <button onclick="moveRibbon('${c.id}',${i},-1)" ${i===0?'disabled':''}>${ic('arrow-up','ic-sm')}</button>
+          <button onclick="moveRibbon('${c.id}',${i},1)" ${i===ribbons.length-1?'disabled':''}>${ic('arrow-down','ic-sm')}</button>
+          <button class="cm-sr-del" onclick="deleteRibbon('${c.id}',${i})">${ic('x','ic-sm')}</button>
+        </div>
+      </div>`;
+    }
+  });
+  html += `</div>`;
+
+  // Category toggle buttons (multiple can be active)
+  const cats = Object.keys(RIBBON_CATALOG);
+  const catBtns = cats.map(cat => {
+    const active = _activeRibbonCats.has(cat) ? ' rib-cat-active' : '';
+    return `<button class="rib-cat-btn${active}" onclick="toggleRibbonCat('${esc(cat)}')">${esc(cat)}</button>`;
+  }).join('');
+
+  if (_ribbonAddFormOpen) {
+    html += `<div class="cm-rib-add-form" id="rib-add-form">
+      <div class="cm-rib-add-title">ADD RIBBON</div>
+      <div class="cm-rib-add-body">
+        <div class="cm-rib-add-fields">
+          <div class="cm-rib-cat-label">Filter by Category:</div>
+          <div class="cm-rib-cat-btns">${catBtns}</div>
+          <input id="rib-search" class="cm-sr-f" list="rib-datalist" placeholder="Search ribbon name…" oninput="onRibbonSearchInput()" autocomplete="off">
+          <datalist id="rib-datalist"></datalist>
+          <input id="rib-date" class="cm-sr-f" placeholder="Date (stardate)">
+          <input id="rib-assign" class="cm-sr-f" list="rib-assign-list" placeholder="Assignment / posting">
+          <datalist id="rib-assign-list">${assignOpts}</datalist>
+          <textarea id="rib-citation" class="cm-sr-f" rows="2" placeholder="Citation… use [[Article]] for wiki links"></textarea>
+          <div style="display:flex;gap:6px;margin-top:2px">
+            <button class="cm-tab-add-btn" onclick="addRibbon('${c.id}')">+ Add</button>
+            <button class="cm-tab-add-btn" onclick="cancelRibbonAdd('${c.id}')">Cancel</button>
+          </div>
+        </div>
+        <div class="cm-rib-add-side">
+          <div id="rib-preview" class="cm-rib-add-preview"></div>
+          <div id="rib-selected-name" class="cm-rib-add-catname"></div>
+        </div>
+      </div>
+    </div>`;
+  } else {
+    html += `<button class="cm-tab-add-btn" style="margin-top:8px" onclick="openRibbonAddForm('${c.id}')">+ Add Ribbon</button>`;
+  }
+
+  return html;
+}
+
+function toggleRibbonCat(cat) {
+  if (_activeRibbonCats.has(cat)) _activeRibbonCats.delete(cat);
+  else _activeRibbonCats.add(cat);
+  // Update button styles without re-rendering the whole panel
+  document.querySelectorAll('.rib-cat-btn').forEach(b => {
+    b.classList.toggle('rib-cat-active', _activeRibbonCats.has(b.textContent));
+  });
+  // Re-filter the datalist with the current search text
+  onRibbonSearchInput();
+}
+
+function onRibbonSearchInput() {
+  const val = (document.getElementById('rib-search')?.value || '').trim();
+  const dl = document.getElementById('rib-datalist');
+  const prev = document.getElementById('rib-preview');
+  const nameEl = document.getElementById('rib-selected-name');
+
+  // Only populate datalist once typing starts
+  if (dl) {
+    if (val.length === 0) {
+      dl.innerHTML = '';
+    } else {
+      const activeCats = _activeRibbonCats.size > 0 ? [..._activeRibbonCats] : Object.keys(RIBBON_CATALOG);
+      const names = activeCats.flatMap(cat => (RIBBON_CATALOG[cat]||[]).map(r=>r.name));
+      dl.innerHTML = names.map(n=>`<option value="${esc(n)}">`).join('');
+    }
+  }
+
+  // Update preview if exact match found
+  const lookup = buildRibbonLookup();
+  const entry = lookup[val];
+  if (entry) {
+    const url = ribbonImgUrl(entry.img);
+    if (prev) prev.innerHTML = `<img src="${url}" class="cm-rib-img" alt="" onerror="this.outerHTML='<span class=cm-rib-noimg>[No Internet]</span>'">`;
+    if (nameEl) nameEl.textContent = entry.category;
+  } else {
+    if (prev) prev.innerHTML = '';
+    if (nameEl) nameEl.textContent = '';
+  }
+}
+
+function toggleRibbonEditMode(charId) {
+  _ribbonEditMode = !_ribbonEditMode;
+  _ribbonAddFormOpen = false;
+  _expandedRibbonIdx = -1;
+  _activeRibbonCats.clear();
+  if (charId === _curCharId) _rerenderKeepScroll(charId);
+}
+
+function setRibbonSort(charId, order) {
+  const c = S.characters[charId]; if (!c) return;
+  if (order === 'custom') c.ribbons = ribbonSortedList(c); // snapshot current display order
+  c.ribbonSortOrder = order;
+  persist();
+  _rerenderKeepScroll(charId);
+}
+
+function addRibbon(charId) {
+  const ribbonName = document.getElementById('rib-search')?.value.trim() || '';
+  if (!ribbonName) { showToast('Type or select a ribbon name first.'); return; }
+  const lookup = buildRibbonLookup();
+  const entry = lookup[ribbonName];
+  const imgFile = entry?.img || ribbonName.replace(/ /g,'_') + '.png';
+  const category = entry?.category || '';
+  const date = document.getElementById('rib-date')?.value || '';
+  const assignment = document.getElementById('rib-assign')?.value || '';
+  const citation = document.getElementById('rib-citation')?.value || '';
+  const c = S.characters[charId]; if (!c) return;
+  c.ribbons = c.ribbons || [];
+  c.ribbons.push({ id: uid(), category, ribbonName, imageFile: imgFile, date, assignment, citation });
+  persist();
+  _ribbonAddFormOpen = false;
+  _activeRibbonCats.clear();
+  _rerenderKeepScroll(charId);
+}
+
+function openRibbonAddForm(charId) {
+  _ribbonAddFormOpen = true;
+  _activeRibbonCats.clear();
+  _rerenderKeepScroll(charId);
+  setTimeout(() => {
+    document.getElementById('rib-add-form')?.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }, 50);
+}
+
+function expandRibbonEdit(charId, idx) {
+  _expandedRibbonIdx = idx;
+  _rerenderKeepScroll(charId);
+}
+
+function collapseRibbonEdit(charId) {
+  _expandedRibbonIdx = -1;
+  _rerenderKeepScroll(charId);
+}
+
+function cancelRibbonAdd(charId) {
+  _ribbonAddFormOpen = false;
+  _activeRibbonCats.clear();
+  if (charId && charId === _curCharId) _rerenderKeepScroll(charId);
+}
+
+function saveRibbonField(charId, idx, field, value) {
+  const c = S.characters[charId]; if (!c) return;
+  c.ribbons = c.ribbons || [];
+  if (!c.ribbons[idx]) return;
+  c.ribbons[idx][field] = value;
+  persist();
+}
+
+function deleteRibbon(charId, idx) {
+  const c = S.characters[charId]; if (!c) return;
+  c.ribbons = c.ribbons || [];
+  c.ribbons.splice(idx, 1);
+  persist();
+  _rerenderKeepScroll(charId);
+}
+
+function moveRibbon(charId, idx, dir) {
+  const c = S.characters[charId]; if (!c) return;
+  // Snapshot current display order into array before reordering
+  if ((c.ribbonSortOrder || 'oldest') !== 'custom') c.ribbons = ribbonSortedList(c);
+  c.ribbonSortOrder = 'custom';
+  const rb = c.ribbons;
+  const ni = idx + dir;
+  if (ni < 0 || ni >= rb.length) return;
+  [rb[idx], rb[ni]] = [rb[ni], rb[idx]];
+  persist();
+  _rerenderKeepScroll(charId);
+}
+
+
+function copyRibbonsWikitext(charId) {
+  const c = S.characters[charId]; if (!c) return;
+  if (!(c.ribbons||[]).length) { showToast('No ribbons to export.'); return; }
+  // Export in current display sort order; count per name for |2, |3 suffixes
+  const sorted = ribbonSortedList(c);
+  const nameCount = {};
+  const lines = ['{{Ribbons Display|ALIGN=left|COLOR=grey}}','{{Service Ribbons Header}}'];
+  sorted.forEach(r => {
+    const n = r.ribbonName || '';
+    nameCount[n] = (nameCount[n] || 0) + 1;
+    const suffix = nameCount[n] > 1 ? `|${nameCount[n]}` : '';
+    // Citation may contain [[wiki links]] — export raw so wikitext is valid
+    lines.push(`{{Citation|${n}|${r.date||''}|${r.assignment||''}|${r.citation||''}${suffix}}}`);
+  });
+  lines.push('{{Ribbons Display End}}');
+  navigator.clipboard.writeText(lines.join('\n')).then(()=>showToast('Ribbons wikitext copied!')).catch(()=>showToast('Copy failed.'));
+}
+
+// ── Field saves ──
+
+function saveCharField(field, value) {
+  if (!_curCharId || !S.characters) return;
+  const c = S.characters[_curCharId]; if (!c) return;
+  c[field] = value;
+  c.updatedAt = Date.now();
+  persist();
+  renderManifestList();
+}
+
+function saveCharDivision(value) {
+  if (value==='__custom__') {
+    const sel = document.getElementById('cm-e-division');
+    const c = _curCharId && S.characters ? S.characters[_curCharId] : null;
+    if (sel && c) sel.value = c.division||'';
+    openModal('CUSTOM DIVISION',`
+      <div class="mf"><label class="ml">DIVISION NAME</label><input class="mi" id="cm-div-n" placeholder="e.g. Engineering"></div>
+      <div class="mf" style="display:flex;align-items:center;gap:10px">
+        <input type="color" class="mi-color" id="cm-div-c" value="#667788">
+        <div><label class="ml">BADGE COLOUR</label></div>
+      </div>
+    `,()=>{
+      const n=document.getElementById('cm-div-n').value.trim();
+      const col=document.getElementById('cm-div-c').value;
+      if (!n) return false;
+      saveCharField('division',n);
+      saveCharField('divisionColor',col);
+    });
+    return;
+  }
+  saveCharField('division', value);
+  saveCharField('divisionColor', DIVISION_COLORS[value]||'');
+}
+
+function saveAlias(idx, value) {
+  if (!_curCharId || !S.characters) return;
+  const c = S.characters[_curCharId]; if (!c) return;
+  if (!c.aliases) c.aliases = [];
+  c.aliases[idx] = value.trim();
+  c.updatedAt = Date.now();
+  persist();
+  renderManifestList();
+}
+
+function addAlias() {
+  if (!_curCharId || !S.characters) return;
+  const c = S.characters[_curCharId]; if (!c) return;
+  if (!c.aliases) c.aliases = [];
+  c.aliases.push('');
+  c.updatedAt = Date.now();
+  persist();
+  renderCharProfile(_curCharId);
+  setTimeout(()=>{
+    const inputs = document.querySelectorAll('#cm-aliases-list input');
+    if (inputs.length) inputs[inputs.length-1].focus();
+  },50);
+}
+
+function removeAlias(idx) {
+  if (!_curCharId || !S.characters) return;
+  const c = S.characters[_curCharId]; if (!c || !c.aliases) return;
+  c.aliases.splice(idx, 1);
+  c.updatedAt = Date.now();
+  persist();
+  renderManifestList();
+  renderCharProfile(_curCharId);
+}
+
+function deleteCharacter(id) {
+  const c = S.characters ? S.characters[id] : null; if (!c) return;
+  if (!confirm(`Remove "${c.name}" from the Manifest?\n\nSim data is not affected.`)) return;
+  delete S.characters[id];
+  persist();
+  if (_curCharId===id) {
+    _curCharId = null;
+    _manifestActiveTab = 'sims';
+    _srEditMode = false;
+    _ribbonEditMode = false;
+    const _cmProfile = document.getElementById('cm-profile');
+    if (_cmProfile) { _cmProfile.className = 'cm-empty-msg'; _cmProfile.innerHTML = 'Select a character to view their profile.'; }
+  }
+  renderManifestList();
+}
+
+function onCharPicFile(e) {
+  const file = e.target.files[0]; if (!file) return;
+  resizePicture(file, dataUrl => {
+    if (!_curCharId || !S.characters) return;
+    const c = S.characters[_curCharId]; if (!c) return;
+    c.pictureDataUrl = dataUrl; c.updatedAt = Date.now();
+    persist(); renderManifestList(); renderCharProfile(_curCharId);
+  });
+  e.target.value = '';
+}
+
+function removeCharPic() {
+  if (!_curCharId || !S.characters) return;
+  const c = S.characters[_curCharId]; if (!c) return;
+  c.pictureDataUrl = null; c.updatedAt = Date.now();
+  persist(); renderManifestList(); renderCharProfile(_curCharId);
+}
+
+function loadCharPicFromUrl() {
+  const urlInput = document.getElementById('cm-pic-url');
+  const url = urlInput ? urlInput.value.trim() : '';
+  if (!url) return;
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 200;
+    const ctx = canvas.getContext('2d');
+    const min = Math.min(img.width, img.height);
+    const sx = (img.width-min)/2, sy = (img.height-min)/2;
+    ctx.drawImage(img, sx, sy, min, min, 0, 0, 200, 200);
+    if (!_curCharId || !S.characters) return;
+    const c = S.characters[_curCharId]; if (!c) return;
+    c.pictureDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+    c.updatedAt = Date.now();
+    persist(); renderManifestList(); renderCharProfile(_curCharId);
+  };
+  img.onerror = () => alert('Could not load image from that URL.\nSome sites block cross-origin image requests.');
+  img.src = url;
+}
+
+function resizePicture(file, cb) {
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 200;
+    const ctx = canvas.getContext('2d');
+    const min = Math.min(img.width, img.height);
+    const sx = (img.width-min)/2, sy = (img.height-min)/2;
+    ctx.drawImage(img, sx, sy, min, min, 0, 0, 200, 200);
+    URL.revokeObjectURL(url);
+    cb(canvas.toDataURL('image/jpeg', 0.82));
+  };
+  img.src = url;
+}
+
+// ================================================================
+// SIM TEMPLATES
+// ================================================================
+function showTemplateManager() {
+  if (!S.templates) S.templates = [];
+  const listHtml = S.templates.length
+    ? S.templates.map((t,i)=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span style="flex:1;font-size:0.87rem;color:var(--text)">${esc(t.name)}</span>
+          <button class="btn btn-s btn-sm" onclick="renameTemplate(${i})">Rename</button>
+          <button class="btn btn-s btn-sm" style="color:var(--red)" onclick="deleteTemplate(${i})">${ic('x','ic-sm')}</button>
+        </div>`).join('')
+    : '<div style="color:var(--dim);font-size:0.87rem;padding:8px 0">No templates saved yet.</div>';
+  const saveRow = curId ? `
+    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+      <p style="font-size:0.8rem;color:var(--dim);margin-bottom:8px">Save the current sim as a template:</p>
+      <div class="mf"><label class="ml">TEMPLATE NAME</label><input class="mi" id="t-save-name" placeholder="e.g. JP Opening Scene"></div>
+    </div>` : '';
+  openModal('SIM TEMPLATES', `${listHtml}${saveRow}`,
+    curId ? ()=>{
+      const name = document.getElementById('t-save-name').value.trim();
+      if (!name) { alert('Enter a template name.'); return false; }
+      const ed = document.getElementById('editor');
+      if (!S.templates) S.templates = [];
+      const curTitle = curId ? (S.docs[curId]?.title||'') : '';
+      S.templates.push({id:uid(),name,title:curTitle,content:ed.innerHTML,createdAt:Date.now()});
+      persist();
+      alert(`Template "${name}" saved.`);
+    } : null,
+    { ok: curId ? 'Save as Template' : undefined }
+  );
+}
+
+function renameTemplate(i) {
+  const t = (S.templates||[])[i]; if (!t) return;
+  openModal('RENAME TEMPLATE',`
+    <div class="mf"><label class="ml">TEMPLATE NAME</label><input class="mi" id="t-rn" value="${esc(t.name)}"></div>
+  `,()=>{
+    const n = document.getElementById('t-rn').value.trim();
+    if (!n) return false;
+    t.name=n; persist();
+  });
+}
+
+function deleteTemplate(i) {
+  if (!confirm('Delete this template? This cannot be undone.')) return;
+  (S.templates||[]).splice(i,1);
+  persist();
+  closeModal();
+  showTemplateManager();
+}
+
+// ================================================================
+// INIT
+// ================================================================
+document.addEventListener('DOMContentLoaded',()=>{
+  setTheme(S.settings.theme||'dark', true);
+  updateThemeBtn();
+  renderStyleMenu();
+  applyStyle();
+  applyPrefs();
+  updateAutoBoldBtn();
+  updateItalicThoughtsBtn();
+
+  // Style menu: click-outside and Escape close it, focus returns to the trigger
+  document.addEventListener('click', e => {
+    const p = document.getElementById('style-picker');
+    if (p && !p.contains(e.target)) closeStyleMenu();
+  });
+  document.getElementById('style-menu').addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeStyleMenu(); document.getElementById('btn-style').focus(); }
+  });
+
+  // Sidebar states
+  if (S.settings.sidebarOpen === false) {
+    document.getElementById('sidebar').classList.add('collapsed');
+    document.getElementById('sb-toggle').innerHTML=ic('chevron-right');
+  }
+  if (S.settings.charsOpen === false) {
+    document.getElementById('cp').classList.add('collapsed');
+    document.getElementById('cp-toggle').innerHTML=ic('chevron-left');
+  }
+  if (S.settings.sidebarDetail) {
+    document.getElementById('sidebar').classList.add('sidebar-detail');
+    document.getElementById('sb-detail-btn').innerHTML=ic('list') + ' Details';
+  }
+
+  // Saved sidebar widths
+  if (S.settings.sidebarW) document.documentElement.style.setProperty('--sidebar-w', S.settings.sidebarW+'px');
+  if (S.settings.charsW) document.documentElement.style.setProperty('--chars-w', S.settings.charsW+'px');
+
+  const ed=document.getElementById('editor');
+  ed.addEventListener('input',onEditorInput);
+  ed.addEventListener('keyup',updateTBState);
+  ed.addEventListener('mouseup',updateTBState);
+  document.getElementById('doc-title').addEventListener('input',schedSave);
+  document.getElementById('s-zoom').textContent=zoom+'%';
+  installCopyHandler();
+  installPasteHandler();
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('#ctx')) hideCtx();
+  });
+  renderNav();
+  showDashboard();
+  showMovedBanner();                    // only appears on the old GitHub Pages address
+  if (!getMode()) {
+    showAuthGate(false);                // first visit — the wizard follows once resolved
+  } else {
+    if (isCloud()) cloudBoot();         // signed in — pull the server copy
+    maybeShowStyleIntro();              // held back behind the gate on a first visit
+    maybeShowWizard();
+  }
+});
