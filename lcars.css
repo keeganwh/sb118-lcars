@@ -53,16 +53,6 @@ body{font-family:var(--ui-font,'Droid Sans',Verdana,Arial,sans-serif);background
 body.hc .hdr-badge{color:#000}
 .hdr-title{color:var(--blue2);font-size:0.87rem;letter-spacing:3px;opacity:.8}
 .hdr-right{margin-left:auto;display:flex;align-items:center;gap:6px;padding-right:12px;flex-shrink:0}
-/* On a narrow screen the header's buttons no longer fit. Drop the strapline
-   and let the bar scroll sideways rather than clip — every control, including
-   the way back out of a view, has to stay reachable. */
-@media (max-width:820px){
-  #hdr{overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
-  #hdr::-webkit-scrollbar{display:none}
-  .hdr-title{display:none}
-  .hdr-badge{margin-right:10px;padding:6px 14px;font-size:1.1rem;letter-spacing:3px}
-  .hdr-right{padding-right:8px}
-}
 .theme-picker{position:relative;display:inline-flex}
 .theme-dropdown{position:absolute;top:100%;right:0;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:3px 0;min-width:148px;z-index:200;display:none;flex-direction:column;box-shadow:0 4px 16px rgba(0,0,0,.4)}
 .theme-picker:hover .theme-dropdown{display:flex}
@@ -444,7 +434,9 @@ body.hc #cp{border-left:3px solid var(--blue)}
 #sb-search-btn.on{opacity:1!important}
 
 /* ── CHARACTER MANIFEST ── */
-#char-manifest{position:fixed;inset:0;z-index:500;display:flex;background:var(--bg)}
+/* A view like any other: it fills the space under the app header rather than
+   covering the whole window, so the header stays reachable from inside it. */
+#view-manifest{display:flex;background:var(--bg)}
 /* LEFT PANE */
 #cm-left{width:270px;background:var(--panel2);border-right:3px solid var(--amber);display:flex;flex-direction:column;flex-shrink:0}
 .cm-hdr{background:var(--amber);height:40px;display:flex;align-items:center;padding:0 10px;font-weight:bold;color:#000;font-size:0.73rem;letter-spacing:3px;gap:5px;border-radius:0 0 32px 0;flex-shrink:0}
@@ -616,7 +608,6 @@ body.hc #cp{border-left:3px solid var(--blue)}
 .cm-rib-add-preview .cm-rib-img{width:100%;height:auto;max-height:56px}
 .cm-rib-add-catname{font-size:0.72rem;color:var(--dim);margin-top:4px;word-break:break-word;text-align:center}
 /* Manifest right-pane header */
-#cm-right-hdr{height:40px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 12px;gap:6px;flex-shrink:0}
 #cm-profile{flex:1;overflow:hidden;display:flex;flex-direction:column;min-width:0}
 /* Toast */
 #lcars-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(30px);background:var(--amber,#d4a017);color:#000;padding:8px 18px;border-radius:6px;font-size:0.82rem;font-family:inherit;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;z-index:9999;white-space:nowrap}
@@ -999,6 +990,34 @@ body.hc #cp{border-left:3px solid var(--blue)}
    from the pointer position in applyWithReveal(), not the control's centre. */
 ::view-transition-old(root){animation:none}
 ::view-transition-new(root){animation:vt-reveal .6s cubic-bezier(.22,.72,.2,1)}
+/* ── RESPONSIVE ──
+   Kept last so it outranks the skin overrides above. Covers the header and the
+   two views built as pages (Settings has its own rules with its section). */
+
+/* The header's buttons stop fitting well before a phone width. Drop the
+   strapline and let the bar scroll sideways rather than clip — every control,
+   including the way back out of a view, has to stay reachable. */
+@media (max-width:820px){
+  #hdr{overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  #hdr::-webkit-scrollbar{display:none}
+  .hdr-title{display:none}
+  .hdr-badge{margin-right:10px;padding:6px 14px;font-size:1.1rem;letter-spacing:3px}
+  .hdr-right{padding-right:8px}
+
+  /* Manifest: neither the list beside the profile nor the profile's own two
+     columns fit, so the whole view becomes one scrolling column. */
+  #view-manifest{flex-direction:column;overflow-y:auto}
+  #cm-left{width:auto;max-height:40vh;border-right:none;border-bottom:3px solid var(--amber);flex-shrink:0}
+  :root[data-skin="prime"] body #cm-left{border-right:none;border-bottom:1px solid var(--border)}
+  #cm-right{flex:1 0 auto;overflow:visible}
+  #cm-profile,#cm-profile-wrap{overflow:visible}
+  #cm-profile-wrap{flex-direction:column}
+  #cm-bio-col{width:auto;border-right:none;border-bottom:1px solid var(--border);overflow:visible;padding:16px 14px}
+  #cm-sims-col{overflow:visible;padding:16px 14px}
+  .cm-rib-add-body{flex-direction:column}
+  .cm-rib-add-side{width:auto}
+}
+
 @media (prefers-reduced-motion:reduce){
   ::view-transition-new(root){animation:none}
 }

@@ -158,6 +158,8 @@ const VERSIONS = [
       'Fixed: the downloaded offline copy still offered to sign you in or create an account, neither of which can work from a file on your own machine — the browser blocks it reaching the server. The offline copy now starts straight in offline mode with no sign-in prompt, and Settings and the Getting Started wizard point you at LCARS online instead, noting that a backup taken offline restores straight into it',
       'Changed: Settings is now a page of its own rather than a tall pop-up window. It sits under the same header as the rest of LCARS, at its own address, and the sections are regrouped \u2014 your account first, then how it looks, then how the sim editor behaves, with your data, the danger zone and the version history below. Fonts, sizes, colours and the editor toggles are saved together from the bar at the foot of the page; everything else still applies the moment you click it',
       'Fixed: on a narrow screen the header buttons were cut off with no way to reach them, so there was no way back out of Settings on a phone. The header now scrolls sideways and drops the STARBASE 118 WRITING TOOL strapline rather than clipping',
+      'Changed: the Character Manifest is a page of the app now rather than a screen that covered it. It carried a second row of Sim Editor, theme and Settings buttons of its own, which made it read as a separate application; it now sits under the same header as everything else, and that header stays put while you are in it. Opening it mid-sim still leaves your unsaved typing exactly where it was',
+      'Changed: the Character Manifest works on a phone \u2014 the character list and the profile stack into one scrolling column instead of being squeezed side by side',
     ],
   },
 ];
@@ -486,7 +488,6 @@ function setTheme(t, keepSkin) {
   }
   persist();
   updateThemeBtn();
-  updateManifestThemeBtn();
 }
 function cycleTheme() {
   const order = ['dark','light','hc'];
@@ -2526,7 +2527,7 @@ function flushSave() {
   updateCharsPanel(doc);
   renderNav();
   // Keep manifest stats live if it's open
-  if (!document.getElementById('char-manifest').classList.contains('hidden')) refreshManifest();
+  if (_routeView === 'manifest') refreshManifest();
 }
 
 function schedSave() {
@@ -2780,7 +2781,7 @@ function toggleMyChar(i) {
   }
   persist(); updateCharsPanel(doc);
   // Keep manifest stats live if it's open
-  if (!document.getElementById('char-manifest').classList.contains('hidden')) refreshManifest();
+  if (_routeView === 'manifest') refreshManifest();
 }
 
 function openCharWarn(i) {
@@ -4720,19 +4721,19 @@ function downloadOfflineCopy() {
 //
 // Every view change goes through showView, which is also what keeps the URL
 // honest: it is the one place syncRoute is called from.
-const VIEW_IDS = { dash: 'workspace', settings: 'view-settings', manifest: 'char-manifest' };
+const VIEW_IDS = { dash: 'workspace', settings: 'view-settings', manifest: 'view-manifest' };
 
 function showView(view, fromRoute) {
   if (!VIEW_IDS[view]) view = 'dash';
   if (view === 'settings') renderSettingsView();
   else if (view === 'manifest') prepManifest();
 
-  document.getElementById('view-settings').classList.toggle('hidden', view !== 'settings');
-  // The manifest is still an overlay, so the workspace stays mounted beneath
-  // it and only Settings actually displaces it.
-  document.getElementById('workspace').classList.toggle('hidden', view === 'settings');
-  const cm = document.getElementById('char-manifest');
-  if (cm) cm.classList.toggle('hidden', view !== 'manifest');
+  // Hiding a view leaves it mounted — the editor and its unsaved keystrokes
+  // are still there, untouched, when the dashboard comes back.
+  Object.entries(VIEW_IDS).forEach(([v, id]) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('hidden', v !== view);
+  });
 
   _routeView = view;
   updateViewButtons();
@@ -5282,12 +5283,6 @@ function getCharInitials(name) {
   return (name||'').split(/\s+/).map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
 }
 
-function updateManifestThemeBtn() {
-  const t = S.settings?.theme || 'dark';
-  const btn = document.getElementById('cm-theme-btn');
-  if (btn) btn.innerHTML = ic(t === 'light' ? 'sun' : t === 'hc' ? 'contrast' : 'moon');
-}
-
 // Everything the manifest needs before it is shown. Called by showView, which
 // owns the actual display and the URL.
 function prepManifest() {
@@ -5306,7 +5301,6 @@ function prepManifest() {
   _srEditMode = false;
   _ribbonEditMode = false;
   renderManifestList();
-  updateManifestThemeBtn();
   // Auto-open the alphabetically first Primary character
   const firstPrimary = Object.values(S.characters)
     .filter(c => c.charType === 'Primary')

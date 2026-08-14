@@ -296,26 +296,10 @@
 
 </div><!-- /workspace -->
 
-<!-- SETTINGS VIEW — filled in by renderSettingsView(); a sibling of the
-     workspace so it wears the same app header and the editor is never torn
-     down behind it. -->
-<div id="view-settings" class="view hidden"></div>
-
-<!-- STATUS BAR -->
-<div id="sb">
-  <span id="s-doc">No sim open</span>
-  <span id="s-wc">0 words</span>
-  <div class="zc">
-    <button class="zb" onclick="adjZoom(-10)">−</button>
-    <span id="s-zoom" style="min-width:36px;text-align:center">100%</span>
-    <button class="zb" onclick="adjZoom(10)">+</button>
-  </div>
-</div>
-
-</div><!-- /app -->
-
-<!-- CHARACTER MANIFEST (full-screen overlay) -->
-<div id="char-manifest" class="hidden">
+<!-- CHARACTER MANIFEST VIEW — a sibling of the workspace, so it wears the same
+     app header as every other view and the open sim is left untouched behind
+     it. -->
+<div id="view-manifest" class="view hidden">
   <div id="cm-left">
     <div class="cm-hdr">
       <span>MANIFEST</span>
@@ -343,24 +327,27 @@
     <div id="cm-char-list"></div>
   </div>
   <div id="cm-right">
-    <div id="cm-right-hdr">
-      <div style="flex:1"></div>
-      <button class="btn btn-s btn-sm" onclick="closeManifest()"><svg class="ic" aria-hidden="true"><use href="#i-pencil"/></svg> Sim Editor</button>
-      <div class="tsep"></div>
-      <div class="theme-picker">
-        <button class="btn btn-s btn-sm" id="cm-theme-btn" title="Theme"><svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg></button>
-        <div class="theme-dropdown">
-          <button class="theme-opt" data-theme="dark" onclick="setTheme('dark')"><svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg> Dark</button>
-          <button class="theme-opt" data-theme="light" onclick="setTheme('light')"><svg class="ic" aria-hidden="true"><use href="#i-sun"/></svg> Light</button>
-          <button class="theme-opt" data-theme="hc" onclick="setTheme('hc')"><svg class="ic" aria-hidden="true"><use href="#i-contrast"/></svg> High Contrast</button>
-          <button class="theme-opt" onclick="toggleSkin(this,event)"><svg class="ic" aria-hidden="true"><use href="#i-sparkles"/></svg> Delta Prime look</button>
-        </div>
-      </div>
-      <button class="btn btn-s btn-sm" onclick="openSettings()"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg> Settings</button>
-    </div>
     <div id="cm-profile" class="cm-empty-msg">Select a character to view their profile.</div>
   </div>
 </div>
+
+<!-- SETTINGS VIEW — filled in by renderSettingsView(); a sibling of the
+     workspace so it wears the same app header and the editor is never torn
+     down behind it. -->
+<div id="view-settings" class="view hidden"></div>
+
+<!-- STATUS BAR -->
+<div id="sb">
+  <span id="s-doc">No sim open</span>
+  <span id="s-wc">0 words</span>
+  <div class="zc">
+    <button class="zb" onclick="adjZoom(-10)">−</button>
+    <span id="s-zoom" style="min-width:36px;text-align:center">100%</span>
+    <button class="zb" onclick="adjZoom(10)">+</button>
+  </div>
+</div>
+
+</div><!-- /app -->
 
 <!-- MODAL -->
 <div id="mo" class="hidden" onclick="if(event.target===this)closeModal()">
