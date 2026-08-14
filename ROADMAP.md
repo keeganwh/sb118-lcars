@@ -10,9 +10,18 @@ Each item has a **Done when…** so any session can pick it up and run without a
 
 ## Phase 1 — Hosting move (do first, low risk)
 
-- [ ] **Deploy from Vercel instead of GitHub Pages.**
-      Connect the repo to Vercel, add `vercel.json` rewriting `/` → `/LCARS.html`, point a domain at it. Keep Pages live in parallel for a grace period with a banner pointing at the new URL.
-      _Done when: the new URL serves the current app, existing `localStorage` data is untouched, Gist sync still works, and pushing to `main` still auto-deploys._
+- [x] **Deploy from Vercel instead of GitHub Pages.** — _done 2026-08-14._
+      Live at **https://sb118-lcars.vercel.app/**. `vercel.json` rewrites `/` → `/LCARS.html` and `/guide` → the user guide; `LCARS.html` is served `must-revalidate` so deploys reach users on next load. `LCARS-prototype.html` removed from the repo (was being served publicly, nothing referenced it).
+
+- [ ] **Grace period on GitHub Pages.**
+      Pages is still live and still auto-deploys from `main`. Add a banner on the Pages build pointing at the Vercel URL, then retire Pages once writers have moved.
+      _Done when: Pages either shows the banner or is switched off, and no one is landing on the old URL unaware._
+
+- [ ] **Custom domain (optional).**
+      Can be added in Vercel settings at any time without redoing anything.
+      _Done when: decided — a domain is pointed at the deployment, or this is explicitly dropped in favour of the `.vercel.app` subdomain._
+
+> **Origin change caveat:** `localStorage` is per-origin, so data on the Pages URL does **not** appear on the Vercel URL. Until Phase 2 lands, moving between them needs a Backup Data export + Import, or a Gist pull. Phase 2 removes this problem permanently.
 
 ---
 
