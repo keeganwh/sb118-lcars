@@ -1489,6 +1489,8 @@ const VERSIONS = [
       'Added: the old GitHub Pages address now shows a moving notice explaining the change, with Move My Stuff (sign in there and your sims and settings upload to your account, ready at the new address), a manual backup download, a link to the new site, and Remind Me Later — which returns on the next load rather than dismissing for good',
       'Added: a Getting Started wizard on first run, with separate routes for writers new to LCARS and writers arriving from the old address \u2014 the latter covering what changed and how to bring sims across, including loading a backup file directly from the wizard. Dismiss it with the \u201cDon\u2019t show this again\u201d button, or reopen it any time from Getting Started on the Dashboard',
       'Added: a Danger Zone in Settings \u2192 Data Management. Erase all sims and characters wipes LCARS clean \u2014 synced to your other devices when signed in \u2014 and, with an account, Delete my account removes your sims, characters and revision history from the server. Both need the action typed out to confirm, and neither can be undone',
+      'Changed: the Dashboard\u2019s Ready to get started? cards now sit in two rows \u2014 making things on the first, learning about them on the second',
+      'Fixed: the Danger Zone heading was tinted red and became unreadable against the red duty post accent; it now uses the normal text colour',
       'Fixed: restoring a large backup froze the page for over a second — the whole dataset was being written and the sim tree rebuilt inside the click, with a blocking alert on the end. The work now yields a frame first and reports through a toast',
       'Note: if this browser and your account both hold sims, you are asked which copy to keep rather than one silently replacing the other',
     ],
@@ -2890,6 +2892,8 @@ function renderDashboard() {
         <div class="da-label">Character Manifest</div>
         <div class="da-hint">View and manage your characters</div>
       </button>
+    </div>
+    <div class="dash-actions">
       <button class="dash-action" onclick="showWizard()">
         <div class="da-icon">${ic('sparkles')}</div>
         <div class="da-label">Getting Started</div>
@@ -5989,8 +5993,8 @@ function openSettings() {
       </div>
     </div>
 
-    <div class="msec" style="margin-top:18px;color:var(--red,#c66)">DANGER ZONE</div>
-    <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px;padding:12px;border:1px solid var(--red,#c66);border-radius:6px">
+    <div class="msec" style="margin-top:18px">DANGER ZONE</div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px;padding:12px;border:1px solid var(--border);border-radius:6px">
       <div>
         <button class="btn btn-s" onclick="confirmEraseData()">${ic('trash')} Erase all my sims and characters</button>
         <div style="font-size:0.73rem;color:var(--dim);margin-top:5px">Empties this copy of LCARS — every mission, scene, sim and character. ${isCloud() ? 'Your account stays, and the erase is synced, so it clears on your other devices too.' : 'Applies to this browser only.'} Cannot be undone. <strong>Take a backup first.</strong></div>
