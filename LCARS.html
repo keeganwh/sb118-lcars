@@ -1488,6 +1488,7 @@ const VERSIONS = [
       'Fixed: restoring a backup did not save to your account — it saved on the device only and would not reach the server until your next edit. Restoring now uploads straight away, which matters most when moving your sims across from the old address',
       'Added: the old GitHub Pages address now shows a moving notice explaining the change, with Move My Stuff (sign in there and your sims and settings upload to your account, ready at the new address), a manual backup download, a link to the new site, and Remind Me Later — which returns on the next load rather than dismissing for good',
       'Added: a Getting Started wizard on first run, with separate routes for writers new to LCARS and writers arriving from the old address \u2014 the latter covering what changed and how to bring sims across, including loading a backup file directly from the wizard. Dismiss it with the \u201cDon\u2019t show this again\u201d button, or reopen it any time from Getting Started on the Dashboard',
+      'Added: a Danger Zone in Settings \u2192 Data Management. Erase all sims and characters wipes LCARS clean \u2014 synced to your other devices when signed in \u2014 and, with an account, Delete my account removes your sims, characters and revision history from the server. Both need the action typed out to confirm, and neither can be undone',
       'Fixed: restoring a large backup froze the page for over a second — the whole dataset was being written and the sim tree rebuilt inside the click, with a blocking alert on the end. The work now yields a frame first and reports through a toast',
       'Note: if this browser and your account both hold sims, you are asked which copy to keep rather than one silently replacing the other',
     ],
@@ -2342,6 +2343,84 @@ function adoptCloudState(remote) {
   curId = null; curView = null; curViewId = null;
   setTheme(S.settings.theme || 'dark', true);
   applyStyle(); applyPrefs(); renderNav(); showDashboard();
+}
+
+// ================================================================
+// ERASE / DELETE
+// ================================================================
+// Both paths demand a typed confirmation rather than an OK button, because
+// neither can be undone and a backup is the only way back.
+function eraseConfirmBody(word, warning) {
+  return `<div style="font-size:0.87rem;line-height:1.65">
+      ${warning}
+      <p style="margin:12px 0 6px">Type <strong>${word}</strong> below to confirm.</p>
+      <input class="mi" id="erase-confirm" type="text" autocomplete="off" spellcheck="false" placeholder="${word}">
+    </div>`;
+}
+
+function confirmEraseData() {
+  closeModal();
+  setTimeout(() => openModal('Erase all sims and characters',
+    eraseConfirmBody('ERASE',
+      `<p style="margin:0 0 8px">This removes every mission, scene, sim and character from LCARS.</p>
+       <p style="margin:0 0 8px">${isCloud()
+         ? 'Your account stays and you remain signed in, but the erase is synced — it will clear on your other devices too.'
+         : 'This applies to this browser only.'}</p>
+       <p style="margin:0"><strong>There is no undo.</strong> If you have not taken a backup, cancel and do that first.</p>`),
+    () => {
+      const v = (document.getElementById('erase-confirm').value || '').trim().toUpperCase();
+      if (v !== 'ERASE') { showToast('Type ERASE to confirm'); return false; }
+      eraseAllData();
+    },
+    { ok: 'Erase everything' }), 60);
+}
+
+async function eraseAllData() {
+  S.docs = {}; S.missions = {}; S.scenes = {}; S.characters = {}; S.templates = [];
+  persist();
+  curId = null; curView = null; curViewId = null;
+  renderNav(); showDashboard();
+  showToast('Everything erased');
+  if (isCloud()) {
+    await saveToCloud();
+    const a = getAuth();
+    if (a.uid) await supaFetch('/rest/v1/snapshots?writer_uid=eq.' + encodeURIComponent(a.uid), { method: 'DELETE' });
+  }
+}
+
+function confirmDeleteAccount() {
+  closeModal();
+  setTimeout(() => openModal('Delete account and all data',
+    eraseConfirmBody('DELETE',
+      `<p style="margin:0 0 8px">This removes your sims, characters and revision history from the server, and wipes this device's copy.</p>
+       <p style="margin:0 0 8px">Your Writer ID stays registered as a login — signing in with it again would give you an empty LCARS. To have the login itself removed, ask the tool's maintainer.</p>
+       <p style="margin:0"><strong>There is no undo.</strong> Take a backup first if there is anything you want to keep.</p>`),
+    () => {
+      const v = (document.getElementById('erase-confirm').value || '').trim().toUpperCase();
+      if (v !== 'DELETE') { showToast('Type DELETE to confirm'); return false; }
+      deleteAccount();
+    },
+    { ok: 'Delete my account' }), 60);
+}
+
+async function deleteAccount() {
+  const a = getAuth();
+  if (a.uid) {
+    const uid = encodeURIComponent(a.uid);
+    try {
+      await supaFetch('/rest/v1/snapshots?writer_uid=eq.' + uid, { method: 'DELETE' });
+      await supaFetch('/rest/v1/state?writer_uid=eq.' + uid, { method: 'DELETE' });
+      await supaFetch('/rest/v1/writers?id=eq.' + uid, { method: 'DELETE' });
+    } catch(e) {
+      alert('Could not reach the server, so nothing was deleted. Check your connection and try again.');
+      return;
+    }
+  }
+  S.docs = {}; S.missions = {}; S.scenes = {}; S.characters = {}; S.templates = [];
+  persist();
+  clearAuth();
+  setMode('');
+  location.reload();
 }
 
 // ================================================================
@@ -5908,6 +5987,19 @@ function openSettings() {
         </div>
         <div style="font-size:0.73rem;color:var(--dim);margin-top:5px">Saves or restores all your data — Sims, Character Manifest, and preferences. Use Backup regularly to keep a copy outside the browser. <strong>Restore replaces all current data.</strong></div>
       </div>
+    </div>
+
+    <div class="msec" style="margin-top:18px;color:var(--red,#c66)">DANGER ZONE</div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px;padding:12px;border:1px solid var(--red,#c66);border-radius:6px">
+      <div>
+        <button class="btn btn-s" onclick="confirmEraseData()">${ic('trash')} Erase all my sims and characters</button>
+        <div style="font-size:0.73rem;color:var(--dim);margin-top:5px">Empties this copy of LCARS — every mission, scene, sim and character. ${isCloud() ? 'Your account stays, and the erase is synced, so it clears on your other devices too.' : 'Applies to this browser only.'} Cannot be undone. <strong>Take a backup first.</strong></div>
+      </div>
+      ${isCloud() ? `
+      <div style="border-top:1px solid var(--border,#333);padding-top:12px">
+        <button class="btn btn-s" onclick="confirmDeleteAccount()">${ic('alert')} Delete my account and all data</button>
+        <div style="font-size:0.73rem;color:var(--dim);margin-top:5px">Removes your sims, characters and revision history from the server and wipes this device's copy. Your Writer ID stays registered as a login. Cannot be undone.</div>
+      </div>` : ''}
     </div>
 
     <div class="msec" style="margin-top:18px">YOUR ACCOUNT</div>
