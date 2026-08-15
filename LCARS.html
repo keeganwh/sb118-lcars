@@ -111,11 +111,12 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
 
 <!-- HEADER -->
 <div id="hdr">
-  <div class="hdr-badge">LCARS</div>
-  <!-- Sits beside the badge rather than inside it: the badge is filled with the
-       duty accent, and on Operations that accent is the same gold as the mark.
-       src is set from the icon link at boot so the base64 is carried once. -->
-  <img id="hdr-mark" alt="">
+  <!-- The mark sits on the duty accent, which on Operations is the same gold as
+       the mark itself, so it carries a dark keyline in the CSS. That is built
+       from drop-shadow rather than box-shadow: drop-shadow follows the PNG's
+       alpha, so it traces the delta instead of boxing it.
+       src is set from the icon link at boot, so the base64 is carried once. -->
+  <div class="hdr-badge"><img id="hdr-mark" alt="">LCARS</div>
   <div class="hdr-title">STARBASE 118 WRITING TOOL</div>
   <div class="hdr-right">
     <button class="btn btn-s btn-sm" id="btn-manifest-toggle" onclick="openManifest()"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg> Character Manifest</button>

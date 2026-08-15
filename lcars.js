@@ -191,7 +191,7 @@ const VERSIONS = [
     date: '2026-08-15',
     changes: [
       'Changed: new icon \u2014 the gold delta \u2014 in the browser tab, and on your home screen if you add LCARS to it from a phone',
-      'Added: the delta now sits in the top left of the app as well, beside the LCARS badge',
+      'Added: the delta now sits in the top-left LCARS badge as well. It carries a fine dark outline so it stays legible on every duty-post colour \u2014 without one it disappears against the gold of Operations',
     ],
   },
 ];
