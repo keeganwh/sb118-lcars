@@ -103,7 +103,6 @@
   <div class="hdr-badge">LCARS</div>
   <div class="hdr-title">STARBASE 118 WRITING TOOL</div>
   <div class="hdr-right">
-    <button class="btn btn-s btn-sm" onclick="showTemplateManager()"><svg class="ic" aria-hidden="true"><use href="#i-hexagon"/></svg> Sim Templates</button>
     <button class="btn btn-s btn-sm" id="btn-manifest-toggle" onclick="openManifest()"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg> Character Manifest</button>
     <div class="tsep"></div>
     <div id="style-picker">
@@ -285,6 +284,10 @@
           <button class="btn btn-s btn-sm" onclick="showHistory()" title="Revision snapshots"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg> Snapshots</button>
         </div>
         <div class="sd-row">
+          <span class="sd-lbl">Template</span>
+          <button class="btn btn-s btn-sm" onclick="saveCurrentAsTemplate()" title="Save this sim's text as a reusable template"><svg class="ic" aria-hidden="true"><use href="#i-hexagon"/></svg> Save as Template</button>
+        </div>
+        <div class="sd-row">
           <button class="btn btn-s btn-sm" id="btn-post" onclick="openPostedCal()" title="Set posted date"><svg class="ic" aria-hidden="true"><use href="#i-calendar"/></svg> Post Date</button>
           <span class="sd-date" id="dh-date"></span>
         </div>
@@ -300,6 +303,13 @@
      app header as every other view and the open sim is left untouched behind
      it. -->
 <div id="view-manifest" class="view hidden">
+  <!-- Narrow screens only: the character list folds away behind this so the
+       profile you came to read gets the screen. -->
+  <div id="cm-mobile-bar">
+    <button class="btn btn-s btn-sm" id="cm-list-btn" onclick="toggleManifestList()"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg> Characters</button>
+    <span id="cm-current-name">No character selected</span>
+    <button class="cm-add-btn" onclick="addNewCharacter()">+ Add</button>
+  </div>
   <div id="cm-left">
     <div class="cm-hdr">
       <span>MANIFEST</span>

@@ -164,6 +164,13 @@ const VERSIONS = [
       'Changed: everything to do with your account is now in one place at the top of Settings \u2014 who you are signed in as, saving now, signing out, your PIN, your recovery email and closing the account. Deleting your account moved there from the Danger Zone, which now covers erasing your sims and characters only',
       'Fixed: the version number in Settings and the link to LCARS online were asking for a colour that was never defined, so they came out in ordinary body text instead of the accent colour',
       'Note: a forgotten PIN still has to be reset by the maintainer, and deleting your account still leaves the Writer ID registered as a login. Both need a server-side key that cannot safely live in the page, and are being done properly next',
+      'Changed: Settings is reordered and regrouped into four sections \u2014 Your Account & Data, LCARS Appearance, LCARS Sim Editor and About LCARS \u2014 with a contents rail down the side to jump between them. On a phone the rail folds away behind a Jump to\u2026 button',
+      'Changed: the buttons in Settings now say what they actually do underneath their label, and sit three across a desktop page instead of one per row, wrapping down to one on a phone. \u201cSave now\u201d, for instance, now says it uploads this device\u2019s sims straight away rather than waiting for the automatic save',
+      'Changed: Delete my account moved back into the Danger Zone, which is now a marked-off block at the foot of Your Account & Data rather than a section of its own',
+      'Added: a display name. Set a friendlier name than your Writer ID from Settings \u2192 Your Account & Data',
+      'Changed: About LCARS now gathers the changelog, the link to the full user guide, the Getting Started tour and the note about how the tool was built. That last one has moved off the Dashboard, which was not really the place for it',
+      'Changed: Sim Templates is no longer a button in the header. The saved templates live in Settings \u2192 Your Account & Data, where clicking one opens it for editing \u2014 name, default sim title and the template text itself \u2014 rather than only offering rename and delete. Saving the sim you are writing as a template moved to Sim Details, next to Snapshots',
+      'Changed: on a phone the Character Manifest no longer gives the top of the screen to the character list. The list folds away behind a Characters button, with its search intact, so the character you are reading gets the room',
     ],
   },
 ];
@@ -874,27 +881,39 @@ function cloudSignOut() {
 // a page served to writers — those stay manual until there is a server
 // function to do them (see ROADMAP session 3).
 
-// recovery_email is stored for identification, not used to send anything yet.
-async function fetchRecoveryEmail() {
+// The writers row holds the two things about a writer that are not the sims
+// themselves: a display name, and a recovery email kept for identification.
+async function fetchWriterProfile() {
   const a = getAuth();
-  if (!a.uid) return null;
-  const r = await supaFetch('/rest/v1/writers?select=recovery_email&id=eq.' + encodeURIComponent(a.uid));
+  if (!a.uid) return { display_name: '', recovery_email: '' };
+  const r = await supaFetch('/rest/v1/writers?select=display_name,recovery_email&id=eq.' + encodeURIComponent(a.uid));
   if (!r.ok) throw new Error('Could not read your account details.');
-  const rows = await r.json();
-  return (rows[0] && rows[0].recovery_email) || '';
+  const row = (await r.json())[0] || {};
+  return { display_name: row.display_name || '', recovery_email: row.recovery_email || '' };
 }
 
-async function saveRecoveryEmail(email) {
+async function patchWriterProfile(patch) {
   const a = getAuth();
   if (!a.uid) throw new Error('You are not signed in.');
-  const v = (email || '').trim();
-  if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new Error('That does not look like an email address.');
   const r = await supaFetch('/rest/v1/writers?id=eq.' + encodeURIComponent(a.uid), {
     method: 'PATCH',
     headers: { 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ recovery_email: v || null })
+    body: JSON.stringify(patch)
   });
-  if (!r.ok) throw new Error(supaErr(await r.json().catch(()=>null), 'Could not save your recovery email.'));
+  if (!r.ok) throw new Error(supaErr(await r.json().catch(()=>null), 'Could not save that.'));
+}
+
+async function saveDisplayName(name) {
+  const v = (name || '').trim();
+  if (v.length > 60) throw new Error('That is longer than 60 characters.');
+  await patchWriterProfile({ display_name: v || null });
+  return v;
+}
+
+async function saveRecoveryEmail(email) {
+  const v = (email || '').trim();
+  if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new Error('That does not look like an email address.');
+  await patchWriterProfile({ recovery_email: v || null });
   return v;
 }
 
@@ -1564,6 +1583,21 @@ function closeDoc() {
   renderNav();
 }
 
+// The mark shown wherever LCARS says how it was built. Lives in one place so
+// the About page and any future use cannot drift apart.
+const AI_LOGO_SVG = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <circle cx="9" cy="9" r="7.5" stroke="currentColor" stroke-width="1.2" opacity=".6"/>
+  <circle cx="9" cy="9" r="2.5" fill="currentColor"/>
+  <line x1="9" y1="1.5" x2="9" y2="5" stroke="currentColor" stroke-width="1.2"/>
+  <line x1="9" y1="13" x2="9" y2="16.5" stroke="currentColor" stroke-width="1.2"/>
+  <line x1="1.5" y1="9" x2="5" y2="9" stroke="currentColor" stroke-width="1.2"/>
+  <line x1="13" y1="9" x2="16.5" y2="9" stroke="currentColor" stroke-width="1.2"/>
+  <line x1="3.4" y1="3.4" x2="5.8" y2="5.8" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
+  <line x1="12.2" y1="12.2" x2="14.6" y2="14.6" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
+  <line x1="14.6" y1="3.4" x2="12.2" y2="5.8" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
+  <line x1="5.8" y1="12.2" x2="3.4" y2="14.6" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
+</svg>`;
+
 function renderDashboard() {
   const el = document.getElementById('dashboard');
   const allDocs = Object.values(S.docs);
@@ -1598,28 +1632,6 @@ function renderDashboard() {
           <div class="dash-stat-item"><div class="dash-stat-num">${totalPosted}</div><div class="dash-stat-lbl">POSTED</div></div>
           <div class="dash-stat-item"><div class="dash-stat-num">${totalWords.toLocaleString()}</div><div class="dash-stat-lbl">WORDS</div></div>
           <div class="dash-stat-item" title="${dspTip}"><div class="dash-stat-num" style="color:${dspColor}">${dspVal}</div><div class="dash-stat-lbl">SINCE LAST POST</div></div>
-        </div>
-      </div>
-      <div class="dash-ai-box" id="dash-ai-box">
-        <div class="dash-ai-logo" onclick="toggleDashAi()">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;opacity:.85">
-            <circle cx="9" cy="9" r="7.5" stroke="currentColor" stroke-width="1.2" opacity=".6"/>
-            <circle cx="9" cy="9" r="2.5" fill="currentColor"/>
-            <line x1="9" y1="1.5" x2="9" y2="5" stroke="currentColor" stroke-width="1.2"/>
-            <line x1="9" y1="13" x2="9" y2="16.5" stroke="currentColor" stroke-width="1.2"/>
-            <line x1="1.5" y1="9" x2="5" y2="9" stroke="currentColor" stroke-width="1.2"/>
-            <line x1="13" y1="9" x2="16.5" y2="9" stroke="currentColor" stroke-width="1.2"/>
-            <line x1="3.4" y1="3.4" x2="5.8" y2="5.8" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
-            <line x1="12.2" y1="12.2" x2="14.6" y2="14.6" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
-            <line x1="14.6" y1="3.4" x2="12.2" y2="5.8" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
-            <line x1="5.8" y1="12.2" x2="3.4" y2="14.6" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
-          </svg>
-          <strong>Tool Built with Claude Code AI</strong>
-          <span id="dash-ai-toggle" style="margin-left:auto;font-size:0.73rem;color:var(--dim);border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;transition:color .15s,border-color .15s">?</span>
-        </div>
-        <div id="dash-ai-body" style="display:none">
-          <div>This tool uses <strong>no AI to run</strong> and your content is never touched by AI. Everything is contained locally on your device and in your browser's storage. No internet connection required*.</div>
-          <div style="margin-top:6px;font-size:0.67rem;opacity:.7">*Fonts load from Google Fonts on first use.</div>
         </div>
       </div>
     </div>
@@ -1690,11 +1702,6 @@ function renderDashboard() {
     </div>`;
 }
 
-function toggleDashAi() {
-  const body = document.getElementById('dash-ai-body');
-  if (!body) return;
-  body.style.display = body.style.display === 'none' ? '' : 'none';
-}
 
 // ================================================================
 // COPY POST
@@ -3301,9 +3308,9 @@ function setThemeFromSettings(t) {
 function setStyleFromSettings(skin, el, ev) {
   setStyle({ skin }, el, ev);
   if (_routeView === 'settings') {
-    const y = document.getElementById('view-settings').scrollTop;
+    const y = document.getElementById('set-scroll').scrollTop;
     renderSettingsView();
-    document.getElementById('view-settings').scrollTop = y;
+    document.getElementById('set-scroll').scrollTop = y;
   }
 }
 function toggleFmt(type) {
@@ -4796,7 +4803,7 @@ function showView(view, fromRoute) {
   _routeView = view;
   updateViewButtons();
   if (!fromRoute) syncRoute(view);
-  if (view === 'settings') document.getElementById('view-settings').scrollTop = 0;
+  if (view === 'settings') { const sc = document.getElementById('set-scroll'); if (sc) sc.scrollTop = 0; }
 }
 
 // Header buttons double as the view indicator: the manifest button flips to
@@ -4831,81 +4838,132 @@ function closeSettings() { if (_routeView === 'settings') showView('dash'); }
 // Most controls here act the moment they are clicked. Only the typed
 // preference fields need an explicit save, which is what the bar at the foot
 // of the page is for.
+// The settings page is long enough to need a contents rail. Kept in step with
+// the cards by id, so adding a section is one entry here plus the card itself.
+const SET_SECTIONS = [
+  { id: 'set-sec-account',    icon: 'user',        label: 'Your Account & Data' },
+  { id: 'set-sec-appearance', icon: 'palette',     label: 'LCARS Appearance' },
+  { id: 'set-sec-editor',     icon: 'pencil',      label: 'LCARS Sim Editor' },
+  { id: 'set-sec-about',      icon: 'file-text',   label: 'About LCARS' },
+];
+
 function renderSettingsView() {
   const el = document.getElementById('view-settings');
   if (!el) return;
   el.innerHTML = `
-    <div class="set-wrap">
-      <div class="set-head">
-        <span class="set-title">SETTINGS</span>
-        <span class="set-sub">LCARS SB118 Writing Tool &middot; v${APP_VERSION}</span>
-      </div>
-      ${settingsAccountCard()}
-      ${settingsAppearanceCard()}
-      ${settingsEditorCard()}
-      ${settingsDataCard()}
-      ${settingsDangerCard()}
-      ${settingsAboutCard()}
-      <div class="set-bar">
-        <span class="set-note">Fonts, sizes, colours and the editor toggles above are saved together.</span>
-        <button class="btn btn-s" onclick="resetPrefsForm()">Reset to defaults</button>
-        <button class="btn btn-p" onclick="saveSettingsPrefs()">Save preferences</button>
+    <div id="set-toc">
+      <div class="cm-hdr"><span>SETTINGS</span></div>
+      <nav id="set-toc-list">
+        ${SET_SECTIONS.map(s => `
+          <button class="set-toc-link" data-sec="${s.id}" onclick="gotoSettingsSection('${s.id}')">
+            ${ic(s.icon)} <span>${s.label}</span>
+          </button>`).join('')}
+      </nav>
+    </div>
+    <div id="set-scroll">
+      <div class="set-wrap">
+        <div class="set-head">
+          <button class="btn btn-s" id="set-toc-btn" onclick="toggleSettingsToc()">${ic('list')} Jump to…</button>
+          <span class="set-sub">LCARS SB118 Writing Tool &middot; v${APP_VERSION}</span>
+        </div>
+        ${settingsAccountCard()}
+        ${settingsAppearanceCard()}
+        ${settingsEditorCard()}
+        ${settingsAboutCard()}
+        <div class="set-bar">
+          <span class="set-note">Fonts, sizes, colours and the editor toggles above are saved together.</span>
+          <button class="btn btn-s" onclick="resetPrefsForm()">Reset to defaults</button>
+          <button class="btn btn-p" onclick="saveSettingsPrefs()">Save preferences</button>
+        </div>
       </div>
     </div>`;
   // The Delta Prime radio groups render their own selected state.
   setTimeout(updateStyleMenu, 0);
-  if (isCloud()) loadRecoveryEmail();
+  if (isCloud()) loadWriterProfile();
+  document.getElementById('set-scroll')
+    .addEventListener('scroll', markSettingsSection, { passive: true });
+  // Deferred: this runs while the view is still hidden, so nothing has a box
+  // to measure until showView has revealed it.
+  requestAnimationFrame(markSettingsSection);
+}
+
+// offsetTop is measured against whichever ancestor happens to be positioned,
+// and that changes between breakpoints — the mobile rules make #view-settings
+// relative. Measure against the scroller itself instead.
+function settingsSectionTop(el, sc) {
+  return el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
+}
+
+function gotoSettingsSection(id) {
+  const sec = document.getElementById(id);
+  const sc = document.getElementById('set-scroll');
+  if (!sec || !sc) return;
+  sc.scrollTo({ top: settingsSectionTop(sec, sc) - 12, behavior: 'smooth' });
+  closeSettingsToc();                      // on a phone the rail is covering the page
+}
+
+// Whichever section's top has most recently passed the top of the viewport is
+// the one you are reading — except at the very bottom, where the scroller runs
+// out before the last section reaches the top and it could never be marked.
+function markSettingsSection() {
+  const sc = document.getElementById('set-scroll');
+  if (!sc || sc.clientHeight === 0) return;   // still hidden; nothing to measure
+  let active = SET_SECTIONS[0].id;
+  if (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 4) {
+    active = SET_SECTIONS[SET_SECTIONS.length - 1].id;
+  } else {
+    SET_SECTIONS.forEach(s => {
+      const el = document.getElementById(s.id);
+      if (el && settingsSectionTop(el, sc) - 80 <= sc.scrollTop) active = s.id;
+    });
+  }
+  document.querySelectorAll('.set-toc-link').forEach(b =>
+    b.classList.toggle('on', b.dataset.sec === active));
+}
+
+function toggleSettingsToc() {
+  const t = document.getElementById('set-toc');
+  if (t) t.classList.toggle('toc-open');
+}
+function closeSettingsToc() {
+  const t = document.getElementById('set-toc');
+  if (t) t.classList.remove('toc-open');
+}
+
+// A settings action: a button that says what it does underneath its label,
+// sized so three sit across a desktop page and wrap down from there. Shares
+// .dash-action with the dashboard so both look like the same app.
+function setTile(onclick, icon, label, hint, id) {
+  return `<button class="dash-action"${id?` id="${id}"`:''} onclick="${onclick}">
+      <div class="da-icon">${ic(icon)}</div>
+      <div class="da-label">${label}</div>
+      <div class="da-hint">${hint}</div>
+    </button>`;
 }
 
 function settingsAccountCard() {
   return `
-    <div class="set-card">
-      <div class="msec">YOUR ACCOUNT</div>
+    <div class="set-card" id="set-sec-account">
+      <div class="msec">YOUR ACCOUNT &amp; DATA</div>
       ${isCloud() ? `
       <div class="set-block">
         <div class="set-writerid">
           <span class="set-writerid-lbl">SIGNED IN AS</span>
           <span class="set-writerid-val">${esc(getAuth().writerId||'')}</span>
+          <span class="set-note" style="margin:0" id="sync-status">${esc(syncStatus.msg||'')}</span>
         </div>
-        <div class="set-note">Your work saves to your account a few seconds after each change, and follows
-          you to any device you sign in on.</div>
-        <div class="set-actions" style="margin-top:10px">
-          <button class="btn btn-s" onclick="saveToCloud()">${ic('arrow-up')} Save now</button>
-          <button class="btn btn-s" onclick="cloudSignOut()">Sign out</button>
+        <div class="set-tiles" style="margin-top:10px">
+          ${setTile('saveToCloud()', 'arrow-up', 'Save to my account now',
+            'Uploads this device\u2019s sims and characters straight away, rather than waiting for the automatic save a few seconds after each change')}
+          ${setTile('showDisplayName()', 'user', 'Display name',
+            '<span id="acct-dn-hint">Loading\u2026</span>', 'acct-dn-tile')}
+          ${setTile('showChangePin()', 'hexagon', 'Change my PIN',
+            'Sets a new PIN for signing in. You will need your current one. A forgotten PIN still has to be reset by the tool\u2019s maintainer')}
+          ${setTile('showRecoveryEmail()', 'link', 'Recovery email',
+            '<span id="acct-rec-hint">Loading\u2026</span>', 'acct-rec-tile')}
+          ${setTile('cloudSignOut()', 'move-right', 'Sign out',
+            'Leaves this account on this device. Your sims here are untouched and your online copy is unaffected')}
         </div>
-        <div class="set-note"><span id="sync-status">${esc(syncStatus.msg||'')}</span></div>
-        <div class="set-note">Signing out leaves your work on this device untouched. Your online copy is unaffected.</div>
-      </div>
-
-      <div class="set-block">
-        <div class="ml">YOUR PIN</div>
-        <div class="set-actions" style="margin-top:5px">
-          <button class="btn btn-s" onclick="showChangePin()">Change PIN</button>
-        </div>
-        <div class="set-note">You will need your current PIN. A <em>forgotten</em> PIN still has to be reset
-          by the tool's maintainer — the address your account is registered under is not one that can
-          receive mail.</div>
-      </div>
-
-      <div class="set-block">
-        <div class="ml" id="acct-rec-lbl">RECOVERY EMAIL</div>
-        <div class="set-actions" style="margin-top:5px">
-          <input class="mi" id="acct-rec" type="email" style="flex:2 1 220px" placeholder="Loading…" disabled
-                 autocomplete="email" spellcheck="false">
-          <button class="btn btn-s" id="acct-rec-save" style="flex:0 1 auto;min-width:120px"
-                  onclick="saveRecoveryEmailFromSettings()" disabled>Save email</button>
-        </div>
-        <div class="set-note" id="acct-rec-msg">So you can be identified if you forget your PIN. Nothing is
-          sent to it — it is held for support only. Leave it empty to remove it.</div>
-      </div>
-
-      <div class="set-block">
-        <div class="ml">CLOSING YOUR ACCOUNT</div>
-        <div class="set-actions" style="margin-top:5px">
-          <button class="btn btn-s" onclick="confirmDeleteAccount()">${ic('alert')} Delete my account and all data</button>
-        </div>
-        <div class="set-note">Removes your sims, characters and revision history from the server and wipes
-          this device's copy. Your Writer ID stays registered as a login. Cannot be undone.</div>
       </div>
       ` : isFileCopy() ? `
       <div class="set-block">
@@ -4926,14 +4984,40 @@ function settingsAccountCard() {
           You are working <strong>offline on this device only</strong>. Nothing is sent anywhere, and your
           sims live in this browser alone &mdash; clearing browser data will erase them, so keep taking backups.
         </div>
-        <div class="set-actions" style="margin-top:10px">
-          <button class="btn btn-p" onclick="showAuthGate(true)">Set up an account</button>
+        <div class="set-tiles" style="margin-top:10px">
+          ${setTile('showAuthGate(true)', 'user', 'Set up an account',
+            'Keeps your sims backed up automatically and available on any device you sign in on. The work already on this device is carried across')}
         </div>
         <div class="set-note"><span id="sync-status"></span></div>
-        <div class="set-note">An account keeps your sims backed up automatically and available on any
-          device. Your work on this device will be carried across.</div>
       </div>
       `}
+
+      <div class="set-block">
+        <div class="ml">BACKUPS &amp; THE OFFLINE COPY</div>
+        <div class="set-tiles" style="margin-top:6px">
+          ${setTile('exportData()', 'download', 'Back up my data',
+            'Saves one file holding every sim, character and preference. Keep it somewhere outside the browser, and take one regularly')}
+          ${setTile('importData()', 'upload', 'Restore from a backup',
+            'Loads a backup file back in. <strong>Replaces everything currently in LCARS</strong>, so back up first if there is anything here you want')}
+          ${setTile('downloadOfflineCopy()', 'archive', 'Download LCARS for offline use',
+            'One self-contained file for your own machine that opens with no internet at all. It keeps its own sims, so move work in and out with a backup')}
+        </div>
+      </div>
+
+      ${settingsTemplatesBlock()}
+
+      <div class="set-block set-danger-block">
+        <div class="ml" style="color:var(--red,#c66)">DANGER ZONE</div>
+        <div class="set-note">Neither of these can be undone, and a backup is the only way back.</div>
+        <div class="set-tiles" style="margin-top:6px">
+          ${setTile('confirmEraseData()', 'trash', 'Erase all my sims and characters',
+            `Empties this copy of LCARS \u2014 every mission, scene, sim and character. ${isCloud()
+              ? 'Your account stays and the erase is synced, so it clears on your other devices too'
+              : 'Applies to this browser only'}`)}
+          ${isCloud() ? setTile('confirmDeleteAccount()', 'alert', 'Delete my account and all data',
+            'Removes your sims, characters and revision history from the server and wipes this device\u2019s copy. Your Writer ID stays registered as a login') : ''}
+        </div>
+      </div>
     </div>`;
 }
 
@@ -4942,8 +5026,8 @@ function settingsAppearanceCard() {
   const theme = S.settings.theme || 'dark';
   const skin = getStyle().skin;
   return `
-    <div class="set-card">
-      <div class="msec">APPEARANCE</div>
+    <div class="set-card" id="set-sec-appearance">
+      <div class="msec">LCARS APPEARANCE</div>
 
       <div class="set-block">
         <div class="ml">VISUAL STYLE</div>
@@ -5022,8 +5106,8 @@ function settingsEditorCard() {
       </div>
     </div>`;
   return `
-    <div class="set-card">
-      <div class="msec">SIM EDITOR</div>
+    <div class="set-card" id="set-sec-editor">
+      <div class="msec">LCARS SIM EDITOR</div>
 
       <div class="set-block">
         <div class="ml">VISUAL AIDS</div>
@@ -5073,82 +5157,182 @@ function settingsEditorCard() {
     </div>`;
 }
 
-function settingsDataCard() {
-  return `
-    <div class="set-card">
-      <div class="msec">YOUR DATA</div>
-      <div class="set-block">
-        <div class="set-actions">
-          <button class="btn btn-s" onclick="exportData()">${ic('download')} Backup Data</button>
-          <button class="btn btn-s" onclick="importData()">${ic('upload')} Restore Data</button>
-        </div>
-        <div class="set-note">Saves or restores all your data — sims, Character Manifest and preferences.
-          Use Backup regularly to keep a copy outside the browser.
-          <strong>Restore replaces all current data.</strong></div>
-      </div>
-      <div class="set-block">
-        <div class="set-actions">
-          <button class="btn btn-s" onclick="downloadOfflineCopy()">${ic('download')} Download LCARS for offline use</button>
-        </div>
-        <div class="set-note">One self-contained file you can keep on your own machine and open with no
-          internet at all. Your sims live in that copy's own browser storage, so move work between it and
-          this one with Backup and Restore.</div>
-      </div>
-    </div>`;
-}
-
-function settingsDangerCard() {
-  return `
-    <div class="set-card set-danger">
-      <div class="msec">DANGER ZONE</div>
-      <div class="set-block">
-        <div class="set-actions">
-          <button class="btn btn-s" onclick="confirmEraseData()">${ic('trash')} Erase all my sims and characters</button>
-        </div>
-        <div class="set-note">Empties this copy of LCARS — every mission, scene, sim and character.
-          ${isCloud() ? 'Your account stays, and the erase is synced, so it clears on your other devices too.'
-                      : 'Applies to this browser only.'}
-          Cannot be undone. <strong>Take a backup first.</strong></div>
-      </div>
-      ${isCloud() ? `
-      <div class="set-note">Closing the account itself lives with the rest of your account settings, at the
-        top of this page.</div>` : ''}
-    </div>`;
-}
-
 // ── Account controls ──────────────────────────────────────────────────────
-// The recovery email is the one field here that has to be read back from the
-// server, so the input renders disabled and fills itself in.
-function loadRecoveryEmail() {
-  const inp = document.getElementById('acct-rec');
-  if (!inp) return;
-  fetchRecoveryEmail().then(v => {
-    const el = document.getElementById('acct-rec');
-    if (!el) return;                       // navigated away while it was in flight
-    el.value = v || '';
-    el.placeholder = 'you@example.com';
-    el.disabled = false;
-    const b = document.getElementById('acct-rec-save');
-    if (b) b.disabled = false;
+// The display name and recovery email both live on the server, so their tiles
+// render saying "Loading…" and fill their own hints in when the row arrives.
+let _writerProfile = { display_name: '', recovery_email: '' };
+
+function loadWriterProfile() {
+  if (!document.getElementById('acct-rec-tile')) return;
+  fetchWriterProfile().then(pr => {
+    _writerProfile = pr;
+    paintWriterProfile();
   }).catch(() => {
-    const el = document.getElementById('acct-rec');
-    if (!el) return;
-    el.placeholder = 'Could not be loaded';
-    const m = document.getElementById('acct-rec-msg');
-    if (m) m.innerHTML = '<span style="color:var(--red,#c66)">Could not reach the server to read your ' +
-      'recovery email. Check your connection and reopen Settings.</span>';
+    ['acct-dn-hint','acct-rec-hint'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = '<span style="color:var(--red,#c66)">Could not be read — check your connection</span>';
+    });
   });
 }
 
-function saveRecoveryEmailFromSettings() {
-  const inp = document.getElementById('acct-rec');
-  const btn = document.getElementById('acct-rec-save');
-  if (!inp) return;
-  btn.disabled = true;
-  saveRecoveryEmail(inp.value)
-    .then(v => showToast(v ? 'Recovery email saved' : 'Recovery email removed'))
-    .catch(e => alert(e.message))
-    .finally(() => { const b = document.getElementById('acct-rec-save'); if (b) b.disabled = false; });
+function paintWriterProfile() {
+  const dn = document.getElementById('acct-dn-hint');
+  if (dn) dn.innerHTML = _writerProfile.display_name
+    ? '<strong>' + esc(_writerProfile.display_name) + '</strong> — a friendlier name than your Writer ID'
+    : 'Not set. A friendlier name than your Writer ID';
+  const re = document.getElementById('acct-rec-hint');
+  if (re) re.innerHTML = _writerProfile.recovery_email
+    ? '<strong>' + esc(_writerProfile.recovery_email) + '</strong> — so you can be identified if you forget your PIN'
+    : 'Not set. So you can be identified if you forget your PIN';
+}
+
+// Both fields are one text box against one column, so they share a dialog.
+function showWriterField(key, title, label, placeholder, note, saver) {
+  openModal(title, `
+    <div class="mf"><label class="ml">${label}</label>
+      <input class="mi" id="wf-val" type="text" spellcheck="false"
+             placeholder="${placeholder}" value="${esc(_writerProfile[key]||'')}"></div>
+    <div id="wf-msg" style="font-size:0.76rem;line-height:1.5;min-height:1.1em;color:var(--red,#c66)"></div>
+    <div class="set-note">${note}</div>
+  `, () => {
+    const msg = document.getElementById('wf-msg');
+    msg.style.color = 'var(--dim)';
+    msg.textContent = 'Saving…';
+    saver(document.getElementById('wf-val').value)
+      .then(v => {
+        _writerProfile[key] = v;
+        paintWriterProfile();
+        closeModal();
+        showToast(v ? title.replace(/^[A-Z]/, c => c) + ' saved' : 'Removed');
+      })
+      .catch(e => { msg.style.color = 'var(--red,#c66)'; msg.textContent = e.message; });
+    return false;                          // closes on success, not on click
+  }, { ok: 'Save' });
+}
+
+function showDisplayName() {
+  showWriterField('display_name', 'Display name', 'DISPLAY NAME', 'e.g. Robin Hopper',
+    'A friendlier name than your Writer ID. Leave it empty to remove it.', saveDisplayName);
+}
+
+function showRecoveryEmail() {
+  showWriterField('recovery_email', 'Recovery email', 'RECOVERY EMAIL', 'you@example.com',
+    'Nothing is sent to it — it is held so you can be identified if you forget your PIN. ' +
+    'Leave it empty to remove it.', saveRecoveryEmail);
+}
+
+// ── Sim templates ─────────────────────────────────────────────────────────
+// A template is a saved sim body you can start a new sim from. The list used
+// to be a modal that only offered rename and delete; here a template opens for
+// editing in place, which is the point of keeping one.
+let _tmplEditing = null;
+
+function settingsTemplatesBlock() {
+  return `<div class="set-block" id="set-templates">${settingsTemplatesInner()}</div>`;
+}
+
+function refreshTemplatesBlock() {
+  const el = document.getElementById('set-templates');
+  if (el) el.innerHTML = settingsTemplatesInner();
+}
+
+function settingsTemplatesInner() {
+  const list = S.templates || [];
+  return `
+    <div class="ml">SIM TEMPLATES</div>
+    <div class="set-note">Saved sim bodies you can start a new sim from, picked from the template list in
+      the New Sim window. Save the sim you have open as one from Sim Details while you are writing it.</div>
+    ${list.length ? `<div class="set-tmpl-list">${list.map(t => settingsTemplateRow(t)).join('')}</div>`
+      : `<div class="set-note" style="margin-top:8px">No templates saved yet.</div>`}`;
+}
+
+function settingsTemplateRow(t) {
+  const editing = _tmplEditing === t.id;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = t.content || '';
+  const words = wc(tmp.innerText || '');
+  if (!editing) {
+    return `<div class="set-tmpl-row" onclick="editTemplate('${t.id}')" title="Open this template for editing">
+        <div class="set-tmpl-name">${esc(t.name)}</div>
+        <div class="set-tmpl-meta">${words} word${words===1?'':'s'}${t.title?' · ' + esc(t.title):''}</div>
+        <div class="set-tmpl-edit">${ic('pencil')} Edit</div>
+      </div>`;
+  }
+  return `
+    <div class="set-tmpl-row set-tmpl-open">
+      <div class="mf"><label class="ml">TEMPLATE NAME</label>
+        <input class="mi" id="tm-name" value="${esc(t.name)}"></div>
+      <div class="mf"><label class="ml">DEFAULT SIM TITLE <span style="font-weight:normal;opacity:.6">(optional)</span></label>
+        <input class="mi" id="tm-title" value="${esc(t.title||'')}" placeholder="Used as the title when a sim starts from this template"></div>
+      <label class="ml" for="tm-body">TEMPLATE TEXT</label>
+      <div class="set-tmpl-body" id="tm-body" contenteditable="true" spellcheck="true"></div>
+      <div class="set-note">Markers such as ::Action:: and ((Location)) are kept exactly as typed.</div>
+      <div class="set-actions" style="margin-top:10px">
+        <button class="btn btn-p" onclick="saveTemplateEdit('${t.id}')">Save template</button>
+        <button class="btn btn-s" onclick="cancelTemplateEdit()">Cancel</button>
+        <button class="btn btn-s" style="color:var(--red,#c66)" onclick="deleteTemplateById('${t.id}')">${ic('trash')} Delete</button>
+      </div>
+    </div>`;
+}
+
+function editTemplate(id) {
+  _tmplEditing = id;
+  refreshTemplatesBlock();
+  // Set the body as HTML after insertion rather than inlining it in the markup,
+  // where the template's own quotes and tags would fight the surrounding string.
+  const t = (S.templates||[]).find(x => x.id === id);
+  const body = document.getElementById('tm-body');
+  if (t && body) body.innerHTML = t.content || '';
+  const n = document.getElementById('tm-name');
+  if (n) n.focus();
+}
+
+function cancelTemplateEdit() { _tmplEditing = null; refreshTemplatesBlock(); }
+
+function saveTemplateEdit(id) {
+  const t = (S.templates||[]).find(x => x.id === id);
+  if (!t) return;
+  const name = document.getElementById('tm-name').value.trim();
+  if (!name) { alert('Give the template a name.'); return; }
+  t.name = name;
+  t.title = document.getElementById('tm-title').value.trim();
+  t.content = document.getElementById('tm-body').innerHTML;
+  t.updatedAt = Date.now();
+  persist();
+  _tmplEditing = null;
+  refreshTemplatesBlock();
+  showToast('Template saved');
+}
+
+function deleteTemplateById(id) {
+  const t = (S.templates||[]).find(x => x.id === id);
+  if (!t) return;
+  if (!confirm(`Delete the template "${t.name}"? This cannot be undone.`)) return;
+  S.templates = (S.templates||[]).filter(x => x.id !== id);
+  persist();
+  _tmplEditing = null;
+  refreshTemplatesBlock();
+  showToast('Template deleted');
+}
+
+// Saving the sim you are writing as a template belongs with the sim, not in
+// Settings — Settings manages the ones you already have.
+function saveCurrentAsTemplate() {
+  if (!curId) return;
+  openModal('SAVE AS TEMPLATE', `
+    <div class="mf"><label class="ml">TEMPLATE NAME</label>
+      <input class="mi" id="t-save-name" placeholder="e.g. JP Opening Scene"></div>
+    <div class="set-note">Saves this sim's text as a starting point for future sims. You can edit it later
+      in Settings, under Your Account &amp; Data.</div>
+  `, () => {
+    const name = document.getElementById('t-save-name').value.trim();
+    if (!name) { alert('Enter a template name.'); return false; }
+    if (!S.templates) S.templates = [];
+    S.templates.push({ id: uid(), name, title: S.docs[curId]?.title || '',
+      content: document.getElementById('editor').innerHTML, createdAt: Date.now() });
+    persist();
+    showToast(`Template "${name}" saved`);
+  }, { ok: 'Save template' });
 }
 
 function showChangePin() {
@@ -5179,16 +5363,39 @@ function showChangePin() {
 
 function settingsAboutCard() {
   return `
-    <div class="set-card">
-      <div class="msec">ABOUT</div>
+    <div class="set-card" id="set-sec-about">
+      <div class="msec">ABOUT LCARS</div>
+
       <div class="set-block">
-        <div class="set-actions">
-          <span style="font-size:1.4rem;font-weight:bold;color:var(--amber);flex:0 0 auto">v${APP_VERSION}</span>
-          <button class="btn btn-s" style="flex:0 0 auto;min-width:0"
-                  onclick="document.getElementById('ver-hist').classList.toggle('hidden')">Changelog ${ic('chevron-down')}</button>
+        <div class="set-writerid">
+          <span class="set-writerid-lbl">VERSION</span>
+          <span class="set-writerid-val">v${APP_VERSION}</span>
         </div>
-        <div id="ver-hist" class="hidden" style="margin-top:10px;max-height:300px;overflow-y:auto;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px">
+        <div class="set-tiles" style="margin-top:10px">
+          ${setTile("document.getElementById('ver-hist').classList.toggle('hidden')", 'file-text',
+            'What\u2019s changed', 'Every version of LCARS and what it added, changed or fixed')}
+          ${setTile("window.open('LCARS-Guide-v2.html','_blank')", 'book-open',
+            'The full user guide', 'How every part of the tool works, in a page of its own')}
+          ${setTile('showWizard()', 'sparkles',
+            'Getting Started', 'The quick tour again, including how to bring old sims across')}
+        </div>
+        <div id="ver-hist" class="hidden" style="margin-top:12px;max-height:340px;overflow-y:auto;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px">
           ${renderVersionHistory()}
+        </div>
+      </div>
+
+      <div class="set-block">
+        <div class="ml">HOW THIS TOOL WAS BUILT</div>
+        <div class="set-ai">
+          <div class="set-ai-logo">${AI_LOGO_SVG}<strong>Built with Claude Code AI</strong></div>
+          <div style="margin-top:8px;line-height:1.65">
+            This tool uses <strong>no AI to run</strong>, and your content is never touched by AI.
+            Everything is held locally on your device and in your browser\u2019s storage${isCloud()
+              ? ', and in your own account when you are signed in' : ''}. No internet connection is
+            required to write*.
+          </div>
+          <div style="margin-top:6px;font-size:0.67rem;opacity:.7">*Fonts load from Google Fonts on first
+            use, and signing in to an account needs a connection.</div>
         </div>
       </div>
     </div>`;
@@ -5454,6 +5661,8 @@ function prepManifest() {
     .filter(c => c.charType === 'Primary')
     .sort((a, b) => a.name.localeCompare(b.name))[0];
   if (firstPrimary) selectCharacter(firstPrimary.id);
+  setManifestList(false);
+  updateManifestBar();
 }
 
 function openManifest(fromRoute) { showView('manifest', fromRoute); }
@@ -5627,6 +5836,38 @@ function selectCharacter(id) {
   _ribbonEditMode = false;
   renderManifestList();
   renderCharProfile(id);
+  // On a phone the list is a drop-down over the profile; picking from it is
+  // the request to go and read that profile.
+  setManifestList(false);
+  updateManifestBar();
+}
+
+// ── The manifest's narrow-screen character picker ──
+// Desktop keeps the list permanently beside the profile; below the breakpoint
+// it collapses behind this bar so the character being read has the screen.
+function setManifestList(open) {
+  const v = document.getElementById('view-manifest');
+  if (v) v.classList.toggle('cm-list-open', open);
+  const b = document.getElementById('cm-list-btn');
+  if (b) b.classList.toggle('btn-p', open);
+}
+
+function toggleManifestList() {
+  const v = document.getElementById('view-manifest');
+  if (!v) return;
+  const opening = !v.classList.contains('cm-list-open');
+  setManifestList(opening);
+  if (opening) {
+    const f = document.getElementById('cm-filter-input');
+    if (f) f.focus();                      // the search bar is why you opened it
+  }
+}
+
+function updateManifestBar() {
+  const el = document.getElementById('cm-current-name');
+  if (!el) return;
+  const c = _curCharId && S.characters ? S.characters[_curCharId] : null;
+  el.textContent = c ? c.name : 'No character selected';
 }
 
 // ── Profile ──
@@ -6610,54 +6851,6 @@ function resizePicture(file, cb) {
 // ================================================================
 // SIM TEMPLATES
 // ================================================================
-function showTemplateManager() {
-  if (!S.templates) S.templates = [];
-  const listHtml = S.templates.length
-    ? S.templates.map((t,i)=>`
-        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
-          <span style="flex:1;font-size:0.87rem;color:var(--text)">${esc(t.name)}</span>
-          <button class="btn btn-s btn-sm" onclick="renameTemplate(${i})">Rename</button>
-          <button class="btn btn-s btn-sm" style="color:var(--red)" onclick="deleteTemplate(${i})">${ic('x','ic-sm')}</button>
-        </div>`).join('')
-    : '<div style="color:var(--dim);font-size:0.87rem;padding:8px 0">No templates saved yet.</div>';
-  const saveRow = curId ? `
-    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
-      <p style="font-size:0.8rem;color:var(--dim);margin-bottom:8px">Save the current sim as a template:</p>
-      <div class="mf"><label class="ml">TEMPLATE NAME</label><input class="mi" id="t-save-name" placeholder="e.g. JP Opening Scene"></div>
-    </div>` : '';
-  openModal('SIM TEMPLATES', `${listHtml}${saveRow}`,
-    curId ? ()=>{
-      const name = document.getElementById('t-save-name').value.trim();
-      if (!name) { alert('Enter a template name.'); return false; }
-      const ed = document.getElementById('editor');
-      if (!S.templates) S.templates = [];
-      const curTitle = curId ? (S.docs[curId]?.title||'') : '';
-      S.templates.push({id:uid(),name,title:curTitle,content:ed.innerHTML,createdAt:Date.now()});
-      persist();
-      alert(`Template "${name}" saved.`);
-    } : null,
-    { ok: curId ? 'Save as Template' : undefined }
-  );
-}
-
-function renameTemplate(i) {
-  const t = (S.templates||[])[i]; if (!t) return;
-  openModal('RENAME TEMPLATE',`
-    <div class="mf"><label class="ml">TEMPLATE NAME</label><input class="mi" id="t-rn" value="${esc(t.name)}"></div>
-  `,()=>{
-    const n = document.getElementById('t-rn').value.trim();
-    if (!n) return false;
-    t.name=n; persist();
-  });
-}
-
-function deleteTemplate(i) {
-  if (!confirm('Delete this template? This cannot be undone.')) return;
-  (S.templates||[]).splice(i,1);
-  persist();
-  closeModal();
-  showTemplateManager();
-}
 
 // ================================================================
 // ROUTING (History API)
