@@ -105,6 +105,18 @@ Both are blocked on the same thing: the `service_role` key, which must never be 
 - [ ] **Mobile optimisation.**
       Deliberately after the feature reworks so it covers them. Settings, the Manifest and the app header were done in session 2, leaving **the editor, the toolbar and the two resizable sidebars** as the remaining work — the whole workspace view, in other words.
       _The responsive rules live in one `RESPONSIVE` section at the foot of `lcars.css`, after the skin overrides, deliberately: rules placed earlier are silently outranked by the Delta Prime blocks. Breakpoint in use is 820px._
+
+      **Observed on a real phone, v4.23:** the reworked pages are usable, but two
+      problems run across the whole app.
+      1. *The page zooms in when a field is focused.* Almost certainly iOS Safari's
+         auto-zoom, which fires on any focused input under 16px. `.mi` / `.ms` are
+         `0.87rem` and `#search-input` is `0.8rem` against a 15px UI base — about
+         13px and 12px. Fix is to floor form controls at 16px on coarse pointers
+         rather than to disable zoom with `maximum-scale`, which breaks pinch-zoom
+         for everyone. Not verified on device, so confirm before building on it.
+      2. *Buttons do not all fit.* Expected — only the header, Settings and the
+         Manifest were made responsive in session 2. The editor toolbar, the sim
+         details panel and the two resizable sidebars were never touched.
       _Done when: a sim can be read, written and copied out on a phone without pinch-zooming._
 
 - [ ] **Joint Posts.**
