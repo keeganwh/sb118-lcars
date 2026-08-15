@@ -63,13 +63,33 @@ Code" note moved off the Dashboard into About LCARS.
 
 ---
 
-## Session 3 — Server functions (one Edge Function, two features)
+## Session 3 — Account recovery and true deletion
 
-Both are blocked on the same thing: the `service_role` key, which must never be in a page served to writers. Do them together.
+> **Start with a methods discussion, not code.** How PIN reset should work is
+> genuinely unsettled, and the options differ in what they cost to run. The
+> user's stated preference is **keep it simple**, and they are open to
+> collecting different data from writers or offering fewer recovery routes if
+> that avoids standing up another service. Agree the approach first.
+>
+> The constraint driving all of it: the auth account's email is synthetic
+> (`<writerid>@lcars.local`), chosen so sign-in needs no server lookup. It
+> cannot receive mail, so Supabase's built-in password-reset flow has nowhere
+> to send. Options include emailing `writers.recovery_email` from an Edge
+> Function via an external sender; making the real email the auth identity and
+> using the built-in flow, at the cost of the no-lookup sign-in design; or
+> **dropping email entirely** in favour of a one-time recovery code issued at
+> signup and regenerable from Settings, which needs no external service at all.
+> Verify current Supabase behaviour and limits against their docs rather than
+> assuming — the free tier's built-in mailer is rate-limited and documented as
+> development-only.
 
-- [ ] **Self-serve PIN reset.**
-      Distinct from the recovery email we already store — that is currently just text for identification, nothing sends to it. Needs the function plus an email sender, keyed off `writers.recovery_email`.
-      _Done when: a writer who gave a recovery email can reset their own PIN without the maintainer._
+True deletion is the simpler half and is blocked only on the `service_role`
+key, which must never be in a page served to writers. Whether it still shares
+an Edge Function with recovery depends on what recovery turns out to need.
+
+- [ ] **Self-serve PIN reset.** _Method to be agreed first — see the note above._
+      `writers.recovery_email` is collected today but nothing has ever sent to it; it exists for identification only.
+      _Done when: a writer who has lost their PIN can get back into their account without the maintainer._
 
 - [ ] **True account deletion.**
       Today "delete account" removes every data row but leaves the login registered, because the anon key cannot delete an auth user. The function closes that gap.
