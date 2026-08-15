@@ -195,6 +195,7 @@ const VERSIONS = [
       'Changed: deleting your account now really removes it. It used to clear your sims but leave the login registered, so the Writer ID could never be used again and signing back in gave you an empty LCARS \u2014 the login itself is now removed too, and the Writer ID becomes free to register again',
       'Added: a 48-hour grace period on account deletion. Nothing is destroyed straight away \u2014 sign in again with your Writer ID and PIN within 48 hours and you can cancel, and everything comes back exactly as it was. Settings shows how long is left',
       'Changed: if the server cannot be reached while deleting an account, the deletion is refused outright rather than wiping the device and leaving the account behind',
+      'Removed: the recovery email. Nothing was ever sent to it \u2014 your sign-in address is synthetic and cannot receive mail \u2014 so it was held for identification only and implied a recovery route that did not exist. Creating an account no longer asks for it, and Settings no longer offers it. Linking a Google or Discord account replaces it, and is coming next',
     ],
   },
 ];
@@ -854,7 +855,7 @@ async function supaFetch(path, opts = {}, retry = true) {
   return res;
 }
 
-async function cloudSignUp(wid, pin, recoveryEmail) {
+async function cloudSignUp(wid, pin) {
   const w = normalizeWriterId(wid);
   const r = await fetch(SUPA_URL + '/auth/v1/signup', {
     method: 'POST',
@@ -872,7 +873,7 @@ async function cloudSignUp(wid, pin, recoveryEmail) {
   await supaFetch('/rest/v1/writers', {
     method: 'POST',
     headers: { 'Prefer': 'resolution=merge-duplicates' },
-    body: JSON.stringify({ id: j.user.id, writer_id: w, recovery_email: (recoveryEmail || '').trim() || null })
+    body: JSON.stringify({ id: j.user.id, writer_id: w })
   });
   setMode('cloud');
   return w;
@@ -909,12 +910,11 @@ function cloudSignOut() {
 // themselves: a display name, and a recovery email kept for identification.
 async function fetchWriterProfile() {
   const a = getAuth();
-  if (!a.uid) return { display_name: '', recovery_email: '' };
-  const r = await supaFetch('/rest/v1/writers?select=display_name,recovery_email,deleted_at&id=eq.' + encodeURIComponent(a.uid));
+  if (!a.uid) return { display_name: '', deleted_at: null };
+  const r = await supaFetch('/rest/v1/writers?select=display_name,deleted_at&id=eq.' + encodeURIComponent(a.uid));
   if (!r.ok) throw new Error('Could not read your account details.');
   const row = (await r.json())[0] || {};
-  return { display_name: row.display_name || '', recovery_email: row.recovery_email || '',
-           deleted_at: row.deleted_at || null };
+  return { display_name: row.display_name || '', deleted_at: row.deleted_at || null };
 }
 
 async function patchWriterProfile(patch) {
@@ -932,13 +932,6 @@ async function saveDisplayName(name) {
   const v = (name || '').trim();
   if (v.length > 60) throw new Error('That is longer than 60 characters.');
   await patchWriterProfile({ display_name: v || null });
-  return v;
-}
-
-async function saveRecoveryEmail(email) {
-  const v = (email || '').trim();
-  if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new Error('That does not look like an email address.');
-  await patchWriterProfile({ recovery_email: v || null });
   return v;
 }
 
@@ -1602,10 +1595,6 @@ function gateForm(kind) {
       <label class="ml">PIN <span style="font-weight:normal;opacity:0.6">(at least 6 characters)</span></label>
       <input class="mi" id="gate-pin" type="password" autocomplete="${up ? 'new-password' : 'current-password'}">
     </div>
-    ${up ? `<div class="mf" style="margin-bottom:10px">
-      <label class="ml">RECOVERY EMAIL <span style="font-weight:normal;opacity:0.6">(optional)</span></label>
-      <input class="mi" id="gate-email" type="email" autocomplete="email" placeholder="so you can be identified if you forget your PIN">
-    </div>` : ''}
     <div id="gate-msg" style="font-size:0.76rem;line-height:1.5;min-height:1.1em;margin:6px 0 12px;color:var(--red,#c66)"></div>
     <div style="display:flex;flex-direction:column;gap:8px">
       <button class="btn btn-p" id="gate-go" style="width:100%;justify-content:center" onclick="gateSubmit('${kind}')">${up ? 'Create account' : 'Sign in'}</button>
@@ -1616,7 +1605,7 @@ function gateForm(kind) {
     </div>` : ''}`;
   const wid = document.getElementById('gate-wid');
   wid.focus();
-  ['gate-wid','gate-pin','gate-email'].forEach(id => {
+  ['gate-wid','gate-pin'].forEach(id => {
     const n = document.getElementById(id);
     if (n) n.addEventListener('keydown', e => { if (e.key === 'Enter') gateSubmit(kind); });
   });
@@ -1662,7 +1651,6 @@ async function gateSubmit(kind) {
   const btn = document.getElementById('gate-go');
   const wid = (document.getElementById('gate-wid').value || '').trim();
   const pin = document.getElementById('gate-pin').value || '';
-  const email = (document.getElementById('gate-email') || {}).value || '';
 
   if (!validWriterId(wid)) { msg.textContent = 'That does not look like a Writer ID — it should be ten characters, like A239809JP3.'; return; }
   if (pin.length < 6) { msg.textContent = 'Your PIN needs to be at least 6 characters.'; return; }
@@ -1671,7 +1659,7 @@ async function gateSubmit(kind) {
   msg.textContent = kind === 'up' ? 'Creating your account…' : 'Signing in…';
   btn.disabled = true;
   try {
-    if (kind === 'up') await cloudSignUp(wid, pin, email);
+    if (kind === 'up') await cloudSignUp(wid, pin);
     else await cloudSignIn(wid, pin);
     gateClose();
     await cloudBoot();
@@ -5202,7 +5190,6 @@ function settingsAccountCard() {
         <div class="set-tiles" style="margin-top:10px">
           ${setBtn('showDisplayName()', 'user', 'Display name', 'Helps friends find you, not for logins.', {id:'acct-dn-tile'})}
           ${setBtn('showChangePin()', 'hexagon', 'Change my PIN', 'Requires your current PIN to change.')}
-          ${setBtn('showRecoveryEmail()', 'link', 'Recovery email', 'In case you forget your PIN.', {id:'acct-rec-tile', descId:'acct-rec-hint'})}
           ${setBtn('showShareContact()', 'copy', 'Share my contact', 'Copy + paste to connect with other writers.')}
           ${setBtn('saveToCloud()', 'arrow-up', 'Sync data now', 'Push/sync manually (for those who like pushing buttons).')}
           ${setBtn('cloudSignOut()', 'move-right', 'Sign out', 'Signs out in this browser. Nothing is deleted.')}
@@ -5479,32 +5466,32 @@ function saveCurrentAsTemplate() {
 // ── Account controls ──────────────────────────────────────────────────────
 // The recovery email lives on the server, so its button renders saying
 // "In case you forget your PIN." and swaps in the address when the row arrives.
-let _writerProfile = { display_name: '', recovery_email: '', deleted_at: null };
+let _writerProfile = { display_name: '', deleted_at: null };
 
 function loadWriterProfile() {
-  if (!document.getElementById('acct-rec-tile')) return;
+  // Anchored on the Writer ID line, which is present for every signed-in
+  // writer. It used to key off the recovery-email tile, so removing that tile
+  // would have silently taken the display name and the deletion countdown with
+  // it -- exactly the kind of quiet breakage this codebase specialises in.
+  if (!document.getElementById('acct-who')) return;
   fetchWriterProfile().then(pr => {
     _writerProfile = pr;
     paintWriterProfile();
   }).catch(() => {
-    const el = document.getElementById('acct-rec-hint');
-    if (el) el.innerHTML = '<span style="color:var(--red,#c66)">Could not be read \u2014 check your connection.</span>';
+    const el = document.getElementById('acct-del-hint');
+    if (el) el.innerHTML = '<span style="color:var(--red,#c66)">Account details could not be read \u2014 check your connection.</span>';
   });
 }
 
 function paintWriterProfile() {
-  const re = document.getElementById('acct-rec-hint');
-  if (re) re.innerHTML = _writerProfile.recovery_email
-    ? '<strong>' + esc(_writerProfile.recovery_email) + '</strong>'
-    : 'In case you forget your PIN.';
-  // The display name and the Writer ID carry equal weight \u2014 one is what people
-  // call you, the other is what the fleet calls you.
   const del = document.getElementById('acct-del-hint');
   if (del) del.innerHTML = _writerProfile.deleted_at
     ? '<strong style="color:var(--red,#c66)">Scheduled — about ' + esc(deletionRemaining(_writerProfile.deleted_at)) +
       ' left.</strong> Open this to keep your account.'
     : `Removes everything after ${DELETION_GRACE_HOURS} hours. Reversible until then.`;
 
+  // The display name and the Writer ID carry equal weight — one is what people
+  // call you, the other is what the fleet calls you.
   const who = document.getElementById('acct-who');
   if (who) {
     const wid = getAuth().writerId || '';
@@ -5573,12 +5560,6 @@ function showShareContact() {
       .catch(() => showToast('Copy failed \u2014 check clipboard permissions.'));
     return false;                          // stays open so it can be copied again
   }, { ok: ic('copy') + ' Copy' });
-}
-
-function showRecoveryEmail() {
-  showWriterField('recovery_email', 'Recovery email', 'RECOVERY EMAIL', 'you@example.com',
-    'Nothing is sent to it \u2014 it is held so you can be identified if you forget your PIN. ' +
-    'Leave it empty to remove it.', saveRecoveryEmail);
 }
 
 function showChangePin() {

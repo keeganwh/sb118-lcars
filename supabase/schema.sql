@@ -90,6 +90,21 @@ create trigger state_touch before update on public.state
   for each row execute function public.touch_updated_at();
 
 -- ---------------------------------------------------------------------------
+-- recovery_email : removed
+-- ---------------------------------------------------------------------------
+-- It was collected for identification and nothing was ever sent to it -- the
+-- auth address is synthetic and cannot receive mail. A linked Google or Discord
+-- account replaces it and gives a real, verified address for free, so the
+-- column and the addresses in it go rather than sitting there implying a
+-- recovery route that does not exist.
+--
+-- ORDER MATTERS: only run this once the app version that stopped selecting the
+-- column is live. PostgREST errors on a select naming a column that is gone, so
+-- dropping it while an older build is still deployed breaks sign-in for
+-- everyone.
+alter table public.writers drop column if exists recovery_email;
+
+-- ---------------------------------------------------------------------------
 -- Account deletion : soft delete now, real removal after a grace period
 -- ---------------------------------------------------------------------------
 --   * Asking for deletion only stamps deleted_at. That is an ordinary update
