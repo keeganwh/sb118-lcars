@@ -50,13 +50,16 @@ body{font-family:var(--ui-font,'Droid Sans',Verdana,Arial,sans-serif);background
 /* ── HEADER ── */
 #hdr{height:56px;background:var(--panel);border-bottom:3px solid var(--amber);display:flex;align-items:center;padding:0;flex-shrink:0}
 .hdr-badge{background:var(--amber);color:#fff;font-weight:bold;font-size:1.33rem;letter-spacing:5px;padding:6px 20px 6px 15px;border-radius:0 0 36px 0;margin-right:16px;height:100%;display:flex;align-items:center;flex-shrink:0}
-/* Keyline built from drop-shadow, not box-shadow: drop-shadow follows the
-   image's alpha channel, so it traces the delta's silhouette rather than
-   drawing a rectangle around it. Needed because the badge is filled with the
-   duty accent, and on Operations that accent is the mark's own gold. */
-#hdr-mark{height:26px;width:auto;margin-right:10px;flex-shrink:0;
-  filter:drop-shadow(1px 0 0 rgba(0,0,0,.75)) drop-shadow(-1px 0 0 rgba(0,0,0,.75))
-         drop-shadow(0 1px 0 rgba(0,0,0,.75)) drop-shadow(0 -1px 0 rgba(0,0,0,.75))}
+/* The badge is filled with the duty accent, and on Operations that accent is
+   the mark's own gold, so the delta rides on a dark disc. The disc is 80% black
+   rather than solid: enough separation on every accent, while the colour behind
+   still tints it, so the mark shifts with the duty post. The hairline ring is a
+   box-shadow on the disc, which is why the disc is its own element. The source
+   PNG is square, so equal padding gives a true circle. */
+#hdr-mark-plate{display:inline-flex;align-items:center;flex-shrink:0;margin-right:10px;
+  background:rgba(0,0,0,.8);border-radius:50%;padding:5px;
+  box-shadow:0 0 0 1px rgba(255,255,255,.45)}
+#hdr-mark{height:26px;width:auto;display:block}
 body.hc .hdr-badge{color:#000}
 .hdr-title{color:var(--blue2);font-size:0.87rem;letter-spacing:3px;opacity:.8}
 .hdr-right{margin-left:auto;display:flex;align-items:center;gap:6px;padding-right:12px;flex-shrink:0}
@@ -1075,7 +1078,8 @@ body.hc .contact-card-bar{color:#000}
   #hdr::-webkit-scrollbar{display:none}
   .hdr-title{display:none}
   .hdr-badge{margin-right:10px;padding:6px 14px;font-size:1.1rem;letter-spacing:3px}
-  #hdr-mark{height:22px;margin-right:8px}
+  #hdr-mark-plate{margin-right:8px;padding:4px}
+  #hdr-mark{height:22px}
   .hdr-right{padding-right:8px}
 
   /* Settings: the contents rail folds away behind a "Jump to…" button, and
