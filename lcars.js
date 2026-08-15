@@ -178,6 +178,12 @@ const VERSIONS = [
       'Added: Share my contact, in Settings \u2192 Your Account & Data. Shows your name and Writer ID as a small card and copies them in one click, for handing to another writer',
       'Changed: Sim Templates is now its own section in Settings rather than sitting inside Your Account & Data',
       'Changed: About LCARS is tidied \u2014 Getting Started, the full user guide and how the tool was built are three buttons, and the changelog is a small button on the version line rather than a panel of its own',
+      'Fixed: a sim template row showed an Edit label that was not clickable \u2014 the whole row now opens the template, which is what it looked like it should do',
+      'Changed: finishing with a template, whether by Done or the close button, takes you back to Sim Templates in Settings rather than dropping you on the dashboard',
+      'Changed: your display name and Writer ID are now shown at the same size and weight in Settings, rather than the Writer ID trailing in brackets',
+      'Changed: the Share my contact card reads \u201cWrite with [name] on LCARS. Writer ID [ID].\u201d and is headed LCARS Writing System',
+      'Changed: LCARS Appearance and LCARS Sim Editor use the same buttons and spacing as the rest of Settings \u2014 the style and theme pickers are now buttons with a selected state rather than a row of pills',
+      'Fixed: jumping to a section from the Settings contents rail could leave a different section highlighted, because a short section near the end of the page is reached at the very bottom of the scroll where the one below it is equally on screen',
     ],
   },
 ];
@@ -1585,11 +1591,13 @@ function showDashboard() {
 }
 
 function closeDoc() {
+  const wasTemplate = !!curTmplId;
   flushSave();
   exitTemplateMode();
   curId = null; curView = null; curViewId = null;
   showDashboard();
   renderNav();
+  if (wasTemplate) returnToTemplates();
 }
 
 // The mark shown wherever LCARS says how it was built. Lives in one place so
@@ -2690,6 +2698,14 @@ function closeTemplateEditor() {
   showDashboard();
   renderNav();
   showToast('Template saved');
+  returnToTemplates();
+}
+
+// You reached the template editor from Settings, so that is where finishing
+// with it puts you back — at the templates, not on the dashboard.
+function returnToTemplates() {
+  showView('settings');
+  requestAnimationFrame(() => gotoSettingsSection('set-sec-templates'));
 }
 
 // Ctrl/Cmd+S — flush the current sim, force a revision snapshot (bypassing the
@@ -4982,8 +4998,13 @@ function renderSettingsView() {
   // The Delta Prime radio groups render their own selected state.
   setTimeout(updateStyleMenu, 0);
   if (isCloud()) loadWriterProfile();
-  document.getElementById('set-scroll')
-    .addEventListener('scroll', markSettingsSection, { passive: true });
+  const sc = document.getElementById('set-scroll');
+  sc.addEventListener('scroll', markSettingsSection, { passive: true });
+  // Scrolling under your own steam releases the pin; a smooth scroll started by
+  // gotoSettingsSection fires 'scroll' but none of these.
+  ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach(ev =>
+    sc.addEventListener(ev, () => { _setSecPinned = null; }, { passive: true }));
+  _setSecPinned = null;
   // Deferred: this runs while the view is still hidden, so nothing has a box
   // to measure until showView has revealed it.
   requestAnimationFrame(markSettingsSection);
@@ -4996,12 +5017,26 @@ function settingsSectionTop(el, sc) {
   return el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
 }
 
+// Set when a rail link is used, cleared the moment you scroll yourself. Scroll
+// position alone cannot always answer "which section am I looking at": a short
+// section near the end of the page is reached at maximum scroll, where the
+// section below it is equally on screen. If you asked for a section, that is
+// the answer, until you go somewhere else.
+let _setSecPinned = null;
+
 function gotoSettingsSection(id) {
   const sec = document.getElementById(id);
   const sc = document.getElementById('set-scroll');
   if (!sec || !sc) return;
+  _setSecPinned = id;
+  paintSettingsSection(id);
   sc.scrollTo({ top: settingsSectionTop(sec, sc) - 12, behavior: 'smooth' });
   closeSettingsToc();                      // on a phone the rail is covering the page
+}
+
+function paintSettingsSection(id) {
+  document.querySelectorAll('.set-toc-link').forEach(b =>
+    b.classList.toggle('on', b.dataset.sec === id));
 }
 
 // Whichever section's top has most recently passed the top of the viewport is
@@ -5010,6 +5045,7 @@ function gotoSettingsSection(id) {
 function markSettingsSection() {
   const sc = document.getElementById('set-scroll');
   if (!sc || sc.clientHeight === 0) return;   // still hidden; nothing to measure
+  if (_setSecPinned) return;                  // you asked for a section; keep it
   let active = SET_SECTIONS[0].id;
   if (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 4) {
     active = SET_SECTIONS[SET_SECTIONS.length - 1].id;
@@ -5019,8 +5055,7 @@ function markSettingsSection() {
       if (el && settingsSectionTop(el, sc) - 80 <= sc.scrollTop) active = s.id;
     });
   }
-  document.querySelectorAll('.set-toc-link').forEach(b =>
-    b.classList.toggle('on', b.dataset.sec === active));
+  paintSettingsSection(active);
 }
 
 function toggleSettingsToc() {
@@ -5034,7 +5069,7 @@ function closeSettingsToc() {
 
 // A settings action: icon, name, one short line saying what it does.
 function setBtn(onclick, icon, label, desc, opts = {}) {
-  return `<button class="set-btn${opts.danger?' set-btn-danger':''}"${opts.id?` id="${opts.id}"`:''} onclick="${onclick}">
+  return `<button class="set-btn${opts.danger?' set-btn-danger':''}${opts.on?' on':''}"${opts.id?` id="${opts.id}"`:''} onclick="${onclick}">
       <span class="set-btn-t">${ic(icon)}${label}</span>
       <span class="set-btn-d"${opts.descId?` id="${opts.descId}"`:''}>${desc}</span>
     </button>`;
@@ -5052,12 +5087,12 @@ function settingsAccountCard() {
           <span class="set-note" style="margin:0" id="sync-status">${esc(syncStatus.msg||'')}</span>
         </div>
         <div class="set-tiles" style="margin-top:10px">
-          ${setBtn('showDisplayName()', 'user', 'Display name', 'Loading\u2026', {id:'acct-dn-tile', descId:'acct-dn-hint'})}
-          ${setBtn('showChangePin()', 'hexagon', 'Change my PIN', 'You will need your current one')}
-          ${setBtn('showRecoveryEmail()', 'link', 'Recovery email', 'Loading\u2026', {id:'acct-rec-tile', descId:'acct-rec-hint'})}
-          ${setBtn('showShareContact()', 'copy', 'Share my contact', 'Your name and Writer ID, ready to paste')}
-          ${setBtn('saveToCloud()', 'arrow-up', 'Sync data now', 'Rarely needed \u2014 syncing is automatic')}
-          ${setBtn('cloudSignOut()', 'move-right', 'Sign out', 'Signs out in this browser. Nothing is deleted')}
+          ${setBtn('showDisplayName()', 'user', 'Display name', 'Helps friends find you, not for logins.', {id:'acct-dn-tile'})}
+          ${setBtn('showChangePin()', 'hexagon', 'Change my PIN', 'Requires your current PIN to change.')}
+          ${setBtn('showRecoveryEmail()', 'link', 'Recovery email', 'In case you forget your PIN.', {id:'acct-rec-tile', descId:'acct-rec-hint'})}
+          ${setBtn('showShareContact()', 'copy', 'Share my contact', 'Copy + paste to connect with other writers.')}
+          ${setBtn('saveToCloud()', 'arrow-up', 'Sync data now', 'Push/sync manually (for those who like pushing buttons).')}
+          ${setBtn('cloudSignOut()', 'move-right', 'Sign out', 'Signs out in this browser. Nothing is deleted.')}
         </div>
       </div>
       ` : isFileCopy() ? `
@@ -5080,7 +5115,7 @@ function settingsAccountCard() {
           sims live in this browser alone &mdash; clearing browser data will erase them, so keep taking backups.
         </div>
         <div class="set-tiles" style="margin-top:10px">
-          ${setBtn('showAuthGate(true)', 'user', 'Set up an account', 'Back up your sims and use them on any device')}
+          ${setBtn('showAuthGate(true)', 'user', 'Set up an account', 'Back up your sims and use them on any device.')}
         </div>
         <div class="set-note"><span id="sync-status"></span></div>
       </div>
@@ -5089,9 +5124,9 @@ function settingsAccountCard() {
       <div class="set-block">
         <div class="ml">BACKUPS &amp; THE OFFLINE COPY</div>
         <div class="set-tiles" style="margin-top:6px">
-          ${setBtn('exportData()', 'download', 'Back up my data', 'Downloads one file holding everything')}
-          ${setBtn('importData()', 'upload', 'Restore from a backup', 'Replaces everything currently in LCARS')}
-          ${setBtn('downloadOfflineCopy()', 'archive', 'Download LCARS', 'One file that works with no internet')}
+          ${setBtn('exportData()', 'download', 'Back up my data', 'Downloads one file holding everything.')}
+          ${setBtn('importData()', 'upload', 'Restore from a backup', 'Replaces everything currently in LCARS.')}
+          ${setBtn('downloadOfflineCopy()', 'archive', 'Download LCARS', 'One HTML file that runs with no internet.')}
         </div>
       </div>
 
@@ -5100,9 +5135,9 @@ function settingsAccountCard() {
         <div class="set-note">Neither can be undone. Back up first.</div>
         <div class="set-tiles" style="margin-top:6px">
           ${setBtn('confirmEraseData()', 'trash', 'Erase my sims and characters',
-            isCloud() ? 'Empties LCARS on all your devices' : 'Empties LCARS in this browser', {danger:true})}
+            isCloud() ? 'Empties LCARS on all your devices.' : 'Empties LCARS in this browser.', {danger:true})}
           ${isCloud() ? setBtn('confirmDeleteAccount()', 'alert', 'Delete my account',
-            'Removes your data from the server too', {danger:true}) : ''}
+            'Removes your data from the server too.', {danger:true}) : ''}
         </div>
       </div>
     </div>`;
@@ -5112,33 +5147,36 @@ function settingsAppearanceCard() {
   const p = getPrefs();
   const theme = S.settings.theme || 'dark';
   const skin = getStyle().skin;
+  // The style and theme pickers are choices, so they use the same button as the
+  // actions elsewhere on the page with a selected state rather than a row of
+  // pill buttons that look like nothing else here.
+  const pick = (on, onclick, icon, label, desc) =>
+    setBtn(onclick, icon, label, desc, { on });
   return `
     <div class="set-card" id="set-sec-appearance">
       <div class="msec">LCARS APPEARANCE</div>
 
       <div class="set-block">
         <div class="ml">VISUAL STYLE</div>
-        <div class="set-actions" style="margin-top:5px">
-          <button class="btn btn-s st-btn${skin==='prime'?' btn-p':''}" onclick="setStyleFromSettings('prime',this,event)">${ic('sparkles')} Delta Prime (${STYLE_VERSION})</button>
-          <button class="btn btn-s st-btn${skin==='classic'?' btn-p':''}" onclick="setStyleFromSettings('classic',this,event)">${ic('layout-grid')} Classic LCARS (4.21)</button>
+        <div class="set-tiles" style="margin-top:6px">
+          ${pick(skin==='prime', "setStyleFromSettings('prime',this,event)", 'sparkles',
+            `Delta Prime (${STYLE_VERSION})`, 'The current look. Still being tuned.')}
+          ${pick(skin==='classic', "setStyleFromSettings('classic',this,event)", 'layout-grid',
+            'Classic LCARS (4.21)', 'The original look, kept available.')}
         </div>
         ${skin==='prime' ? `
-        <div id="sty-settings" style="margin-top:12px">${styleControlsHtml()}</div>
-        <div class="set-note">
-          <strong style="color:var(--amber)">Delta Prime is new in ${STYLE_VERSION}</strong> and still being
-          tuned — Classic LCARS stays available for now, and feedback on either is welcome.
-        </div>` : `
-        <div class="ml" style="margin-top:12px">THEME</div>
-        <div class="set-actions" style="margin-top:5px">
-          <button class="btn btn-s st-btn${theme==='dark'?' btn-p':''}" data-theme="dark" onclick="setThemeFromSettings('dark')">${ic('moon')} Dark</button>
-          <button class="btn btn-s st-btn${theme==='light'?' btn-p':''}" data-theme="light" onclick="setThemeFromSettings('light')">${ic('sun')} Light</button>
-          <button class="btn btn-s st-btn${theme==='hc'?' btn-p':''}" data-theme="hc" onclick="setThemeFromSettings('hc')">${ic('contrast')} High Contrast</button>
+        <div id="sty-settings" style="margin-top:12px">${styleControlsHtml()}</div>` : `
+        <div class="ml" style="margin-top:14px">THEME</div>
+        <div class="set-tiles" style="margin-top:6px">
+          ${pick(theme==='dark', "setThemeFromSettings('dark')", 'moon', 'Dark', 'Light text on a dark panel.')}
+          ${pick(theme==='light', "setThemeFromSettings('light')", 'sun', 'Light', 'Dark text on a light panel.')}
+          ${pick(theme==='hc', "setThemeFromSettings('hc')", 'contrast', 'High Contrast', 'Maximum separation, for readability.')}
         </div>`}
       </div>
 
       <div class="set-block">
         <div class="ml">TEXT SIZE</div>
-        <div class="set-grid" style="margin-top:5px">
+        <div class="set-grid" style="margin-top:6px">
           <div class="mf" style="margin:0">
             <label class="ml" for="pf-ls">LINE SPACING</label>
             <input class="mi" id="pf-ls" type="number" min="1" max="3" step="0.05" value="${p.lineSpacing}">
@@ -5156,7 +5194,7 @@ function settingsAppearanceCard() {
 
       <div class="set-block">
         <div class="ml">TYPEFACE</div>
-        <div class="set-grid" style="margin-top:5px">
+        <div class="set-grid" style="margin-top:6px">
           <div class="mf" style="margin:0">
             <label class="ml" for="pf-uifont">UI FONT</label>
             <select class="mi" id="pf-uifont">
@@ -5172,10 +5210,10 @@ function settingsAppearanceCard() {
             </select>
           </div>
         </div>
-        <label style="display:inline-flex;align-items:center;gap:6px;font-size:0.76rem;color:var(--dim);cursor:pointer;margin-top:9px">
-          <input type="checkbox" id="pf-ef-same" style="width:auto" ${p.editorFontSameAsUI?'checked':''}
+        <label class="set-check" style="margin-top:10px;cursor:pointer">
+          <input type="checkbox" id="pf-ef-same" ${p.editorFontSameAsUI?'checked':''}
                  onchange="document.getElementById('pf-editorfont').disabled=this.checked;">
-          Use the UI font in the editor too
+          <span class="set-btn-d">Use the UI font in the editor too.</span>
         </label>
       </div>
     </div>`;
@@ -5184,174 +5222,63 @@ function settingsAppearanceCard() {
 function settingsEditorCard() {
   const p = getPrefs();
   const aid = (id, cid, on, colour, title, code, note) => `
-    <div class="set-check">
+    <label class="set-check" style="cursor:pointer">
       <input type="checkbox" id="${id}" ${on?'checked':''}>
-      <div style="flex:1;min-width:0">
-        <div class="set-check-t">${title} &nbsp;<code>${code}</code>
-          <input class="mi-color-sm" id="${cid}" type="color" value="${colour}"></div>
-        <div class="set-note" style="margin-top:2px">${note}</div>
-      </div>
-    </div>`;
+      <span style="flex:1;min-width:0">
+        <span class="set-btn-t">${title} <code>${code}</code>
+          <input class="mi-color-sm" id="${cid}" type="color" value="${colour}"
+                 onclick="event.stopPropagation()"></span>
+        <span class="set-btn-d" style="display:block;margin-top:2px">${note}</span>
+      </span>
+    </label>`;
+  const toggle = (id, on, title, note) => `
+    <label class="set-check" style="cursor:pointer">
+      <input type="checkbox" id="${id}" ${on?'checked':''}>
+      <span>
+        <span class="set-btn-t">${title}</span>
+        <span class="set-btn-d" style="display:block;margin-top:2px">${note}</span>
+      </span>
+    </label>`;
   return `
     <div class="set-card" id="set-sec-editor">
       <div class="msec">LCARS SIM EDITOR</div>
 
       <div class="set-block">
         <div class="ml">VISUAL AIDS</div>
-        <div class="set-note" style="margin-bottom:10px">Colour-highlight special lines in the editor.
-          Toggle each aid from the toolbar or here.</div>
-        <div style="display:flex;flex-direction:column;gap:12px">
-          ${aid('pf-ao','pf-ac',p.actionOn!==false,p.actionAccent,'Action Lines','::text::',
-                'Lines surrounded by <code>::</code> are highlighted as stage directions or action beats.')}
-          ${aid('pf-co','pf-cc',p.commsOn!==false,p.commsAccent,'Comms Lines','=/\\=text=/\\=',
-                'Lines surrounded by <code>=/\\=</code> are highlighted as communications or transmissions.')}
-          ${aid('pf-to','pf-tc',p.thoughtOn!==false,p.thoughtAccent,'Thought Lines','oO text Oo',
-                'Lines surrounded by <code>oO…Oo</code> are highlighted. Italicised when Auto-Formatting is enabled.')}
+        <div class="set-note">Colour-highlight special lines while you write. Also on the toolbar.</div>
+        <div class="set-checks">
+          ${aid('pf-ao','pf-ac',p.actionOn!==false,p.actionAccent,'Action lines','::text::',
+                'Stage directions and action beats.')}
+          ${aid('pf-co','pf-cc',p.commsOn!==false,p.commsAccent,'Comms lines','=/\\=text=/\\=',
+                'Communications and transmissions.')}
+          ${aid('pf-to','pf-tc',p.thoughtOn!==false,p.thoughtAccent,'Thought lines','oO text Oo',
+                'Italicised too when auto-formatting is on.')}
         </div>
       </div>
 
       <div class="set-block">
         <div class="ml">AUTO-FORMATTING</div>
-        <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
-          <div class="set-check">
-            <input type="checkbox" id="pf-abn" ${p.autoBoldNames?'checked':''}>
-            <div>
-              <div class="set-check-t">Bold Names</div>
-              <div class="set-note" style="margin-top:2px">Automatically bolds character names when detected
-                at the start of a line (e.g. <code>Name:</code>). Formatting persists in copy-paste.</div>
-            </div>
-          </div>
-          <div class="set-check">
-            <input type="checkbox" id="pf-ti" ${p.thoughtItalic?'checked':''}>
-            <div>
-              <div class="set-check-t">Italicize Thoughts</div>
-              <div class="set-note" style="margin-top:2px">Automatically italicizes lines marked with
-                <code>oO…Oo</code>. Formatting persists in copy-paste.</div>
-            </div>
-          </div>
+        <div class="set-note">Applied as you type, and kept when you copy the sim out.</div>
+        <div class="set-checks">
+          ${toggle('pf-abn', p.autoBoldNames, 'Bold names',
+            'Bolds a character name at the start of a line.')}
+          ${toggle('pf-ti', p.thoughtItalic, 'Italicize thoughts',
+            'Italicises lines marked with oO\u2026Oo.')}
         </div>
       </div>
 
       <div class="set-block">
-        <div class="mf" style="margin:0;max-width:340px">
-          <label class="ml" for="pf-ml">MARKER BUTTONS</label>
-          <select class="ms" id="pf-ml">
-            <option value="dropdown" ${p.markerLayout!=='buttons'?'selected':''}>Insert ▾ dropdown (compact)</option>
+        <div class="ml">MARKER BUTTONS</div>
+        <div class="set-note">How the marker buttons are laid out on the editor toolbar.</div>
+        <div class="mf" style="margin:6px 0 0;max-width:340px">
+          <select class="ms" id="pf-ml" aria-label="Marker button layout">
+            <option value="dropdown" ${p.markerLayout!=='buttons'?'selected':''}>Insert \u25be dropdown (compact)</option>
             <option value="buttons"  ${p.markerLayout==='buttons'?'selected':''}>Individual buttons (expanded)</option>
           </select>
         </div>
       </div>
     </div>`;
 }
-
-// ── Account controls ──────────────────────────────────────────────────────
-// The display name and recovery email both live on the server, so their tiles
-// render saying "Loading…" and fill their own hints in when the row arrives.
-let _writerProfile = { display_name: '', recovery_email: '' };
-
-function loadWriterProfile() {
-  if (!document.getElementById('acct-rec-tile')) return;
-  fetchWriterProfile().then(pr => {
-    _writerProfile = pr;
-    paintWriterProfile();
-  }).catch(() => {
-    ['acct-dn-hint','acct-rec-hint'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.innerHTML = '<span style="color:var(--red,#c66)">Could not be read — check your connection</span>';
-    });
-  });
-}
-
-function paintWriterProfile() {
-  const dn = document.getElementById('acct-dn-hint');
-  if (dn) dn.innerHTML = _writerProfile.display_name
-    ? '<strong>' + esc(_writerProfile.display_name) + '</strong>'
-    : 'Not set \u2014 a friendlier name than your Writer ID';
-  const re = document.getElementById('acct-rec-hint');
-  if (re) re.innerHTML = _writerProfile.recovery_email
-    ? '<strong>' + esc(_writerProfile.recovery_email) + '</strong>'
-    : 'Not set \u2014 in case you forget your PIN';
-  // Once there is a display name it leads, with the Writer ID kept alongside
-  // because that is what identifies the account.
-  const who = document.getElementById('acct-who');
-  if (who) {
-    const wid = getAuth().writerId || '';
-    who.innerHTML = _writerProfile.display_name
-      ? esc(_writerProfile.display_name) + ' <span class="set-writerid-id">(' + esc(wid) + ')</span>'
-      : esc(wid);
-  }
-}
-
-// Both fields are one text box against one column, so they share a dialog.
-function showWriterField(key, title, label, placeholder, note, saver) {
-  openModal(title, `
-    <div class="mf"><label class="ml">${label}</label>
-      <input class="mi" id="wf-val" type="text" spellcheck="false"
-             placeholder="${placeholder}" value="${esc(_writerProfile[key]||'')}"></div>
-    <div id="wf-msg" style="font-size:0.76rem;line-height:1.5;min-height:1.1em;color:var(--red,#c66)"></div>
-    <div class="set-note">${note}</div>
-  `, () => {
-    const msg = document.getElementById('wf-msg');
-    msg.style.color = 'var(--dim)';
-    msg.textContent = 'Saving…';
-    saver(document.getElementById('wf-val').value)
-      .then(v => {
-        _writerProfile[key] = v;
-        paintWriterProfile();
-        closeModal();
-        showToast(v ? title.replace(/^[A-Z]/, c => c) + ' saved' : 'Removed');
-      })
-      .catch(e => { msg.style.color = 'var(--red,#c66)'; msg.textContent = e.message; });
-    return false;                          // closes on success, not on click
-  }, { ok: 'Save' });
-}
-
-function showDisplayName() {
-  showWriterField('display_name', 'Display name', 'DISPLAY NAME', 'e.g. Jean Luc Picard',
-    'A friendlier name than your Writer ID. Leave it empty to remove it.', saveDisplayName);
-}
-
-// Handing your Writer ID to another writer is a real errand — joint posts and
-// invitations start with it. A small chit you can read out or copy, rather
-// than making people hunt for it in a settings field.
-function contactText() {
-  const wid = getAuth().writerId || '';
-  const dn = _writerProfile.display_name;
-  return dn ? `${dn} (${wid})` : wid;
-}
-
-function showShareContact() {
-  const wid = getAuth().writerId || '';
-  const dn = _writerProfile.display_name;
-  openModal('SHARE MY CONTACT', `
-    <div class="contact-card">
-      <div class="contact-card-bar">STARBASE 118</div>
-      <div class="contact-card-body">
-        ${dn ? `<div class="contact-card-name">${esc(dn)}</div>` : ''}
-        <div class="contact-card-lbl">WRITER ID</div>
-        <div class="contact-card-id">${esc(wid)}</div>
-      </div>
-    </div>
-    <div class="set-note" style="margin-top:12px">Give this to another writer so they can find you \u2014
-      for a joint post, or to be added to a scene.</div>
-  `, () => {
-    navigator.clipboard.writeText(contactText())
-      .then(() => showToast('Contact copied'))
-      .catch(() => showToast('Copy failed — check clipboard permissions.'));
-    return false;                          // stays open so it can be copied again
-  }, { ok: ic('copy') + ' Copy' });
-}
-
-function showRecoveryEmail() {
-  showWriterField('recovery_email', 'Recovery email', 'RECOVERY EMAIL', 'you@example.com',
-    'Nothing is sent to it — it is held so you can be identified if you forget your PIN. ' +
-    'Leave it empty to remove it.', saveRecoveryEmail);
-}
-
-// ── Sim templates ─────────────────────────────────────────────────────────
-// A template is a saved sim body you can start a new sim from. Settings lists
-// them; editing one happens in the sim editor, because a template is sim text
-// and deserves the same toolbar, markers and auto-formatting.
 
 function settingsTemplatesCard() {
   return `
@@ -5380,13 +5307,17 @@ function settingsTemplateRow(t) {
   const tmp = document.createElement('div');
   tmp.innerHTML = t.content || '';
   const words = wc(tmp.innerText || '');
+  // The whole row opens the template — Edit is the row's job, not a separate
+  // target sitting next to it.
   return `<div class="set-tmpl-row">
       <button class="set-tmpl-open-btn" onclick="openTemplateInEditor('${t.id}')"
               title="Open this template in the sim editor">
-        <span class="set-tmpl-name">${esc(t.name)}</span>
-        <span class="set-tmpl-meta">${words} word${words===1?'':'s'}${t.title?' \u00b7 ' + esc(t.title):''}</span>
+        <span class="set-tmpl-info">
+          <span class="set-tmpl-name">${esc(t.name)}</span>
+          <span class="set-tmpl-meta">${words} word${words===1?'':'s'}${t.title?' \u00b7 ' + esc(t.title):''}</span>
+        </span>
+        <span class="set-tmpl-edit">${ic('pencil')} Edit</span>
       </button>
-      <span class="set-tmpl-edit">${ic('pencil')} Edit</span>
       <button class="set-tmpl-del" onclick="deleteTemplateById('${t.id}')"
               title="Delete this template" aria-label="Delete ${esc(t.name)}">${ic('trash')}</button>
     </div>`;
@@ -5431,6 +5362,105 @@ function saveCurrentAsTemplate() {
   }, { ok: 'Save template' });
 }
 
+// ── Account controls ──────────────────────────────────────────────────────
+// The recovery email lives on the server, so its button renders saying
+// "In case you forget your PIN." and swaps in the address when the row arrives.
+let _writerProfile = { display_name: '', recovery_email: '' };
+
+function loadWriterProfile() {
+  if (!document.getElementById('acct-rec-tile')) return;
+  fetchWriterProfile().then(pr => {
+    _writerProfile = pr;
+    paintWriterProfile();
+  }).catch(() => {
+    const el = document.getElementById('acct-rec-hint');
+    if (el) el.innerHTML = '<span style="color:var(--red,#c66)">Could not be read \u2014 check your connection.</span>';
+  });
+}
+
+function paintWriterProfile() {
+  const re = document.getElementById('acct-rec-hint');
+  if (re) re.innerHTML = _writerProfile.recovery_email
+    ? '<strong>' + esc(_writerProfile.recovery_email) + '</strong>'
+    : 'In case you forget your PIN.';
+  // The display name and the Writer ID carry equal weight \u2014 one is what people
+  // call you, the other is what the fleet calls you.
+  const who = document.getElementById('acct-who');
+  if (who) {
+    const wid = getAuth().writerId || '';
+    who.innerHTML = _writerProfile.display_name
+      ? esc(_writerProfile.display_name) + '<span class="set-writerid-sep">\u00b7</span>' + esc(wid)
+      : esc(wid);
+  }
+}
+
+// Both fields are one text box against one column, so they share a dialog.
+function showWriterField(key, title, label, placeholder, note, saver) {
+  openModal(title, `
+    <div class="mf"><label class="ml">${label}</label>
+      <input class="mi" id="wf-val" type="text" spellcheck="false"
+             placeholder="${placeholder}" value="${esc(_writerProfile[key]||'')}"></div>
+    <div id="wf-msg" style="font-size:0.76rem;line-height:1.5;min-height:1.1em;color:var(--red,#c66)"></div>
+    <div class="set-note">${note}</div>
+  `, () => {
+    const msg = document.getElementById('wf-msg');
+    msg.style.color = 'var(--dim)';
+    msg.textContent = 'Saving\u2026';
+    saver(document.getElementById('wf-val').value)
+      .then(v => {
+        _writerProfile[key] = v;
+        paintWriterProfile();
+        closeModal();
+        showToast(v ? title + ' saved' : title + ' removed');
+      })
+      .catch(e => { msg.style.color = 'var(--red,#c66)'; msg.textContent = e.message; });
+    return false;                          // closes on success, not on click
+  }, { ok: 'Save' });
+}
+
+function showDisplayName() {
+  showWriterField('display_name', 'Display name', 'DISPLAY NAME', 'e.g. Jean Luc Picard',
+    'A friendlier name than your Writer ID. Leave it empty to remove it.', saveDisplayName);
+}
+
+// Handing your Writer ID to another writer is a real errand \u2014 joint posts and
+// invitations start with it. A small chit to copy, rather than making people
+// hunt for it in a settings field.
+function contactText() {
+  const wid = getAuth().writerId || '';
+  const dn = _writerProfile.display_name;
+  return dn ? `Write with ${dn} on LCARS. Writer ID ${wid}.`
+            : `Write with me on LCARS. Writer ID ${wid}.`;
+}
+
+function showShareContact() {
+  const wid = getAuth().writerId || '';
+  const dn = _writerProfile.display_name;
+  openModal('SHARE MY CONTACT', `
+    <div class="contact-card">
+      <div class="contact-card-bar">LCARS WRITING SYSTEM</div>
+      <div class="contact-card-body">
+        <div class="contact-card-line">Write with ${dn ? `<strong>${esc(dn)}</strong>` : '<strong>me</strong>'} on LCARS.</div>
+        <div class="contact-card-lbl">WRITER ID</div>
+        <div class="contact-card-id">${esc(wid)}</div>
+      </div>
+    </div>
+    <div class="set-note" style="margin-top:12px">Give this to another writer so they can find you \u2014
+      for a joint post, or to be added to a scene.</div>
+  `, () => {
+    navigator.clipboard.writeText(contactText())
+      .then(() => showToast('Contact copied'))
+      .catch(() => showToast('Copy failed \u2014 check clipboard permissions.'));
+    return false;                          // stays open so it can be copied again
+  }, { ok: ic('copy') + ' Copy' });
+}
+
+function showRecoveryEmail() {
+  showWriterField('recovery_email', 'Recovery email', 'RECOVERY EMAIL', 'you@example.com',
+    'Nothing is sent to it \u2014 it is held so you can be identified if you forget your PIN. ' +
+    'Leave it empty to remove it.', saveRecoveryEmail);
+}
+
 function showChangePin() {
   openModal('CHANGE YOUR PIN', `
     <div class="mf"><label class="ml">CURRENT PIN</label>
@@ -5471,9 +5501,9 @@ function settingsAboutCard() {
         </div>
         <div id="ver-hist" class="hidden set-changelog">${renderVersionHistory()}</div>
         <div class="set-tiles" style="margin-top:12px">
-          ${setBtn('showWizard()', 'sparkles', 'Getting Started', 'The quick tour of how LCARS works')}
-          ${setBtn("window.open('LCARS-Guide-v2.html','_blank')", 'book-open', 'Full user guide', 'Every part of the tool, in detail')}
-          ${setBtn('showBuiltWith()', 'circle-dot', 'Built with Claude Code', 'How this tool was made, and what it does not do')}
+          ${setBtn('showWizard()', 'sparkles', 'Getting Started', 'The quick tour of how LCARS works.')}
+          ${setBtn("window.open('LCARS-Guide-v2.html','_blank')", 'book-open', 'Full user guide', 'Every part of the tool, in detail.')}
+          ${setBtn('showBuiltWith()', 'circle-dot', 'Built with Claude Code', 'How this tool was made, and what it does not do.')}
         </div>
       </div>
     </div>`;
