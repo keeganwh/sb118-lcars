@@ -172,6 +172,12 @@ const VERSIONS = [
       'Changed: Sim Templates is no longer a button in the header. The saved templates live in Settings \u2192 Your Account & Data, where clicking one opens it for editing \u2014 name, default sim title and the template text itself \u2014 rather than only offering rename and delete. Saving the sim you are writing as a template moved to Sim Details, next to Snapshots',
       'Changed: on a phone the Character Manifest no longer gives the top of the screen to the character list. The list folds away behind a Characters button, with its search intact, so the character you are reading gets the room',
       'Changed: editing a sim template now opens it in the sim editor itself, with the full toolbar, markers and auto-formatting, rather than a plain text box in Settings. A banner across the top makes it clear you are editing a template rather than a sim, and the title bar holds the template\u2019s name',
+      'Changed: the Settings buttons are smaller and all the same shape, with a one-line explanation each instead of a paragraph. A page of large asymmetric cards repeated a dozen times was more noise than help',
+      'Changed: \u201cSave to my account now\u201d is now \u201cSync data now\u201d, and says plainly that it is rarely needed because syncing is automatic',
+      'Changed: once you set a display name, Settings reads \u201cSigned in as Jean Luc Picard (V239806K11)\u201d rather than showing the Writer ID alone',
+      'Added: Share my contact, in Settings \u2192 Your Account & Data. Shows your name and Writer ID as a small card and copies them in one click, for handing to another writer',
+      'Changed: Sim Templates is now its own section in Settings rather than sitting inside Your Account & Data',
+      'Changed: About LCARS is tidied \u2014 Getting Started, the full user guide and how the tool was built are three buttons, and the changelog is a small button on the version line rather than a panel of its own',
     ],
   },
 ];
@@ -4938,6 +4944,7 @@ const SET_SECTIONS = [
   { id: 'set-sec-account',    icon: 'user',        label: 'Your Account & Data' },
   { id: 'set-sec-appearance', icon: 'palette',     label: 'LCARS Appearance' },
   { id: 'set-sec-editor',     icon: 'pencil',      label: 'LCARS Sim Editor' },
+  { id: 'set-sec-templates',  icon: 'hexagon',     label: 'Sim Templates' },
   { id: 'set-sec-about',      icon: 'file-text',   label: 'About LCARS' },
 ];
 
@@ -4963,6 +4970,7 @@ function renderSettingsView() {
         ${settingsAccountCard()}
         ${settingsAppearanceCard()}
         ${settingsEditorCard()}
+        ${settingsTemplatesCard()}
         ${settingsAboutCard()}
         <div class="set-bar">
           <span class="set-note">Fonts, sizes, colours and the editor toggles above are saved together.</span>
@@ -5024,14 +5032,11 @@ function closeSettingsToc() {
   if (t) t.classList.remove('toc-open');
 }
 
-// A settings action: a button that says what it does underneath its label,
-// sized so three sit across a desktop page and wrap down from there. Shares
-// .dash-action with the dashboard so both look like the same app.
-function setTile(onclick, icon, label, hint, id) {
-  return `<button class="dash-action"${id?` id="${id}"`:''} onclick="${onclick}">
-      <div class="da-icon">${ic(icon)}</div>
-      <div class="da-label">${label}</div>
-      <div class="da-hint">${hint}</div>
+// A settings action: icon, name, one short line saying what it does.
+function setBtn(onclick, icon, label, desc, opts = {}) {
+  return `<button class="set-btn${opts.danger?' set-btn-danger':''}"${opts.id?` id="${opts.id}"`:''} onclick="${onclick}">
+      <span class="set-btn-t">${ic(icon)}${label}</span>
+      <span class="set-btn-d"${opts.descId?` id="${opts.descId}"`:''}>${desc}</span>
     </button>`;
 }
 
@@ -5043,20 +5048,16 @@ function settingsAccountCard() {
       <div class="set-block">
         <div class="set-writerid">
           <span class="set-writerid-lbl">SIGNED IN AS</span>
-          <span class="set-writerid-val">${esc(getAuth().writerId||'')}</span>
+          <span class="set-writerid-val" id="acct-who">${esc(getAuth().writerId||'')}</span>
           <span class="set-note" style="margin:0" id="sync-status">${esc(syncStatus.msg||'')}</span>
         </div>
         <div class="set-tiles" style="margin-top:10px">
-          ${setTile('saveToCloud()', 'arrow-up', 'Save to my account now',
-            'Uploads this device\u2019s sims and characters straight away, rather than waiting for the automatic save a few seconds after each change')}
-          ${setTile('showDisplayName()', 'user', 'Display name',
-            '<span id="acct-dn-hint">Loading\u2026</span>', 'acct-dn-tile')}
-          ${setTile('showChangePin()', 'hexagon', 'Change my PIN',
-            'Sets a new PIN for signing in. You will need your current one. A forgotten PIN still has to be reset by the tool\u2019s maintainer')}
-          ${setTile('showRecoveryEmail()', 'link', 'Recovery email',
-            '<span id="acct-rec-hint">Loading\u2026</span>', 'acct-rec-tile')}
-          ${setTile('cloudSignOut()', 'move-right', 'Sign out',
-            'Leaves this account on this device. Your sims here are untouched and your online copy is unaffected')}
+          ${setBtn('showDisplayName()', 'user', 'Display name', 'Loading\u2026', {id:'acct-dn-tile', descId:'acct-dn-hint'})}
+          ${setBtn('showChangePin()', 'hexagon', 'Change my PIN', 'You will need your current one')}
+          ${setBtn('showRecoveryEmail()', 'link', 'Recovery email', 'Loading\u2026', {id:'acct-rec-tile', descId:'acct-rec-hint'})}
+          ${setBtn('showShareContact()', 'copy', 'Share my contact', 'Your name and Writer ID, ready to paste')}
+          ${setBtn('saveToCloud()', 'arrow-up', 'Sync data now', 'Rarely needed \u2014 syncing is automatic')}
+          ${setBtn('cloudSignOut()', 'move-right', 'Sign out', 'Signs out in this browser. Nothing is deleted')}
         </div>
       </div>
       ` : isFileCopy() ? `
@@ -5079,8 +5080,7 @@ function settingsAccountCard() {
           sims live in this browser alone &mdash; clearing browser data will erase them, so keep taking backups.
         </div>
         <div class="set-tiles" style="margin-top:10px">
-          ${setTile('showAuthGate(true)', 'user', 'Set up an account',
-            'Keeps your sims backed up automatically and available on any device you sign in on. The work already on this device is carried across')}
+          ${setBtn('showAuthGate(true)', 'user', 'Set up an account', 'Back up your sims and use them on any device')}
         </div>
         <div class="set-note"><span id="sync-status"></span></div>
       </div>
@@ -5089,27 +5089,20 @@ function settingsAccountCard() {
       <div class="set-block">
         <div class="ml">BACKUPS &amp; THE OFFLINE COPY</div>
         <div class="set-tiles" style="margin-top:6px">
-          ${setTile('exportData()', 'download', 'Back up my data',
-            'Saves one file holding every sim, character and preference. Keep it somewhere outside the browser, and take one regularly')}
-          ${setTile('importData()', 'upload', 'Restore from a backup',
-            'Loads a backup file back in. <strong>Replaces everything currently in LCARS</strong>, so back up first if there is anything here you want')}
-          ${setTile('downloadOfflineCopy()', 'archive', 'Download LCARS for offline use',
-            'One self-contained file for your own machine that opens with no internet at all. It keeps its own sims, so move work in and out with a backup')}
+          ${setBtn('exportData()', 'download', 'Back up my data', 'Downloads one file holding everything')}
+          ${setBtn('importData()', 'upload', 'Restore from a backup', 'Replaces everything currently in LCARS')}
+          ${setBtn('downloadOfflineCopy()', 'archive', 'Download LCARS', 'One file that works with no internet')}
         </div>
       </div>
 
-      ${settingsTemplatesBlock()}
-
       <div class="set-block set-danger-block">
         <div class="ml" style="color:var(--red,#c66)">DANGER ZONE</div>
-        <div class="set-note">Neither of these can be undone, and a backup is the only way back.</div>
+        <div class="set-note">Neither can be undone. Back up first.</div>
         <div class="set-tiles" style="margin-top:6px">
-          ${setTile('confirmEraseData()', 'trash', 'Erase all my sims and characters',
-            `Empties this copy of LCARS \u2014 every mission, scene, sim and character. ${isCloud()
-              ? 'Your account stays and the erase is synced, so it clears on your other devices too'
-              : 'Applies to this browser only'}`)}
-          ${isCloud() ? setTile('confirmDeleteAccount()', 'alert', 'Delete my account and all data',
-            'Removes your sims, characters and revision history from the server and wipes this device\u2019s copy. Your Writer ID stays registered as a login') : ''}
+          ${setBtn('confirmEraseData()', 'trash', 'Erase my sims and characters',
+            isCloud() ? 'Empties LCARS on all your devices' : 'Empties LCARS in this browser', {danger:true})}
+          ${isCloud() ? setBtn('confirmDeleteAccount()', 'alert', 'Delete my account',
+            'Removes your data from the server too', {danger:true}) : ''}
         </div>
       </div>
     </div>`;
@@ -5272,12 +5265,21 @@ function loadWriterProfile() {
 function paintWriterProfile() {
   const dn = document.getElementById('acct-dn-hint');
   if (dn) dn.innerHTML = _writerProfile.display_name
-    ? '<strong>' + esc(_writerProfile.display_name) + '</strong> — a friendlier name than your Writer ID'
-    : 'Not set. A friendlier name than your Writer ID';
+    ? '<strong>' + esc(_writerProfile.display_name) + '</strong>'
+    : 'Not set \u2014 a friendlier name than your Writer ID';
   const re = document.getElementById('acct-rec-hint');
   if (re) re.innerHTML = _writerProfile.recovery_email
-    ? '<strong>' + esc(_writerProfile.recovery_email) + '</strong> — so you can be identified if you forget your PIN'
-    : 'Not set. So you can be identified if you forget your PIN';
+    ? '<strong>' + esc(_writerProfile.recovery_email) + '</strong>'
+    : 'Not set \u2014 in case you forget your PIN';
+  // Once there is a display name it leads, with the Writer ID kept alongside
+  // because that is what identifies the account.
+  const who = document.getElementById('acct-who');
+  if (who) {
+    const wid = getAuth().writerId || '';
+    who.innerHTML = _writerProfile.display_name
+      ? esc(_writerProfile.display_name) + ' <span class="set-writerid-id">(' + esc(wid) + ')</span>'
+      : esc(wid);
+  }
 }
 
 // Both fields are one text box against one column, so they share a dialog.
@@ -5305,8 +5307,39 @@ function showWriterField(key, title, label, placeholder, note, saver) {
 }
 
 function showDisplayName() {
-  showWriterField('display_name', 'Display name', 'DISPLAY NAME', 'e.g. Robin Hopper',
+  showWriterField('display_name', 'Display name', 'DISPLAY NAME', 'e.g. Jean Luc Picard',
     'A friendlier name than your Writer ID. Leave it empty to remove it.', saveDisplayName);
+}
+
+// Handing your Writer ID to another writer is a real errand — joint posts and
+// invitations start with it. A small chit you can read out or copy, rather
+// than making people hunt for it in a settings field.
+function contactText() {
+  const wid = getAuth().writerId || '';
+  const dn = _writerProfile.display_name;
+  return dn ? `${dn} (${wid})` : wid;
+}
+
+function showShareContact() {
+  const wid = getAuth().writerId || '';
+  const dn = _writerProfile.display_name;
+  openModal('SHARE MY CONTACT', `
+    <div class="contact-card">
+      <div class="contact-card-bar">STARBASE 118</div>
+      <div class="contact-card-body">
+        ${dn ? `<div class="contact-card-name">${esc(dn)}</div>` : ''}
+        <div class="contact-card-lbl">WRITER ID</div>
+        <div class="contact-card-id">${esc(wid)}</div>
+      </div>
+    </div>
+    <div class="set-note" style="margin-top:12px">Give this to another writer so they can find you \u2014
+      for a joint post, or to be added to a scene.</div>
+  `, () => {
+    navigator.clipboard.writeText(contactText())
+      .then(() => showToast('Contact copied'))
+      .catch(() => showToast('Copy failed — check clipboard permissions.'));
+    return false;                          // stays open so it can be copied again
+  }, { ok: ic('copy') + ' Copy' });
 }
 
 function showRecoveryEmail() {
@@ -5320,8 +5353,12 @@ function showRecoveryEmail() {
 // them; editing one happens in the sim editor, because a template is sim text
 // and deserves the same toolbar, markers and auto-formatting.
 
-function settingsTemplatesBlock() {
-  return `<div class="set-block" id="set-templates">${settingsTemplatesInner()}</div>`;
+function settingsTemplatesCard() {
+  return `
+    <div class="set-card" id="set-sec-templates">
+      <div class="msec">SIM TEMPLATES</div>
+      <div class="set-block" id="set-templates">${settingsTemplatesInner()}</div>
+    </div>`;
 }
 
 function refreshTemplatesBlock() {
@@ -5332,10 +5369,9 @@ function refreshTemplatesBlock() {
 function settingsTemplatesInner() {
   const list = S.templates || [];
   return `
-    <div class="ml">SIM TEMPLATES</div>
-    <div class="set-note">Saved sim bodies you can start a new sim from, picked from the template list in
-      the New Sim window. Open one to edit it in the sim editor; save the sim you have open as a new one
-      from Sim Details while you are writing it.</div>
+    <div class="set-note" style="margin-top:0">Saved sim bodies to start a new sim from, offered in the
+      New Sim window. Open one to edit it in the sim editor. To make a new one, use Save as Template in
+      Sim Details while a sim is open.</div>
     ${list.length ? `<div class="set-tmpl-list">${list.map(t => settingsTemplateRow(t)).join('')}</div>`
       : `<div class="set-note" style="margin-top:8px">No templates saved yet.</div>`}`;
 }
@@ -5430,35 +5466,33 @@ function settingsAboutCard() {
         <div class="set-writerid">
           <span class="set-writerid-lbl">VERSION</span>
           <span class="set-writerid-val">v${APP_VERSION}</span>
+          <button class="btn btn-s btn-sm" onclick="document.getElementById('ver-hist').classList.toggle('hidden')">
+            ${ic('chevron-down')} Changelog</button>
         </div>
-        <div class="set-tiles" style="margin-top:10px">
-          ${setTile("document.getElementById('ver-hist').classList.toggle('hidden')", 'file-text',
-            'What\u2019s changed', 'Every version of LCARS and what it added, changed or fixed')}
-          ${setTile("window.open('LCARS-Guide-v2.html','_blank')", 'book-open',
-            'The full user guide', 'How every part of the tool works, in a page of its own')}
-          ${setTile('showWizard()', 'sparkles',
-            'Getting Started', 'The quick tour again, including how to bring old sims across')}
-        </div>
-        <div id="ver-hist" class="hidden" style="margin-top:12px;max-height:340px;overflow-y:auto;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px">
-          ${renderVersionHistory()}
-        </div>
-      </div>
-
-      <div class="set-block">
-        <div class="ml">HOW THIS TOOL WAS BUILT</div>
-        <div class="set-ai">
-          <div class="set-ai-logo">${AI_LOGO_SVG}<strong>Built with Claude Code AI</strong></div>
-          <div style="margin-top:8px;line-height:1.65">
-            This tool uses <strong>no AI to run</strong>, and your content is never touched by AI.
-            Everything is held locally on your device and in your browser\u2019s storage${isCloud()
-              ? ', and in your own account when you are signed in' : ''}. No internet connection is
-            required to write*.
-          </div>
-          <div style="margin-top:6px;font-size:0.67rem;opacity:.7">*Fonts load from Google Fonts on first
-            use, and signing in to an account needs a connection.</div>
+        <div id="ver-hist" class="hidden set-changelog">${renderVersionHistory()}</div>
+        <div class="set-tiles" style="margin-top:12px">
+          ${setBtn('showWizard()', 'sparkles', 'Getting Started', 'The quick tour of how LCARS works')}
+          ${setBtn("window.open('LCARS-Guide-v2.html','_blank')", 'book-open', 'Full user guide', 'Every part of the tool, in detail')}
+          ${setBtn('showBuiltWith()', 'circle-dot', 'Built with Claude Code', 'How this tool was made, and what it does not do')}
         </div>
       </div>
     </div>`;
+}
+
+function showBuiltWith() {
+  openModal('BUILT WITH CLAUDE CODE', `
+    <div class="set-ai-logo" style="margin-bottom:10px">${AI_LOGO_SVG}<strong>Built with Claude Code AI</strong></div>
+    <div style="font-size:0.85rem;line-height:1.7">
+      LCARS was written with the help of Claude Code, an AI coding tool.
+    </div>
+    <div style="font-size:0.85rem;line-height:1.7;margin-top:10px">
+      The tool itself uses <strong>no AI to run</strong>, and your writing is never sent to or touched by
+      any AI. Your sims live in this browser${isCloud() ? ' and in your own account' : ''}, and nothing
+      else reads them.
+    </div>
+    <div class="set-note" style="margin-top:10px">Fonts load from Google Fonts the first time, and an
+      account needs a connection. Writing itself needs neither.</div>
+  `, () => {}, { ok: 'Close', noCancel: true });
 }
 
 // Reads the preference fields out of the settings view and commits them.

@@ -332,11 +332,20 @@ body.hc #cp{border-left:3px solid var(--blue)}
 .set-check{display:flex;align-items:flex-start;gap:10px}
 .set-check input[type=checkbox]{width:auto;flex-shrink:0;margin-top:3px}
 .set-check-t{display:flex;align-items:center;gap:8px;font-size:0.78rem;font-weight:bold;color:var(--text)}
-/* Settings actions: a tile that says what it does, three across a desktop
-   page, wrapping down to one on a phone. Shares .dash-action with the
-   dashboard so the two read as the same app. */
-.set-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:10px}
-.set-tiles .dash-action{min-width:0}
+/* Settings actions: icon, name, one short line of explanation. Deliberately
+   its own class rather than .dash-action — the dashboard's tiles are big and
+   asymmetric by design, which reads as noise repeated a dozen times down a
+   settings page. These are small and uniformly rounded. */
+.set-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));gap:8px}
+.set-btn{display:flex;flex-direction:column;gap:2px;align-items:flex-start;text-align:left;width:100%;
+  min-width:0;background:var(--panel2,var(--bg));border:1px solid var(--border);border-radius:8px;
+  padding:10px 12px;cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s}
+.set-btn:hover{border-color:var(--amber);background:var(--hover)}
+.set-btn-t{display:flex;align-items:center;gap:7px;font-size:0.82rem;font-weight:bold;color:var(--text)}
+.set-btn-t .ic{color:var(--amber);flex-shrink:0}
+.set-btn-d{font-size:0.72rem;color:var(--dim);line-height:1.45}
+.set-btn-danger:hover{border-color:var(--red,#c66)}
+.set-btn-danger .set-btn-t .ic{color:var(--red,#c66)}
 .set-danger-block{border:1px solid var(--red,#a44);border-radius:8px;padding:12px 13px;margin-top:16px}
 .set-danger-block .ml{margin-bottom:2px}
 /* Sim templates */
@@ -353,14 +362,25 @@ body.hc #cp{border-left:3px solid var(--blue)}
 .set-tmpl-del{background:transparent;border:none;cursor:pointer;color:var(--dim);padding:6px;line-height:1;border-radius:4px}
 .set-tmpl-del:hover{color:var(--red,#c66);background:var(--hover)}
 /* How this tool was built */
-.set-ai{font-size:0.78rem;color:var(--dim);margin-top:6px}
-.set-ai strong{color:var(--text)}
-.set-ai-logo{display:flex;align-items:center;gap:8px;color:var(--amber)}
+.set-ai-logo{display:flex;align-items:center;gap:8px;color:var(--amber);font-size:0.85rem}
 .set-ai-logo svg{flex-shrink:0;opacity:.85}
+.set-ai-logo strong{color:var(--text)}
+/* Changelog panel, folded away under the version line */
+.set-changelog{margin-top:10px;max-height:320px;overflow-y:auto;padding:10px 12px;background:var(--bg);
+  border:1px solid var(--border);border-radius:6px}
+/* A chit you can read out or copy when another writer needs to find you */
+.contact-card{border:1px solid var(--amber);border-radius:10px;overflow:hidden;background:var(--bg)}
+.contact-card-bar{background:var(--amber);color:#000;font-size:0.6rem;font-weight:bold;letter-spacing:3px;padding:5px 14px}
+body.hc .contact-card-bar{color:#000}
+.contact-card-body{padding:14px 16px}
+.contact-card-name{font-size:1.2rem;font-weight:bold;color:var(--text);line-height:1.3;margin-bottom:8px}
+.contact-card-lbl{font-size:0.6rem;letter-spacing:2px;color:var(--dim)}
+.contact-card-id{font-size:1.35rem;font-weight:bold;letter-spacing:3px;color:var(--amber);line-height:1.3}
 /* Which account you are actually in is the first thing this page should answer */
 .set-writerid{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .set-writerid-lbl{font-size:0.67rem;letter-spacing:2px;color:var(--dim)}
 .set-writerid-val{font-size:1.25rem;font-weight:bold;letter-spacing:2px;color:var(--amber)}
+.set-writerid-id{font-size:0.85rem;font-weight:normal;letter-spacing:1px;color:var(--dim)}
 /* The preference fields are the only settings that need an explicit save, so
    the bar rides the bottom of the page rather than the bottom of the screen. */
 .set-bar{position:sticky;bottom:0;background:var(--panel);border:1px solid var(--border);
