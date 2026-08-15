@@ -50,6 +50,7 @@ body{font-family:var(--ui-font,'Droid Sans',Verdana,Arial,sans-serif);background
 /* ── HEADER ── */
 #hdr{height:56px;background:var(--panel);border-bottom:3px solid var(--amber);display:flex;align-items:center;padding:0;flex-shrink:0}
 .hdr-badge{background:var(--amber);color:#fff;font-weight:bold;font-size:1.33rem;letter-spacing:5px;padding:6px 20px;border-radius:0 0 36px 0;margin-right:16px;height:100%;display:flex;align-items:center;flex-shrink:0}
+#hdr-mark{height:30px;width:auto;margin:0 14px 0 4px;flex-shrink:0;display:block}
 body.hc .hdr-badge{color:#000}
 .hdr-title{color:var(--blue2);font-size:0.87rem;letter-spacing:3px;opacity:.8}
 .hdr-right{margin-left:auto;display:flex;align-items:center;gap:6px;padding-right:12px;flex-shrink:0}
@@ -1068,6 +1069,7 @@ body.hc .contact-card-bar{color:#000}
   #hdr::-webkit-scrollbar{display:none}
   .hdr-title{display:none}
   .hdr-badge{margin-right:10px;padding:6px 14px;font-size:1.1rem;letter-spacing:3px}
+  #hdr-mark{height:26px;margin:0 10px 0 2px}
   .hdr-right{padding-right:8px}
 
   /* Settings: the contents rail folds away behind a "Jump to…" button, and

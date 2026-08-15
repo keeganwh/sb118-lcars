@@ -112,6 +112,10 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
 <!-- HEADER -->
 <div id="hdr">
   <div class="hdr-badge">LCARS</div>
+  <!-- Sits beside the badge rather than inside it: the badge is filled with the
+       duty accent, and on Operations that accent is the same gold as the mark.
+       src is set from the icon link at boot so the base64 is carried once. -->
+  <img id="hdr-mark" alt="">
   <div class="hdr-title">STARBASE 118 WRITING TOOL</div>
   <div class="hdr-right">
     <button class="btn btn-s btn-sm" id="btn-manifest-toggle" onclick="openManifest()"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg> Character Manifest</button>

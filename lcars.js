@@ -191,6 +191,7 @@ const VERSIONS = [
     date: '2026-08-15',
     changes: [
       'Changed: new icon \u2014 the gold delta \u2014 in the browser tab, and on your home screen if you add LCARS to it from a phone',
+      'Added: the delta now sits in the top left of the app as well, beside the LCARS badge',
     ],
   },
 ];
@@ -7103,6 +7104,11 @@ document.addEventListener('DOMContentLoaded',()=>{
   renderNav();
   showDashboard();
   updateViewButtons();
+  // The header mark reuses the icon already inlined in <head>, so the ~11 KB of
+  // base64 is carried once rather than once per place it appears.
+  const mark = document.getElementById('hdr-mark');
+  const icon = document.querySelector('link[rel=icon]');
+  if (mark && icon) mark.src = icon.href;
   showMovedBanner();                  // only appears on the old GitHub Pages address
   if (isFileCopy() && !getMode()) {
     setMode('local');                   // the offline copy has only one mode
