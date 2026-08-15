@@ -91,8 +91,16 @@ an Edge Function with recovery depends on what recovery turns out to need.
       `writers.recovery_email` is collected today but nothing has ever sent to it; it exists for identification only.
       _Done when: a writer who has lost their PIN can get back into their account without the maintainer._
 
-- [ ] **True account deletion.**
-      Today "delete account" removes every data row but leaves the login registered, because the anon key cannot delete an auth user. The function closes that gap.
+- [x] **True account deletion.**
+      Done without an Edge Function: a `security definer` Postgres function
+      (`purge_expired_deletions`) does what the anon key cannot, and lives in
+      `supabase/schema.sql` like everything else. No provider, no secrets, and it
+      moves with the database if the fleet ever takes over hosting.
+      Deletion is now two-stage — asking for it stamps `writers.deleted_at`
+      (an ordinary update under the existing RLS policy, so nothing privileged
+      is involved in the reversible half), and the login is removed only once a
+      **48-hour grace period** lapses. Purge runs lazily on any signed-in boot
+      rather than depending on a scheduler.
       _Done when: deleting an account also removes the login, freeing the Writer ID to be registered again._
 
 ---

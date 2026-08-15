@@ -90,6 +90,54 @@ create trigger state_touch before update on public.state
   for each row execute function public.touch_updated_at();
 
 -- ---------------------------------------------------------------------------
+-- Account deletion : soft delete now, real removal after a grace period
+-- ---------------------------------------------------------------------------
+--   * Asking for deletion only stamps deleted_at. That is an ordinary update
+--     against the writer's own row, so the existing writers_own policy already
+--     allows it -- no elevated privileges are involved in the reversible half.
+--   * Actually removing the login is the part the anon key cannot do, so it
+--     lives in a security definer function below.
+alter table public.writers add column if not exists deleted_at timestamptz;
+
+comment on column public.writers.deleted_at is
+  'Set when a writer asks to delete their account. Nothing is destroyed until the
+   grace period runs out, so a change of mind -- or a misclick -- is recoverable.';
+
+create index if not exists writers_deleted_idx
+  on public.writers (deleted_at) where deleted_at is not null;
+
+-- Deleting an auth.users row is what frees the Writer ID to be registered
+-- again, and it needs privileges the anon key does not have. This runs as the
+-- function owner instead. It takes no arguments and only ever touches rows
+-- whose grace period has already expired, so there is no input to abuse: the
+-- worst a caller can do is make a deletion happen that was going to happen
+-- anyway. Every other table cascades off auth.users.
+create or replace function public.purge_expired_deletions()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare purged integer;
+begin
+  with gone as (
+    delete from auth.users u
+     using public.writers w
+     where w.id = u.id
+       and w.deleted_at is not null
+       and w.deleted_at < now() - interval '48 hours'
+    returning u.id
+  )
+  select count(*) into purged from gone;
+  return purged;
+end $$;
+
+-- Callable by a signed-in writer only. The app calls it on boot, which is
+-- often enough at this scale -- there is no scheduler to depend on.
+revoke all on function public.purge_expired_deletions() from public, anon;
+grant execute on function public.purge_expired_deletions() to authenticated;
+
+-- ---------------------------------------------------------------------------
 -- Storage bucket for character pictures (replaces base64 pictureDataUrl)
 -- ---------------------------------------------------------------------------
 insert into storage.buckets (id, name, public)

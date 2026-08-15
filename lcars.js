@@ -192,6 +192,9 @@ const VERSIONS = [
     changes: [
       'Changed: new icon \u2014 the gold delta \u2014 in the browser tab, and on your home screen if you add LCARS to it from a phone',
       'Added: the delta now sits in the top-left LCARS badge as well, on a dark disc with a fine light ring. The disc is not quite solid, so the duty-post colour tints it \u2014 and it keeps the delta legible even on Operations gold, where the badge is the same colour as the mark',
+      'Changed: deleting your account now really removes it. It used to clear your sims but leave the login registered, so the Writer ID could never be used again and signing back in gave you an empty LCARS \u2014 the login itself is now removed too, and the Writer ID becomes free to register again',
+      'Added: a 48-hour grace period on account deletion. Nothing is destroyed straight away \u2014 sign in again with your Writer ID and PIN within 48 hours and you can cancel, and everything comes back exactly as it was. Settings shows how long is left',
+      'Changed: if the server cannot be reached while deleting an account, the deletion is refused outright rather than wiping the device and leaving the account behind',
     ],
   },
 ];
@@ -907,10 +910,11 @@ function cloudSignOut() {
 async function fetchWriterProfile() {
   const a = getAuth();
   if (!a.uid) return { display_name: '', recovery_email: '' };
-  const r = await supaFetch('/rest/v1/writers?select=display_name,recovery_email&id=eq.' + encodeURIComponent(a.uid));
+  const r = await supaFetch('/rest/v1/writers?select=display_name,recovery_email,deleted_at&id=eq.' + encodeURIComponent(a.uid));
   if (!r.ok) throw new Error('Could not read your account details.');
   const row = (await r.json())[0] || {};
-  return { display_name: row.display_name || '', recovery_email: row.recovery_email || '' };
+  return { display_name: row.display_name || '', recovery_email: row.recovery_email || '',
+           deleted_at: row.deleted_at || null };
 }
 
 async function patchWriterProfile(patch) {
@@ -1068,6 +1072,7 @@ function hasLocalData() {
 // browser also has local work.
 async function cloudBoot() {
   if (!isCloud()) return;
+  purgeExpiredDeletions();          // clears out anyone whose grace period lapsed
   setSyncStatus('syncing', 'Loading…');
   let row;
   try { row = await loadFromCloud(); }
@@ -1161,13 +1166,47 @@ async function eraseAllData() {
   }
 }
 
+// ── Account deletion ──────────────────────────────────────────────────────
+// Deletion happens in two stages. Asking for it only stamps deleted_at on the
+// writers row and signs the writer out — nothing is destroyed, so a misclick
+// costs nothing. Once the grace period has run out, purge_expired_deletions()
+// removes the auth.users row, and every table cascades off it. That second
+// stage is the one the anon key cannot do, which is why it is a security
+// definer function in the database rather than code here.
+const DELETION_GRACE_HOURS = 48;
+const DELETE_NOTICE_KEY = 'lcars_delete_notice_v1';
+
+function deletionDeadline(deletedAt) {
+  return new Date(new Date(deletedAt).getTime() + DELETION_GRACE_HOURS * 3600 * 1000);
+}
+
+// Deliberately vague at the low end: "3 hours" is more use to someone deciding
+// whether to act now than a countdown to the minute.
+function deletionRemaining(deletedAt) {
+  const ms = deletionDeadline(deletedAt).getTime() - Date.now();
+  if (ms <= 0) return 'any moment now';
+  const h = Math.floor(ms / 3600000);
+  if (h >= 1) return h + (h === 1 ? ' hour' : ' hours');
+  return Math.max(1, Math.round(ms / 60000)) + ' minutes';
+}
+
 function confirmDeleteAccount() {
+  // Already scheduled: the useful thing to offer is the way out, not a second
+  // confirmation of something that has already been asked for.
+  if (_writerProfile && _writerProfile.deleted_at) {
+    closeModal();
+    setTimeout(() => showDeletionPending(_writerProfile.deleted_at), 60);
+    return;
+  }
   closeModal();
   setTimeout(() => openModal('Delete account and all data',
     eraseConfirmBody('DELETE',
-      `<p style="margin:0 0 8px">This removes your sims, characters and revision history from the server, and wipes this device's copy.</p>
-       <p style="margin:0 0 8px">Your Writer ID stays registered as a login — signing in with it again would give you an empty LCARS. To have the login itself removed, ask the tool's maintainer.</p>
-       <p style="margin:0"><strong>There is no undo.</strong> Take a backup first if there is anything you want to keep.</p>`),
+      `<p style="margin:0 0 8px">This removes your sims, characters and revision history, and frees your
+        Writer ID to be registered again.</p>
+       <p style="margin:0 0 8px"><strong>You have ${DELETION_GRACE_HOURS} hours to change your mind.</strong>
+        Nothing is destroyed straight away — sign in again with your Writer ID and PIN before then and
+        everything comes back exactly as it was. After that it is gone for good.</p>
+       <p style="margin:0">Take a backup first if there is anything you want to keep.</p>`),
     () => {
       const v = (document.getElementById('erase-confirm').value || '').trim().toUpperCase();
       if (v !== 'DELETE') { showToast('Type DELETE to confirm'); return false; }
@@ -1176,24 +1215,90 @@ function confirmDeleteAccount() {
     { ok: 'Delete my account' }), 60);
 }
 
+// Stamping deleted_at is an ordinary update against the writer's own row, so
+// the existing RLS policy covers it — no special privileges in this half.
 async function deleteAccount() {
   const a = getAuth();
   if (a.uid) {
-    const uid = encodeURIComponent(a.uid);
     try {
-      await supaFetch('/rest/v1/snapshots?writer_uid=eq.' + uid, { method: 'DELETE' });
-      await supaFetch('/rest/v1/state?writer_uid=eq.' + uid, { method: 'DELETE' });
-      await supaFetch('/rest/v1/writers?id=eq.' + uid, { method: 'DELETE' });
+      const r = await supaFetch('/rest/v1/writers?id=eq.' + encodeURIComponent(a.uid), {
+        method: 'PATCH',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ deleted_at: new Date().toISOString() })
+      });
+      if (!r.ok) throw new Error('rejected');
     } catch(e) {
       alert('Could not reach the server, so nothing was deleted. Check your connection and try again.');
       return;
     }
   }
+  // The local copy goes now so the device looks signed out and empty, which is
+  // what was asked for. The server copy is what a change of mind restores from.
+  try { localStorage.setItem(DELETE_NOTICE_KEY, String(Date.now())); } catch(e) {}
   S.docs = {}; S.missions = {}; S.scenes = {}; S.characters = {}; S.templates = [];
   persist();
   clearAuth();
   setMode('');
   location.reload();
+}
+
+// Shown once, after the reload that follows a deletion request.
+function maybeShowDeleteNotice() {
+  let stamp = null;
+  try { stamp = localStorage.getItem(DELETE_NOTICE_KEY); } catch(e) {}
+  if (!stamp) return false;
+  try { localStorage.removeItem(DELETE_NOTICE_KEY); } catch(e) {}
+  openModal('Your account is scheduled for deletion', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 8px">You have been signed out and this device's copy has been cleared.</p>
+      <p style="margin:0 0 8px">Your sims are held on the server for <strong>${DELETION_GRACE_HOURS} hours</strong>.
+        Sign in again with your Writer ID and PIN before then and you can cancel the deletion — everything
+        comes back.</p>
+      <p style="margin:0">After that, your account and everything in it are removed for good, and your
+        Writer ID becomes available to register again.</p>
+    </div>`, null, { noCancel: true, extra: [
+      { label: 'Understood', cls: 'btn-p', fn: 'closeModal();showAuthGate(false)' }] });
+  return true;
+}
+
+// Offered at boot when a writer signs back in during the grace period.
+function showDeletionPending(deletedAt) {
+  openModal('This account is scheduled for deletion', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 8px">Everything is still here, but this account and all of its sims will be
+        removed in about <strong>${deletionRemaining(deletedAt)}</strong>.</p>
+      <p style="margin:0">If you did not mean to delete it, or you have changed your mind, keep it now —
+        after the deadline there is nothing anyone can restore.</p>
+    </div>`, null, { noCancel: true, extra: [
+      { label: 'Keep my account', cls: 'btn-p', fn: 'cancelAccountDeletion()' },
+      { label: 'Leave it scheduled', fn: 'closeModal()' }
+    ] });
+}
+
+async function cancelAccountDeletion() {
+  try { await patchWriterProfile({ deleted_at: null }); }
+  catch(e) { showToast('Could not reach the server — try again.'); return; }
+  _writerProfile.deleted_at = null;
+  closeModal();
+  showToast('Deletion cancelled — your account is safe');
+}
+
+// Fire and forget. Nothing in the UI waits on it, and at this scale a boot from
+// any signed-in writer comes round often enough to stand in for a scheduler.
+function purgeExpiredDeletions() {
+  supaFetch('/rest/v1/rpc/purge_expired_deletions', { method: 'POST', body: '{}' }).catch(() => {});
+}
+
+async function checkDeletionPending() {
+  // Never steal a modal that is already up — the reconcile prompt has to be
+  // answered or the writer's local work is left in limbo. This will come round
+  // again on the next boot.
+  if (!document.getElementById('mo').classList.contains('hidden')) return;
+  try {
+    const pr = await fetchWriterProfile();
+    _writerProfile = pr;
+    if (pr.deleted_at) showDeletionPending(pr.deleted_at);
+  } catch(e) { /* offline — the banner can wait */ }
 }
 
 // ================================================================
@@ -5145,7 +5250,8 @@ function settingsAccountCard() {
           ${setBtn('confirmEraseData()', 'trash', 'Erase my sims and characters',
             isCloud() ? 'Empties LCARS on all your devices.' : 'Empties LCARS in this browser.', {danger:true})}
           ${isCloud() ? setBtn('confirmDeleteAccount()', 'alert', 'Delete my account',
-            'Removes your data from the server too.', {danger:true}) : ''}
+            `Removes everything after ${DELETION_GRACE_HOURS} hours. Reversible until then.`,
+            {danger:true, id:'acct-del-tile', descId:'acct-del-hint'}) : ''}
         </div>
       </div>
     </div>`;
@@ -5373,7 +5479,7 @@ function saveCurrentAsTemplate() {
 // ── Account controls ──────────────────────────────────────────────────────
 // The recovery email lives on the server, so its button renders saying
 // "In case you forget your PIN." and swaps in the address when the row arrives.
-let _writerProfile = { display_name: '', recovery_email: '' };
+let _writerProfile = { display_name: '', recovery_email: '', deleted_at: null };
 
 function loadWriterProfile() {
   if (!document.getElementById('acct-rec-tile')) return;
@@ -5393,6 +5499,12 @@ function paintWriterProfile() {
     : 'In case you forget your PIN.';
   // The display name and the Writer ID carry equal weight \u2014 one is what people
   // call you, the other is what the fleet calls you.
+  const del = document.getElementById('acct-del-hint');
+  if (del) del.innerHTML = _writerProfile.deleted_at
+    ? '<strong style="color:var(--red,#c66)">Scheduled — about ' + esc(deletionRemaining(_writerProfile.deleted_at)) +
+      ' left.</strong> Open this to keep your account.'
+    : `Removes everything after ${DELETION_GRACE_HOURS} hours. Reversible until then.`;
+
   const who = document.getElementById('acct-who');
   if (who) {
     const wid = getAuth().writerId || '';
@@ -7115,9 +7227,13 @@ document.addEventListener('DOMContentLoaded',()=>{
     maybeShowStyleIntro();
     maybeShowWizard();
   } else if (!getMode()) {
-    showAuthGate(false);                // first visit — the wizard follows once resolved
+    // Someone who has just asked to delete their account lands here signed out.
+    // Tell them what happens next before the gate invites them to sign in.
+    if (!maybeShowDeleteNotice()) showAuthGate(false);   // first visit — wizard follows once resolved
   } else {
-    if (isCloud()) cloudBoot();         // signed in — pull the server copy
+    // The deletion check runs after the boot pull so it never races the
+    // reconcile prompt for the one modal slot.
+    if (isCloud()) cloudBoot().then(checkDeletionPending);  // signed in — pull the server copy
     maybeShowStyleIntro();              // held back behind the gate on a first visit
     maybeShowWizard();
   }
