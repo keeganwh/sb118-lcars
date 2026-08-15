@@ -4,7 +4,7 @@
 const ZWS = String.fromCharCode(0x200B); // zero-width space used as caret anchor after marker spans
 const SKEY = 'lcars_v1';
 
-const APP_VERSION = '4.22';
+const APP_VERSION = '4.23';
 const VERSIONS = [
   {
     version: '4.0',
@@ -131,8 +131,8 @@ const VERSIONS = [
     ]
   },
   {
-    version: 'pending',
-    date: '2026-08-14',
+    version: '4.23',
+    date: '2026-08-15',
     changes: [
       'Removed: the "Import Sims" Markdown/Google Docs importer in Settings — exporting a Doc to Markdown and re-importing it was clunky, and better ways to bring sims in are being built. Backup and Restore are unaffected',
       'Changed: revision snapshots now live in your account rather than inside the main data blob. They were ten full copies of each sim being re-uploaded on every save, and were by far the largest part of the payload; they are now fetched only when you open the Snapshots window, and follow you between devices',

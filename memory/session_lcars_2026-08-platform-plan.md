@@ -6,7 +6,7 @@ _Read this before starting any `ROADMAP.md` phase. Supersedes the July session l
 
 - **Live at https://sb118-lcars.vercel.app/** — Vercel serves `LCARS.html` at the root via `vercel.json`.
 - GitHub Pages still live, serving the same `main`, now showing a moving notice.
-- All work merged to `main`. Version still **4.22** with a long pending changelog block — **not yet cut as a release.**
+- All work merged to `main`. Shipped in **4.23** (2026-08-15).
 - Supabase project `nyjpqaelilrqzmnangft`. Schema in `supabase/schema.sql`, setup steps in `supabase/README.md`.
 
 ## What shipped

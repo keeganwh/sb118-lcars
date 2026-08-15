@@ -2,7 +2,7 @@
 
 _Follows `session_lcars_2026-08-platform-plan.md`, which still holds for hosting, storage and sync. This file covers the view layer and the Settings page._
 
-Merged to `main` and live. Version still **4.22** with a long pending changelog — **still not cut.**
+Merged to `main` and live. Shipped in **4.23** (2026-08-15); the changelog is clean, no pending block.
 
 ## What shipped
 

@@ -1,6 +1,6 @@
 # LCARS SB118 Writing Tool — Roadmap
 
-_Outstanding work only, in the user's priority order. Current version: **4.22** (unreleased changes pending)._
+_Outstanding work only, in the user's priority order. Current version: **4.23**, released 2026-08-15 — no pending changes._
 
 Each item has a **Done when…** so any session can pick it up and run without asking. Check items off (`- [x]`) as they ship, and delete them once they're rolled into a released version's changelog.
 
@@ -86,9 +86,9 @@ Both are blocked on the same thing: the `service_role` key, which must never be 
 
 ---
 
-## Session 5 — Version cut and guide rewrite
+## Session 5 — Guide rewrite
 
-- [ ] **Cut a release.** A large pending changelog block has built up under 4.22. **Ask the user before cutting** — version bumps are theirs to trigger.
+- [x] **Cut a release.** 4.23 shipped 2026-08-15 — fifty entries covering accounts, Supabase, the file split, routing, the Settings page and the Manifest view. _Version bumps stay the user's to trigger; never bump unasked._
 - [ ] **Rewrite the guide.**
       `LCARS-Guide-v2.html` predates accounts, Delta Prime and the importer removal. Start fresh and fundamentally rethink the format rather than patching.
       _Done when: the guide matches the shipped app, with no references to Gist, PATs or the Markdown importer._
