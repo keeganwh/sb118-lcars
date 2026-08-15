@@ -186,6 +186,13 @@ const VERSIONS = [
       'Fixed: jumping to a section from the Settings contents rail could leave a different section highlighted, because a short section near the end of the page is reached at the very bottom of the scroll where the one below it is equally on screen',
     ],
   },
+  {
+    version: 'pending',
+    date: '2026-08-15',
+    changes: [
+      'Changed: new icon \u2014 the gold delta \u2014 in the browser tab, and on your home screen if you add LCARS to it from a phone',
+    ],
+  },
 ];
 function loadState() {
   try { const r = localStorage.getItem(SKEY); if (r) return JSON.parse(r); } catch(e){}
