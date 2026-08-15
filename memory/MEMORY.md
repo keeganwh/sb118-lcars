@@ -2,3 +2,4 @@
 - [Changelog feedback](feedback_changelog.md) — how the user wants changelog/version handling
 - [Session log July 2026](session_lcars_2026-07.md) — features/fixes shipped, architecture notes, data size warning, git workflow reminders
 - [Platform plan Aug 2026](session_lcars_2026-08-platform-plan.md) — **read before starting any ROADMAP phase.** The Vercel + Supabase shift: decisions, reasoning, key code locations, landmines
+- [Views & Settings Aug 2026](session_lcars_2026-08-views.md) — **read alongside the platform plan.** The view layer, Settings as a page, template editing, the responsive-CSS ordering trap, and the browser test harness

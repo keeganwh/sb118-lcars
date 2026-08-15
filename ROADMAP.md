@@ -41,7 +41,12 @@ Settings and Manifest become **routed views inside the one app**, not separate H
 
 ---
 
-## Session 2 — Settings page and account management
+## Session 2 — Settings page and account management ✅ _shipped 2026-08-15_
+
+All three items done, plus additions from review: a display name, Share my
+contact, sim templates edited in the sim editor, and the "built with Claude
+Code" note moved off the Dashboard into About LCARS.
+
 
 - [x] **Move Settings out of the modal to the `/settings` view.**
       The panel is overstuffed. Regroup it while moving. Build it responsive from the start so the later mobile session does not have to redo it.
@@ -77,6 +82,7 @@ Both are blocked on the same thing: the `service_role` key, which must never be 
 - [ ] **Shareable sim links — sims only.**
       `share_token` on a doc plus a `/s/<token>` route served by `share.html` — a minimal page with no auth and no editor, so a share link does not drag the whole app down with it. Scenes explicitly out of scope. Responsive from the start — these will be opened on phones constantly.
       _Done when: a share URL opens in a logged-out private window, renders the sim, and nothing is editable._
+      _`writers.display_name` now exists and is set from Settings, but nothing displays it to anyone yet. This is the first surface that could — a share link showing "by <display name>" rather than a Writer ID._
 
 ---
 
@@ -97,7 +103,8 @@ Both are blocked on the same thing: the `service_role` key, which must never be 
       _An iframe cannot work — Google sends `X-Frame-Options`. A bookmarklet is fragile against their CSP._
 
 - [ ] **Mobile optimisation.**
-      Deliberately after the feature reworks so it covers them. New pages built in sessions 2 and 4 should already be responsive, leaving the editor, toolbar and the two resizable sidebars as the real work.
+      Deliberately after the feature reworks so it covers them. Settings, the Manifest and the app header were done in session 2, leaving **the editor, the toolbar and the two resizable sidebars** as the remaining work — the whole workspace view, in other words.
+      _The responsive rules live in one `RESPONSIVE` section at the foot of `lcars.css`, after the skin overrides, deliberately: rules placed earlier are silently outranked by the Delta Prime blocks. Breakpoint in use is 820px._
       _Done when: a sim can be read, written and copied out on a phone without pinch-zooming._
 
 - [ ] **Joint Posts.**
