@@ -171,6 +171,7 @@ const VERSIONS = [
       'Changed: About LCARS now gathers the changelog, the link to the full user guide, the Getting Started tour and the note about how the tool was built. That last one has moved off the Dashboard, which was not really the place for it',
       'Changed: Sim Templates is no longer a button in the header. The saved templates live in Settings \u2192 Your Account & Data, where clicking one opens it for editing \u2014 name, default sim title and the template text itself \u2014 rather than only offering rename and delete. Saving the sim you are writing as a template moved to Sim Details, next to Snapshots',
       'Changed: on a phone the Character Manifest no longer gives the top of the screen to the character list. The list folds away behind a Characters button, with its search intact, so the character you are reading gets the room',
+      'Changed: editing a sim template now opens it in the sim editor itself, with the full toolbar, markers and auto-formatting, rather than a plain text box in Settings. A banner across the top makes it clear you are editing a template rather than a sim, and the title bar holds the template\u2019s name',
     ],
   },
 ];
@@ -1565,6 +1566,7 @@ async function gateSubmit(kind) {
 // DASHBOARD
 // ================================================================
 function showDashboard() {
+  exitTemplateMode();
   document.body.classList.remove('academy');
   document.getElementById('dashboard').classList.remove('hidden');
   document.getElementById('detail-view').classList.add('hidden');
@@ -1577,7 +1579,8 @@ function showDashboard() {
 }
 
 function closeDoc() {
-  if (curId) flushSave();
+  flushSave();
+  exitTemplateMode();
   curId = null; curView = null; curViewId = null;
   showDashboard();
   renderNav();
@@ -2512,7 +2515,8 @@ function showTitleWarnModal() {
 // DOCUMENT OPERATIONS
 // ================================================================
 function openDoc(id) {
-  if (curId) flushSave();
+  flushSave();
+  exitTemplateMode();
   _indentUndo = [];  // clear indent undo when switching docs
   curId = id;
   curView = null; curViewId = null;
@@ -2557,7 +2561,22 @@ function openDoc(id) {
   }
 }
 
+// ── Template editing ──────────────────────────────────────────────────────
+// A template is a sim body, so it is edited in the sim editor rather than in a
+// box of its own — same toolbar, same markers, same auto-formatting.
+//
+// It rides on curId being null: every sim-specific branch in this file is
+// already written as `if (curId)`, so snapshots, character detection, post
+// dates, sync of the doc and the rest switch themselves off. Only the positive
+// additions live here.
+let curTmplId = null;
+
+function curTemplate() {
+  return curTmplId ? (S.templates||[]).find(t => t.id === curTmplId) : null;
+}
+
 function flushSave() {
+  if (curTmplId) return flushTemplateSave();
   if (!curId) return;
   const doc = S.docs[curId]; if (!doc) return;
   const ed = document.getElementById('editor');
@@ -2600,9 +2619,82 @@ function schedSave() {
   saveTimer = setTimeout(flushSave, 1200);
 }
 
+// The template counterpart of flushSave. Deliberately much smaller: a template
+// has no snapshots, status, post date or characters to keep in step.
+function flushTemplateSave() {
+  const t = curTemplate();
+  if (!t) { curTmplId = null; return; }
+  const name = document.getElementById('doc-title').value.trim();
+  t.name = name || t.name;
+  t.content = stripMarkers(document.getElementById('editor').innerHTML);
+  t.updatedAt = Date.now();
+  persist();
+  schedSync();
+  updateSB();
+  refreshTemplatesBlock();          // no-op unless Settings is the open view
+}
+
+function openTemplateInEditor(id) {
+  const t = (S.templates||[]).find(x => x.id === id);
+  if (!t) return;
+  flushSave();                      // whatever was open, sim or template
+  _indentUndo = [];
+  curId = null; curView = null; curViewId = null;
+  curTmplId = id;
+  showView('dash');                 // the editor lives in the workspace view
+
+  document.getElementById('dashboard').classList.add('hidden');
+  document.getElementById('detail-view').classList.add('hidden');
+  ['dh','ec'].forEach(x => document.getElementById(x).classList.remove('hidden'));
+  document.getElementById('tmpl-banner').classList.remove('hidden');
+  // Sim Details is all sim — status, post type, snapshots, post date.
+  document.getElementById('sim-details').classList.add('hidden');
+  document.getElementById('chars-list').innerHTML =
+    '<div style="padding:10px;font-size:0.8rem;color:var(--dim)">A template has no characters of its own. ' +
+    'Characters are detected in a sim once you start one from this template.</div>';
+  document.body.classList.remove('academy');
+
+  const title = document.getElementById('doc-title');
+  title.value = t.name || '';
+  title.placeholder = 'Template name…';
+  document.getElementById('title-warn').classList.add('hidden');
+
+  const ed = document.getElementById('editor');
+  ed.innerHTML = applyMarkers(t.content || '');
+  normalizeEditorContent(ed);
+  applyZoom();
+  updateWC();
+  updateSB();
+  renderNav();
+  ed.focus();
+}
+
+// Leaves template mode, saving first. Every path out of the editor calls this;
+// it is a no-op when a template is not open.
+function exitTemplateMode() {
+  if (!curTmplId) return;
+  flushTemplateSave();
+  curTmplId = null;
+  document.getElementById('tmpl-banner').classList.add('hidden');
+  document.getElementById('doc-title').placeholder = 'Sim Title…';
+}
+
+function closeTemplateEditor() {
+  exitTemplateMode();
+  showDashboard();
+  renderNav();
+  showToast('Template saved');
+}
+
 // Ctrl/Cmd+S — flush the current sim, force a revision snapshot (bypassing the
 // usual ≥100-word threshold), and push to the Gist immediately if sync is set up.
 function manualSaveAndSync() {
+  if (curTmplId) {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    flushTemplateSave();
+    showToast('Template saved');
+    return;
+  }
   if (!curId || !S.docs[curId]) { showToast('No sim open to save'); return; }
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   flushSave(); // persists content + detects chars + schedules a sync
@@ -2745,8 +2837,10 @@ function updateWC() {
   document.getElementById('s-wc').textContent = wc(document.getElementById('editor').innerText||'') + ' words';
 }
 function updateSB() {
+  const t = curTemplate();
   document.getElementById('s-doc').textContent =
-    (curId && S.docs[curId]) ? (S.docs[curId].title||'Untitled') : 'No sim open';
+    t ? 'Template: ' + (t.name||'Untitled')
+      : (curId && S.docs[curId]) ? (S.docs[curId].title||'Untitled') : 'No sim open';
 }
 
 // ================================================================
@@ -3800,7 +3894,7 @@ function renderPartnersSection(partners, showScenes, emptyMsg) {
 // DETAIL VIEWS
 // ================================================================
 function openMission(id) {
-  if (curId) { flushSave(); curId = null; }
+  flushSave(); exitTemplateMode(); curId = null;
   curView = 'mission'; curViewId = id;
   document.body.classList.remove('academy');
   ['dh','ec'].forEach(x=>document.getElementById(x).classList.add('hidden'));
@@ -3812,7 +3906,7 @@ function openMission(id) {
 }
 
 function openScene(id) {
-  if (curId) { flushSave(); curId = null; }
+  flushSave(); exitTemplateMode(); curId = null;
   curView = 'scene'; curViewId = id;
   document.body.classList.remove('academy');
   ['dh','ec'].forEach(x=>document.getElementById(x).classList.add('hidden'));
@@ -5222,10 +5316,9 @@ function showRecoveryEmail() {
 }
 
 // ── Sim templates ─────────────────────────────────────────────────────────
-// A template is a saved sim body you can start a new sim from. The list used
-// to be a modal that only offered rename and delete; here a template opens for
-// editing in place, which is the point of keeping one.
-let _tmplEditing = null;
+// A template is a saved sim body you can start a new sim from. Settings lists
+// them; editing one happens in the sim editor, because a template is sim text
+// and deserves the same toolbar, markers and auto-formatting.
 
 function settingsTemplatesBlock() {
   return `<div class="set-block" id="set-templates">${settingsTemplatesInner()}</div>`;
@@ -5241,76 +5334,43 @@ function settingsTemplatesInner() {
   return `
     <div class="ml">SIM TEMPLATES</div>
     <div class="set-note">Saved sim bodies you can start a new sim from, picked from the template list in
-      the New Sim window. Save the sim you have open as one from Sim Details while you are writing it.</div>
+      the New Sim window. Open one to edit it in the sim editor; save the sim you have open as a new one
+      from Sim Details while you are writing it.</div>
     ${list.length ? `<div class="set-tmpl-list">${list.map(t => settingsTemplateRow(t)).join('')}</div>`
       : `<div class="set-note" style="margin-top:8px">No templates saved yet.</div>`}`;
 }
 
 function settingsTemplateRow(t) {
-  const editing = _tmplEditing === t.id;
   const tmp = document.createElement('div');
   tmp.innerHTML = t.content || '';
   const words = wc(tmp.innerText || '');
-  if (!editing) {
-    return `<div class="set-tmpl-row" onclick="editTemplate('${t.id}')" title="Open this template for editing">
-        <div class="set-tmpl-name">${esc(t.name)}</div>
-        <div class="set-tmpl-meta">${words} word${words===1?'':'s'}${t.title?' · ' + esc(t.title):''}</div>
-        <div class="set-tmpl-edit">${ic('pencil')} Edit</div>
-      </div>`;
-  }
-  return `
-    <div class="set-tmpl-row set-tmpl-open">
-      <div class="mf"><label class="ml">TEMPLATE NAME</label>
-        <input class="mi" id="tm-name" value="${esc(t.name)}"></div>
-      <div class="mf"><label class="ml">DEFAULT SIM TITLE <span style="font-weight:normal;opacity:.6">(optional)</span></label>
-        <input class="mi" id="tm-title" value="${esc(t.title||'')}" placeholder="Used as the title when a sim starts from this template"></div>
-      <label class="ml" for="tm-body">TEMPLATE TEXT</label>
-      <div class="set-tmpl-body" id="tm-body" contenteditable="true" spellcheck="true"></div>
-      <div class="set-note">Markers such as ::Action:: and ((Location)) are kept exactly as typed.</div>
-      <div class="set-actions" style="margin-top:10px">
-        <button class="btn btn-p" onclick="saveTemplateEdit('${t.id}')">Save template</button>
-        <button class="btn btn-s" onclick="cancelTemplateEdit()">Cancel</button>
-        <button class="btn btn-s" style="color:var(--red,#c66)" onclick="deleteTemplateById('${t.id}')">${ic('trash')} Delete</button>
-      </div>
+  return `<div class="set-tmpl-row">
+      <button class="set-tmpl-open-btn" onclick="openTemplateInEditor('${t.id}')"
+              title="Open this template in the sim editor">
+        <span class="set-tmpl-name">${esc(t.name)}</span>
+        <span class="set-tmpl-meta">${words} word${words===1?'':'s'}${t.title?' \u00b7 ' + esc(t.title):''}</span>
+      </button>
+      <span class="set-tmpl-edit">${ic('pencil')} Edit</span>
+      <button class="set-tmpl-del" onclick="deleteTemplateById('${t.id}')"
+              title="Delete this template" aria-label="Delete ${esc(t.name)}">${ic('trash')}</button>
     </div>`;
-}
-
-function editTemplate(id) {
-  _tmplEditing = id;
-  refreshTemplatesBlock();
-  // Set the body as HTML after insertion rather than inlining it in the markup,
-  // where the template's own quotes and tags would fight the surrounding string.
-  const t = (S.templates||[]).find(x => x.id === id);
-  const body = document.getElementById('tm-body');
-  if (t && body) body.innerHTML = t.content || '';
-  const n = document.getElementById('tm-name');
-  if (n) n.focus();
-}
-
-function cancelTemplateEdit() { _tmplEditing = null; refreshTemplatesBlock(); }
-
-function saveTemplateEdit(id) {
-  const t = (S.templates||[]).find(x => x.id === id);
-  if (!t) return;
-  const name = document.getElementById('tm-name').value.trim();
-  if (!name) { alert('Give the template a name.'); return; }
-  t.name = name;
-  t.title = document.getElementById('tm-title').value.trim();
-  t.content = document.getElementById('tm-body').innerHTML;
-  t.updatedAt = Date.now();
-  persist();
-  _tmplEditing = null;
-  refreshTemplatesBlock();
-  showToast('Template saved');
 }
 
 function deleteTemplateById(id) {
   const t = (S.templates||[]).find(x => x.id === id);
   if (!t) return;
   if (!confirm(`Delete the template "${t.name}"? This cannot be undone.`)) return;
+  // If it is the one open in the editor, leave first so the exit save cannot
+  // write it straight back.
+  if (curTmplId === id) {
+    curTmplId = null;
+    document.getElementById('tmpl-banner').classList.add('hidden');
+    document.getElementById('doc-title').placeholder = 'Sim Title…';
+    closeDoc();
+  }
   S.templates = (S.templates||[]).filter(x => x.id !== id);
   persist();
-  _tmplEditing = null;
+  schedSync();
   refreshTemplatesBlock();
   showToast('Template deleted');
 }
@@ -5454,7 +5514,7 @@ document.addEventListener('keydown',e=>{
   }
   // Ctrl/Cmd+S — save a snapshot + sync (works whenever a sim is open, not just editor focus)
   if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&(e.key==='s'||e.key==='S')){
-    if(curId){e.preventDefault();manualSaveAndSync();}
+    if(curId||curTmplId){e.preventDefault();manualSaveAndSync();}
     return;
   }
   if(!inEditor) return;
@@ -5641,7 +5701,7 @@ function getCharInitials(name) {
 // Everything the manifest needs before it is shown. Called by showView, which
 // owns the actual display and the URL.
 function prepManifest() {
-  if (curId) flushSave(); // prune stale myChars before auto-seeding manifest
+  flushSave(); // prune stale myChars before auto-seeding manifest
   if (!S.characters) S.characters = {};
   // Auto-seed from myChars (checks primary name + aliases)
   (S.settings.myChars||[]).forEach(name => {

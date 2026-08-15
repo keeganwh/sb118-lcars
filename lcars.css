@@ -145,6 +145,11 @@ body.light .tag-ac{color:#007777}
 
 /* ── ACADEMY BANNER ── */
 #academy-banner{display:none;background:#8b1a00;color:#ffbbaa;text-align:center;font-size:0.67rem;letter-spacing:3px;padding:4px;font-weight:bold;flex-shrink:0;border-bottom:1px solid #cc3300}
+/* Says what the editor is holding when it is not holding a sim. */
+#tmpl-banner{display:flex;align-items:center;justify-content:center;gap:10px;background:var(--panel);
+  color:var(--amber);text-align:center;font-size:0.67rem;letter-spacing:2px;padding:6px 12px;
+  font-weight:bold;flex-shrink:0;border-bottom:2px solid var(--amber)}
+#tmpl-banner.hidden{display:none!important}
 body.academy #academy-banner{display:block}
 body.academy .dh-r2 .tbb:not(.fmt-on):not(#tbb-cf):not(#tbb-va-btn):not(#tbb-af-btn){opacity:.3;pointer-events:none}
 body.academy #tbb-bn,body.academy #tbb-it,body.academy #tbb-bl,body.academy #tbb-oi{opacity:.3!important;pointer-events:none!important}
@@ -336,16 +341,17 @@ body.hc #cp{border-left:3px solid var(--blue)}
 .set-danger-block .ml{margin-bottom:2px}
 /* Sim templates */
 .set-tmpl-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
-.set-tmpl-row{background:var(--panel2,var(--bg));border:1px solid var(--border);border-radius:8px;padding:10px 13px}
-.set-tmpl-row:not(.set-tmpl-open){display:grid;grid-template-columns:1fr auto;gap:2px 12px;cursor:pointer;align-items:center}
-.set-tmpl-row:not(.set-tmpl-open):hover{border-color:var(--amber)}
+.set-tmpl-row{background:var(--panel2,var(--bg));border:1px solid var(--border);border-radius:8px;
+  display:flex;align-items:center;gap:10px;padding:0 10px 0 0}
+.set-tmpl-row:hover{border-color:var(--amber)}
+.set-tmpl-open-btn{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;align-items:flex-start;
+  background:transparent;border:none;cursor:pointer;font-family:inherit;text-align:left;padding:10px 0 10px 13px}
 .set-tmpl-name{font-size:0.87rem;font-weight:bold;color:var(--text)}
-.set-tmpl-meta{font-size:0.73rem;color:var(--dim);grid-column:1}
-.set-tmpl-edit{grid-column:2;grid-row:1 / span 2;font-size:0.73rem;color:var(--dim);white-space:nowrap}
+.set-tmpl-meta{font-size:0.73rem;color:var(--dim)}
+.set-tmpl-edit{font-size:0.73rem;color:var(--dim);white-space:nowrap;display:flex;align-items:center;gap:4px}
 .set-tmpl-row:hover .set-tmpl-edit{color:var(--amber)}
-.set-tmpl-body{min-height:150px;max-height:340px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);
-  border-radius:4px;padding:9px 11px;font-size:0.87rem;line-height:1.5;outline:none}
-.set-tmpl-body:focus{border-color:var(--amber)}
+.set-tmpl-del{background:transparent;border:none;cursor:pointer;color:var(--dim);padding:6px;line-height:1;border-radius:4px}
+.set-tmpl-del:hover{color:var(--red,#c66);background:var(--hover)}
 /* How this tool was built */
 .set-ai{font-size:0.78rem;color:var(--dim);margin-top:6px}
 .set-ai strong{color:var(--text)}

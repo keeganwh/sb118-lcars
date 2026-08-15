@@ -157,6 +157,14 @@
   <div id="ep">
     <div id="academy-banner"><svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg> ACADEMY MODE — Plain text only. Rich formatting is disabled.</div>
 
+    <!-- Shown while the editor holds a template rather than a sim, so it is
+         never ambiguous what your typing is being saved into. -->
+    <div id="tmpl-banner" class="hidden">
+      <svg class="ic" aria-hidden="true"><use href="#i-hexagon"/></svg>
+      <span>EDITING A TEMPLATE — your changes save to the template, not to a sim.</span>
+      <button class="btn btn-s btn-sm" onclick="closeTemplateEditor()">Done</button>
+    </div>
+
     <!-- DETAIL VIEW -->
     <div id="detail-view" class="hidden"></div>
 
