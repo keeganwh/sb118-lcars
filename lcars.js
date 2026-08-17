@@ -196,6 +196,9 @@ const VERSIONS = [
       'Added: a 48-hour grace period on account deletion. Nothing is destroyed straight away \u2014 sign in again with your Writer ID and PIN within 48 hours and you can cancel, and everything comes back exactly as it was. Settings shows how long is left',
       'Changed: if the server cannot be reached while deleting an account, the deletion is refused outright rather than wiping the device and leaving the account behind',
       'Removed: the recovery email. Nothing was ever sent to it \u2014 your sign-in address is synthetic and cannot receive mail \u2014 so it was held for identification only and implied a recovery route that did not exist. Creating an account no longer asks for it, and Settings no longer offers it. Linking a Google or Discord account replaces it, and is coming next',
+      'Fixed: after confirming an account deletion the reminder about the 48-hour window did not appear if you had deleted from Settings. Opening a view tears down whatever dialog is on screen, and the reminder was raised a moment before that happened \u2014 deleting now returns you to the dashboard, and the reminder is raised after the view has settled',
+      'Fixed: signing back in during the 48-hour window did not offer to keep your account. The prompt only appeared if you went looking for it in Settings, which is the one place you would not think to look \u2014 it now comes up as soon as you sign in',
+      'Fixed: keeping an account after changing your mind left the Settings tile still showing a countdown until the page was navigated away from and back',
     ],
   },
 ];
@@ -1232,6 +1235,9 @@ async function deleteAccount() {
   persist();
   clearAuth();
   setMode('');
+  // Deleting is done from Settings, but there is no account to have settings
+  // for any more — come back on the dashboard.
+  try { syncRoute('dash', true); } catch(e) {}
   location.reload();
 }
 
@@ -1272,6 +1278,7 @@ async function cancelAccountDeletion() {
   try { await patchWriterProfile({ deleted_at: null }); }
   catch(e) { showToast('Could not reach the server — try again.'); return; }
   _writerProfile.deleted_at = null;
+  paintWriterProfile();     // the Settings tile is on screen behind this modal
   closeModal();
   showToast('Deletion cancelled — your account is safe');
 }
@@ -1282,16 +1289,19 @@ function purgeExpiredDeletions() {
   supaFetch('/rest/v1/rpc/purge_expired_deletions', { method: 'POST', body: '{}' }).catch(() => {});
 }
 
+// Returns true when it put a prompt on screen, so callers can hold back
+// anything that would paint over it.
 async function checkDeletionPending() {
   // Never steal a modal that is already up — the reconcile prompt has to be
   // answered or the writer's local work is left in limbo. This will come round
   // again on the next boot.
-  if (!document.getElementById('mo').classList.contains('hidden')) return;
+  if (!document.getElementById('mo').classList.contains('hidden')) return false;
   try {
     const pr = await fetchWriterProfile();
     _writerProfile = pr;
-    if (pr.deleted_at) showDeletionPending(pr.deleted_at);
-  } catch(e) { /* offline — the banner can wait */ }
+    if (pr.deleted_at) { showDeletionPending(pr.deleted_at); return true; }
+  } catch(e) { /* offline — the prompt can wait */ }
+  return false;
 }
 
 // ================================================================
@@ -1667,6 +1677,9 @@ async function gateSubmit(kind) {
     // Signing in from the old address is a migration, not a destination — the
     // sims are on the account now, so send them where they should be writing.
     if (movedBannerApplies()) { showTransferDone(); return; }
+    // Someone signing in mid-grace-period needs telling here, not only on a
+    // later cold boot — this is the moment they came back to change their mind.
+    if (await checkDeletionPending()) return;
     maybeShowWizard();
   } catch(e) {
     msg.style.color = 'var(--red,#c66)';
@@ -7203,6 +7216,13 @@ document.addEventListener('DOMContentLoaded',()=>{
   const icon = document.querySelector('link[rel=icon]');
   if (mark && icon) mark.src = icon.href;
   showMovedBanner();                  // only appears on the old GitHub Pages address
+
+  // Routing is settled BEFORE anything raises a modal. applyRoute() begins with
+  // closeModal(), so a gate or notice opened first was torn down again the
+  // moment the route resolved — which only showed up when the reload landed on
+  // /settings or /manifest rather than the dashboard.
+  bootRoute();
+
   if (isFileCopy() && !getMode()) {
     setMode('local');                   // the offline copy has only one mode
     maybeShowStyleIntro();
@@ -7218,6 +7238,4 @@ document.addEventListener('DOMContentLoaded',()=>{
     maybeShowStyleIntro();              // held back behind the gate on a first visit
     maybeShowWizard();
   }
-
-  bootRoute();
 });
