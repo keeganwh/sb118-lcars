@@ -87,6 +87,16 @@ True deletion is the simpler half and is blocked only on the `service_role`
 key, which must never be in a page served to writers. Whether it still shares
 an Edge Function with recovery depends on what recovery turns out to need.
 
+> **Deferred edge cases — check before merging to main.**
+> Both are real paths that were skipped during preview testing as low-frequency,
+> and neither is covered end-to-end against the live project yet:
+> 1. *Linking a provider account that is already linked to a different Writer ID.*
+>    Should refuse with "That account is already linked". The translation exists
+>    in `prettyOAuthError`; the live refusal text has never been seen, so the
+>    match may not fire.
+> 2. *Deleting an account while the server is unreachable.* Covered by the
+>    harness (`account-check.js offline`) but never exercised by hand.
+
 - [ ] **Self-serve PIN reset.** _Method to be agreed first — see the note above._
       `writers.recovery_email` is collected today but nothing has ever sent to it; it exists for identification only.
       _Done when: a writer who has lost their PIN can get back into their account without the maintainer._

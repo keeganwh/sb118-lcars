@@ -201,6 +201,7 @@ const VERSIONS = [
       'Fixed: keeping an account after changing your mind left the Settings tile still showing a countdown until the page was navigated away from and back',
       'Added: Linked accounts, in Settings \u2192 Your Account & Data. You can now link a Google or Discord account to your Writer ID. It is optional, and your Writer ID and PIN keep working exactly as before \u2014 a linked account is a second way in, and the way back in if you forget your PIN',
       'Added: linked accounts can be unlinked again from the same place, with a confirmation first. Your Writer ID login is never listed there, because it is not something you linked and must never look removable',
+      'Fixed: unlinking a Google or Discord account failed with \u201cidentity_id must be an UUID\u201d. A linked account carries two different identifiers \u2014 one of its own and one belonging to the provider \u2014 and LCARS was sending the provider\u2019s',
     ],
   },
 ];
@@ -1010,6 +1011,12 @@ async function linkProvider(provider) {
   location.href = j.url;
 }
 
+// A trap worth naming: an identity carries TWO ids. 'identity_id' is the uuid
+// GoTrue's own records use, and the only thing the unlink endpoint accepts;
+// 'id' is the provider's user id -- a Discord snowflake or a Google subject.
+// Passing the wrong one fails with "identity_id must be an UUID".
+function identityKey(i) { return (i && (i.identity_id || i.id)) || ''; }
+
 async function fetchIdentities() {
   const r = await supaFetch('/auth/v1/user');
   if (!r.ok) throw new Error('Could not read your linked accounts.');
@@ -1034,7 +1041,7 @@ function confirmUnlinkProvider(identityId, provider) {
     </div>`, () => {
       unlinkProvider(identityId)
         .then(() => { showToast(label + ' unlinked'); loadIdentities(); closeModal(); })
-        .catch(e => showToast(e.message));
+        .catch(e => showToast(prettyOAuthError(e.message), 5200));
       return false;
     }, { ok: 'Unlink' });
 }
@@ -1110,7 +1117,7 @@ function paintIdentities(list) {
     }
     const d = found.identity_data || {};
     const who = d.email || d.name || d.full_name || d.preferred_username || '';
-    return setBtn(`confirmUnlinkProvider('${found.id}','${p.id}')`, 'link', p.label + ' — linked',
+    return setBtn(`confirmUnlinkProvider('${identityKey(found)}','${p.id}')`, 'link', p.label + ' — linked',
       (who ? esc(who) + '. ' : '') + 'Click to unlink.');
   }).join('');
 }
