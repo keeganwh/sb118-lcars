@@ -199,6 +199,8 @@ const VERSIONS = [
       'Fixed: after confirming an account deletion the reminder about the 48-hour window did not appear if you had deleted from Settings. Opening a view tears down whatever dialog is on screen, and the reminder was raised a moment before that happened \u2014 deleting now returns you to the dashboard, and the reminder is raised after the view has settled',
       'Fixed: signing back in during the 48-hour window did not offer to keep your account. The prompt only appeared if you went looking for it in Settings, which is the one place you would not think to look \u2014 it now comes up as soon as you sign in',
       'Fixed: keeping an account after changing your mind left the Settings tile still showing a countdown until the page was navigated away from and back',
+      'Added: Linked accounts, in Settings \u2192 Your Account & Data. You can now link a Google or Discord account to your Writer ID. It is optional, and your Writer ID and PIN keep working exactly as before \u2014 a linked account is a second way in, and the way back in if you forget your PIN',
+      'Added: linked accounts can be unlinked again from the same place, with a confirmation first. Your Writer ID login is never listed there, because it is not something you linked and must never look removable',
     ],
   },
 ];
@@ -960,6 +962,157 @@ async function changePin(currentPin, newPin) {
   const r = await supaFetch('/auth/v1/user', { method: 'PUT', body: JSON.stringify({ password: newPin }) });
   const j = await r.json().catch(() => null);
   if (!r.ok) throw new Error(supaErr(j, 'Could not change your PIN.'));
+}
+
+// ── Linked accounts (Google / Discord) ────────────────────────────────────
+// Optional, and deliberately additive: the Writer ID and PIN remain the primary
+// sign-in, so deriving the auth address from the Writer ID still needs no server
+// lookup. A linked provider is a second identity on the same auth user — a
+// faster way in, and the way back in when the PIN is forgotten.
+const PROVIDERS = [
+  { id: 'discord', label: 'Discord' },
+  { id: 'google',  label: 'Google'  },
+];
+
+function providerLabel(id) {
+  const p = PROVIDERS.find(x => x.id === id);
+  return p ? p.label : id;
+}
+
+// Must be on the project's allowed redirect list in Supabase, or the provider
+// bounces back with a redirect error rather than returning here.
+function oauthRedirectTo() {
+  return location.origin + (routeUrl('settings') || '/');
+}
+
+// The JWT cannot ride on a top-level navigation, which is the whole difficulty
+// with linking. skip_http_redirect=true makes the endpoint hand back the
+// provider URL as JSON instead of a 302, so the authenticated part happens over
+// fetch and only the harmless navigation that follows is a plain one.
+async function linkProvider(provider) {
+  const a = getAuth();
+  if (!a.access_token) { showToast('You are not signed in.'); return; }
+  const q = '?provider=' + encodeURIComponent(provider) +
+            '&skip_http_redirect=true' +
+            '&redirect_to=' + encodeURIComponent(oauthRedirectTo());
+  let r, j;
+  try {
+    r = await supaFetch('/auth/v1/user/identities/authorize' + q);
+    j = await r.json().catch(() => null);
+  } catch(e) {
+    showToast('Could not reach the server — try again.');
+    return;
+  }
+  if (!r.ok || !j || !j.url) {
+    showToast(supaErr(j, 'Could not start linking. Manual linking may be turned off for this project.'));
+    return;
+  }
+  location.href = j.url;
+}
+
+async function fetchIdentities() {
+  const r = await supaFetch('/auth/v1/user');
+  if (!r.ok) throw new Error('Could not read your linked accounts.');
+  const u = await r.json();
+  // The email identity is the Writer ID login itself — it is not something a
+  // writer linked, and it must never look unlinkable.
+  return (u.identities || []).filter(i => i.provider !== 'email');
+}
+
+async function unlinkProvider(identityId) {
+  const r = await supaFetch('/auth/v1/user/identities/' + encodeURIComponent(identityId), { method: 'DELETE' });
+  if (!r.ok) throw new Error(supaErr(await r.json().catch(() => null), 'Could not unlink that account.'));
+}
+
+function confirmUnlinkProvider(identityId, provider) {
+  const label = providerLabel(provider);
+  openModal('Unlink ' + label, `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 8px">You will no longer be able to sign in with ${esc(label)}, or use it to get
+        back in if you forget your PIN.</p>
+      <p style="margin:0">Your Writer ID and PIN are unaffected, and nothing is deleted.</p>
+    </div>`, () => {
+      unlinkProvider(identityId)
+        .then(() => { showToast(label + ' unlinked'); loadIdentities(); closeModal(); })
+        .catch(e => showToast(e.message));
+      return false;
+    }, { ok: 'Unlink' });
+}
+
+// The return leg. Supabase sends the browser back to redirect_to with the
+// outcome in the URL fragment — tokens on success, an error description on
+// failure. The fragment is cleared either way so a reload cannot replay it.
+function readOAuthFragment() {
+  const h = (location.hash || '').replace(/^#/, '');
+  if (!h || h.indexOf('=') === -1) return null;
+  const p = new URLSearchParams(h);
+  if (!p.get('access_token') && !p.get('error') && !p.get('error_description')) return null;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch(e) {}
+  return {
+    access_token: p.get('access_token'),
+    refresh_token: p.get('refresh_token'),
+    expires_in: Number(p.get('expires_in') || 3600),
+    error: p.get('error_description') || p.get('error'),
+  };
+}
+
+// Provider errors arrive as machine text; these are the ones a writer can
+// actually meet, so they get said in words that suggest what to do.
+function prettyOAuthError(msg) {
+  const m = String(msg || '');
+  if (/already.*linked|identity.*already/i.test(m))
+    return 'That account is already linked — to this Writer ID or to another one.';
+  if (/manual linking.*disabled|not enabled/i.test(m))
+    return 'Account linking is turned off for LCARS right now. Tell the maintainer.';
+  if (/redirect/i.test(m))
+    return 'That sign-in came back to an address LCARS does not recognise. Tell the maintainer.';
+  return m.replace(/\+/g, ' ') || 'That did not work. Please try again.';
+}
+
+function handleOAuthReturn() {
+  const f = readOAuthFragment();
+  if (!f) return false;
+  if (f.error) {
+    setTimeout(() => showToast(prettyOAuthError(f.error), 5200), 500);
+    return true;
+  }
+  // Same auth user either way — keep the Writer ID and uid already on file and
+  // take only the freshened session.
+  if (f.access_token) {
+    const a = getAuth();
+    saveAuth({ ...a, access_token: f.access_token, refresh_token: f.refresh_token || a.refresh_token,
+               expires_at: Date.now() + f.expires_in * 1000 });
+    setMode('cloud');
+  }
+  setTimeout(() => showToast('Account linked'), 500);
+  return true;
+}
+
+function loadIdentities() {
+  const el = document.getElementById('acct-links');
+  if (!el || !isCloud()) return;
+  fetchIdentities()
+    .then(paintIdentities)
+    .catch(() => {
+      el.innerHTML = '<span class="set-note" style="margin:0;color:var(--red,#c66)">' +
+                     'Linked accounts could not be read — check your connection.</span>';
+    });
+}
+
+function paintIdentities(list) {
+  const el = document.getElementById('acct-links');
+  if (!el) return;
+  el.innerHTML = PROVIDERS.map(p => {
+    const found = (list || []).find(i => i.provider === p.id);
+    if (!found) {
+      return setBtn(`linkProvider('${p.id}')`, 'link', 'Link ' + p.label,
+        'Sign in with ' + p.label + ', and use it if you forget your PIN.');
+    }
+    const d = found.identity_data || {};
+    const who = d.email || d.name || d.full_name || d.preferred_username || '';
+    return setBtn(`confirmUnlinkProvider('${found.id}','${p.id}')`, 'link', p.label + ' — linked',
+      (who ? esc(who) + '. ' : '') + 'Click to unlink.');
+  }).join('');
 }
 
 // Snapshots are ten full copies of a sim's HTML apiece. Kept in the main payload
@@ -5208,6 +5361,15 @@ function settingsAccountCard() {
           ${setBtn('cloudSignOut()', 'move-right', 'Sign out', 'Signs out in this browser. Nothing is deleted.')}
         </div>
       </div>
+
+      <div class="set-block">
+        <div class="ml">LINKED ACCOUNTS</div>
+        <div class="set-note">Optional. Link Google or Discord to sign in with one click &mdash; and to get
+          back into your account if you ever forget your PIN. Your Writer ID and PIN keep working either way.</div>
+        <div class="set-tiles" style="margin-top:6px" id="acct-links">
+          <span class="set-note" style="margin:0">Loading&hellip;</span>
+        </div>
+      </div>
       ` : isFileCopy() ? `
       <div class="set-block">
         <div style="font-size:0.85rem;line-height:1.7">
@@ -5487,6 +5649,7 @@ function loadWriterProfile() {
   // would have silently taken the display name and the deletion countdown with
   // it -- exactly the kind of quiet breakage this codebase specialises in.
   if (!document.getElementById('acct-who')) return;
+  loadIdentities();
   fetchWriterProfile().then(pr => {
     _writerProfile = pr;
     paintWriterProfile();
@@ -7216,6 +7379,14 @@ document.addEventListener('DOMContentLoaded',()=>{
   const icon = document.querySelector('link[rel=icon]');
   if (mark && icon) mark.src = icon.href;
   showMovedBanner();                  // only appears on the old GitHub Pages address
+
+  // Coming back from Google or Discord. Runs before the mode checks below,
+  // because a successful return may be what puts this browser into cloud mode.
+  handleOAuthReturn();
+  // A return from a real provider is a cross-origin navigation, so the line
+  // above catches it on load. This is insurance for the case where the browser
+  // treats the return as a same-document fragment change and never reloads.
+  window.addEventListener('hashchange', handleOAuthReturn);
 
   // Routing is settled BEFORE anything raises a modal. applyRoute() begins with
   // closeModal(), so a gate or notice opened first was torn down again the
