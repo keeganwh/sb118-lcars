@@ -206,6 +206,8 @@ const VERSIONS = [
       'Added: Forgotten your PIN? on the sign-in screen. Sign in with your linked Google or Discord account and you can set a new PIN there and then, without anyone else being involved. If you never linked an account it says so plainly rather than sending you round in circles \u2014 that case still needs the maintainer',
       'Added: a one-time nudge to link an account, for writers who have not. It explains that a Writer ID and PIN alone leave no way back in if the PIN is forgotten. Declining it is remembered and it does not ask again',
       'Changed: signing in with a Google or Discord account that has not been linked to any Writer ID now says so and offers the Writer ID sign-in, rather than opening an empty LCARS',
+      'Fixed: creating an account from Settings appeared to do nothing. The account was made and you were signed in, but the Settings page was still the one drawn for a signed-out writer, so it went on offering to set up an account \u2014 and clicking that reopened the sign-in screen, with no way out of the loop',
+      'Fixed: the prompt to link a Google or Discord account never appeared after creating an account. It was opening underneath the Getting Started wizard, which covers the whole screen, so it could be neither seen nor dismissed. It now waits and appears once you have finished with the wizard',
     ],
   },
 ];
@@ -1073,6 +1075,7 @@ async function completeProviderSignIn(f, why) {
 
   saveAuth({ ...getAuth(), writerId });
   await cloudBoot();
+  refreshAuthDependentViews();
   showToast('Signed in as ' + writerId);
   if (await checkDeletionPending()) return;
   if (why === 'recover') { showSetNewPin(true); return; }
@@ -1150,7 +1153,12 @@ function markLinkPromptSeen() { try { localStorage.setItem(LINK_PROMPT_KEY, '1')
 async function maybeSuggestLinking() {
   if (!isCloud()) return;
   try { if (localStorage.getItem(LINK_PROMPT_KEY)) return; } catch(e) { return; }
+  // Nothing else may be on screen. The wizard is its own overlay at a far
+  // higher z-index than the modal, so opening underneath it does not merely
+  // look wrong -- the prompt is invisible, and dismissing something you cannot
+  // see is not a thing anyone can do. wizFinish() calls back here afterwards.
   if (!document.getElementById('mo').classList.contains('hidden')) return;
+  if (document.getElementById('wiz')) return;
   let list;
   try { list = await fetchIdentities(); } catch(e) { return; }   // offline: ask another day
   if (list.length) { markLinkPromptSeen(); return; }             // already sorted
@@ -1674,6 +1682,10 @@ function closeWizard() {
 function wizFinish(remember) {
   if (remember) markWizardSeen();
   closeWizard();
+  // A new writer meets the wizard immediately after creating an account, which
+  // is exactly when the suggestion to link one is due. It stands down while the
+  // wizard is up, so this is where it gets its turn.
+  maybeSuggestLinking();
 }
 
 function wizFoot(backStep) {
@@ -1868,6 +1880,16 @@ function ackMoved() {
 // "Use offline" sets mode to 'local' and the app never touches the network.
 let _gateEl = null;
 
+// A view drawn while signed out is wrong the moment that changes: Settings
+// shows an entirely different card offline, so a writer who has just created
+// an account is left looking at an invitation to create one, and clicking it
+// reopens the gate forever. Rebuilding the view is the whole fix --
+// renderSettingsView() reloads the profile and linked accounts on its own.
+function refreshAuthDependentViews() {
+  if (_routeView === 'settings') renderSettingsView();
+  updateViewButtons();
+}
+
 function gateClose() {
   if (_gateEl) { _gateEl.remove(); _gateEl = null; }
 }
@@ -2005,6 +2027,7 @@ async function gateSubmit(kind) {
     else await cloudSignIn(wid, pin);
     gateClose();
     await cloudBoot();
+    refreshAuthDependentViews();
     showToast('Signed in as ' + normalizeWriterId(wid));
     // Signing in from the old address is a migration, not a destination — the
     // sims are on the account now, so send them where they should be writing.
