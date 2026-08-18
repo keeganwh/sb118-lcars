@@ -202,6 +202,10 @@ const VERSIONS = [
       'Added: Linked accounts, in Settings \u2192 Your Account & Data. You can now link a Google or Discord account to your Writer ID. It is optional, and your Writer ID and PIN keep working exactly as before \u2014 a linked account is a second way in, and the way back in if you forget your PIN',
       'Added: linked accounts can be unlinked again from the same place, with a confirmation first. Your Writer ID login is never listed there, because it is not something you linked and must never look removable',
       'Fixed: unlinking a Google or Discord account failed with \u201cidentity_id must be an UUID\u201d. A linked account carries two different identifiers \u2014 one of its own and one belonging to the provider \u2014 and LCARS was sending the provider\u2019s',
+      'Added: sign in with Google or Discord. Once you have linked an account, Continue with Discord or Continue with Google on the sign-in screen takes you straight in \u2014 LCARS works out which Writer ID is yours from the account itself',
+      'Added: Forgotten your PIN? on the sign-in screen. Sign in with your linked Google or Discord account and you can set a new PIN there and then, without anyone else being involved. If you never linked an account it says so plainly rather than sending you round in circles \u2014 that case still needs the maintainer',
+      'Added: a one-time nudge to link an account, for writers who have not. It explains that a Writer ID and PIN alone leave no way back in if the PIN is forgotten. Declining it is remembered and it does not ask again',
+      'Changed: signing in with a Google or Discord account that has not been linked to any Writer ID now says so and offers the Writer ID sign-in, rather than opening an empty LCARS',
     ],
   },
 ];
@@ -980,6 +984,18 @@ function providerLabel(id) {
   return p ? p.label : id;
 }
 
+// Why we sent the browser to a provider. The return leg has no other way of
+// telling a link apart from a sign-in, and they end very differently.
+// sessionStorage rather than localStorage: it survives the redirect round trip
+// in this tab and cannot leak into another one.
+const OAUTH_INTENT_KEY = 'lcars_oauth_intent_v1';
+function setOAuthIntent(v) { try { sessionStorage.setItem(OAUTH_INTENT_KEY, v); } catch(e) {} }
+function takeOAuthIntent() {
+  let v = '';
+  try { v = sessionStorage.getItem(OAUTH_INTENT_KEY) || ''; sessionStorage.removeItem(OAUTH_INTENT_KEY); } catch(e) {}
+  return v || 'link';
+}
+
 // Must be on the project's allowed redirect list in Supabase, or the provider
 // bounces back with a redirect error rather than returning here.
 function oauthRedirectTo() {
@@ -1016,6 +1032,139 @@ async function linkProvider(provider) {
 // 'id' is the provider's user id -- a Discord snowflake or a Google subject.
 // Passing the wrong one fails with "identity_id must be an UUID".
 function identityKey(i) { return (i && (i.identity_id || i.id)) || ''; }
+
+// Signing in with a provider, as opposed to linking one. No JWT exists yet, so
+// this is a plain top-level navigation and needs no apikey -- /authorize is a
+// browser endpoint.
+function signInWithProvider(provider, intent) {
+  setOAuthIntent(intent || 'signin');
+  location.href = SUPA_URL + '/auth/v1/authorize?provider=' + encodeURIComponent(provider) +
+                  '&redirect_to=' + encodeURIComponent(location.origin + '/');
+}
+
+// Coming back from a provider sign-in. The fragment proves who the auth user
+// is but says nothing about which Writer ID that is, so it is looked up from
+// the writers row -- readable under RLS precisely because it is our own.
+async function completeProviderSignIn(f, why) {
+  saveAuth({ access_token: f.access_token, refresh_token: f.refresh_token,
+             expires_at: Date.now() + f.expires_in * 1000 });
+  setMode('cloud');
+
+  let uid = '', writerId = '';
+  try {
+    const ur = await supaFetch('/auth/v1/user');
+    if (!ur.ok) throw new Error('user');
+    uid = (await ur.json()).id || '';
+    saveAuth({ ...getAuth(), uid });
+    const wr = await supaFetch('/rest/v1/writers?select=writer_id&id=eq.' + encodeURIComponent(uid));
+    if (!wr.ok) throw new Error('writers');
+    const row = (await wr.json())[0];
+    writerId = (row && row.writer_id) || '';
+  } catch(e) {
+    clearAuth(); setMode('');
+    showAuthGate(false);
+    showToast('Could not reach the server \u2014 sign in with your Writer ID and PIN.', 5200);
+    return;
+  }
+
+  // A provider account nobody has attached to a Writer ID. Signing them into
+  // a blank account would be worse than saying so.
+  if (!writerId) { clearAuth(); setMode(''); showProviderNotLinked(); return; }
+
+  saveAuth({ ...getAuth(), writerId });
+  await cloudBoot();
+  showToast('Signed in as ' + writerId);
+  if (await checkDeletionPending()) return;
+  if (why === 'recover') { showSetNewPin(true); return; }
+  maybeSuggestLinking();
+}
+
+function showProviderNotLinked() {
+  openModal('That account is not linked yet', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 8px">You signed in successfully, but that Google or Discord account has not been
+        linked to a Writer ID, so there is nothing for LCARS to open.</p>
+      <p style="margin:0">Sign in with your Writer ID and PIN, then link it under
+        <strong>Settings \u2192 Your Account &amp; Data \u2192 Linked accounts</strong>. After that you can use it
+        to sign in, and to get back in if you forget your PIN.</p>
+    </div>`, null, { noCancel: true, extra: [
+      { label: 'Sign in with a Writer ID', cls: 'btn-p', fn: 'closeModal();showAuthGate(false)' }] });
+}
+
+// Recovery: a session obtained from a linked provider is enough to set a new
+// PIN, because the current PIN is exactly what has been lost. changePin() is
+// the other path and still demands the old one.
+async function setNewPin(newPin) {
+  if ((newPin || '').length < 6) throw new Error('Your new PIN must be at least 6 characters.');
+  const r = await supaFetch('/auth/v1/user', { method: 'PUT', body: JSON.stringify({ password: newPin }) });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(supaErr(j, 'Could not set your new PIN.'));
+}
+
+function showSetNewPin(afterRecovery) {
+  openModal(afterRecovery ? 'Set a new PIN' : 'Set a new PIN', `
+    <div style="font-size:0.85rem;line-height:1.6;margin-bottom:12px">
+      ${afterRecovery
+        ? 'You are back in. Choose a new PIN now \u2014 you will need it next time you sign in with your Writer ID.'
+        : 'Choose a new PIN.'}
+    </div>
+    <div class="mf"><label class="ml">NEW PIN <span style="font-weight:normal;opacity:0.6">(at least 6 characters)</span></label>
+      <input class="mi" id="newpin-a" type="password" autocomplete="new-password"></div>
+    <div class="mf"><label class="ml">NEW PIN AGAIN</label>
+      <input class="mi" id="newpin-b" type="password" autocomplete="new-password"></div>
+    <div id="newpin-msg" style="font-size:0.76rem;line-height:1.5;min-height:1.1em;color:var(--red,#c66)"></div>
+  `, () => {
+    const msg = document.getElementById('newpin-msg');
+    const a = document.getElementById('newpin-a').value;
+    const b = document.getElementById('newpin-b').value;
+    if (a !== b) { msg.textContent = 'The two PINs do not match.'; return false; }
+    msg.style.color = 'var(--dim)'; msg.textContent = 'Saving\u2026';
+    setNewPin(a)
+      .then(() => { closeModal(); showToast('PIN set \u2014 use it next time you sign in'); })
+      .catch(e => { msg.style.color = 'var(--red,#c66)'; msg.textContent = e.message; });
+    return false;
+  }, { ok: 'Set my PIN', noCancel: !!afterRecovery });
+}
+
+// Offered from the sign-in form. Only ever a route back in for someone who
+// linked an account beforehand -- everyone else needs the maintainer, and the
+// copy says so rather than leaving them clicking hopefully.
+function showForgotPin() {
+  gateClose();
+  setTimeout(() => openModal('Forgotten your PIN?', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 10px">If you linked a Google or Discord account, sign in with it and you can set a
+        new PIN straight away.</p>
+      <p style="margin:0 0 4px;color:var(--dim);font-size:0.8rem">If you did not link one, ask the tool's
+        maintainer to reset it for you \u2014 there is no automatic way back in without it.</p>
+    </div>`, null, { extra: [
+      { label: 'Continue with Discord', cls: 'btn-p', fn: "signInWithProvider('discord','recover')" },
+      { label: 'Continue with Google', cls: 'btn-p', fn: "signInWithProvider('google','recover')" }] }), 60);
+}
+
+// Suggested once to writers with no linked account. Not nagging: dismissing it
+// is remembered, and it never appears over another dialog.
+const LINK_PROMPT_KEY = 'lcars_link_prompt_v1';
+function markLinkPromptSeen() { try { localStorage.setItem(LINK_PROMPT_KEY, '1'); } catch(e) {} }
+
+async function maybeSuggestLinking() {
+  if (!isCloud()) return;
+  try { if (localStorage.getItem(LINK_PROMPT_KEY)) return; } catch(e) { return; }
+  if (!document.getElementById('mo').classList.contains('hidden')) return;
+  let list;
+  try { list = await fetchIdentities(); } catch(e) { return; }   // offline: ask another day
+  if (list.length) { markLinkPromptSeen(); return; }             // already sorted
+  openModal('Add a way back in', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 8px">Right now your Writer ID and PIN are the only way into your account. If you
+        forget the PIN, nobody can reset it for you automatically.</p>
+      <p style="margin:0">Linking a Google or Discord account fixes that, and makes signing in one click.
+        It is optional, and your Writer ID and PIN keep working exactly as they do now.</p>
+    </div>`, null, { noCancel: true, extra: [
+      { label: 'Link Discord', cls: 'btn-p', fn: "markLinkPromptSeen();closeModal();linkProvider('discord')" },
+      { label: 'Link Google', cls: 'btn-p', fn: "markLinkPromptSeen();closeModal();linkProvider('google')" },
+      { label: 'Not now', fn: 'markLinkPromptSeen();closeModal()' }] });
+}
 
 async function fetchIdentities() {
   const r = await supaFetch('/auth/v1/user');
@@ -1076,23 +1225,36 @@ function prettyOAuthError(msg) {
   return m.replace(/\+/g, ' ') || 'That did not work. Please try again.';
 }
 
+// Returns 'signin' when a provider sign-in has taken over the rest of boot,
+// so the caller knows not to raise the gate or start its own load. 'link' and
+// null both leave boot to carry on as normal.
 function handleOAuthReturn() {
   const f = readOAuthFragment();
-  if (!f) return false;
+  if (!f) return null;
+  const why = takeOAuthIntent();
+
   if (f.error) {
     setTimeout(() => showToast(prettyOAuthError(f.error), 5200), 500);
-    return true;
+    // A failed sign-in must not leave a half-made session behind; a failed
+    // link changes nothing, so the existing session stands.
+    if (why !== 'link') { clearAuth(); setMode(''); }
+    return null;
   }
-  // Same auth user either way — keep the Writer ID and uid already on file and
-  // take only the freshened session.
-  if (f.access_token) {
+  if (!f.access_token) return null;
+
+  if (why === 'link') {
+    // Same auth user — keep the Writer ID and uid already on file and take
+    // only the freshened session.
     const a = getAuth();
     saveAuth({ ...a, access_token: f.access_token, refresh_token: f.refresh_token || a.refresh_token,
                expires_at: Date.now() + f.expires_in * 1000 });
     setMode('cloud');
+    setTimeout(() => showToast('Account linked'), 500);
+    return 'link';
   }
-  setTimeout(() => showToast('Account linked'), 500);
-  return true;
+
+  completeProviderSignIn(f, why);
+  return 'signin';
 }
 
 function loadIdentities() {
@@ -1736,6 +1898,13 @@ function gateChoice(fromSettings) {
     <div style="display:flex;flex-direction:column;gap:8px">
       <button class="btn btn-p" style="width:100%;justify-content:center" onclick="gateForm('in')">Sign in with your Writer ID</button>
       <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateForm('up')">Create an account</button>
+      <div style="display:flex;align-items:center;gap:8px;margin:2px 0">
+        <span style="flex:1;height:1px;background:var(--dim);opacity:0.3"></span>
+        <span style="font-size:0.68rem;color:var(--dim);letter-spacing:0.08em">OR</span>
+        <span style="flex:1;height:1px;background:var(--dim);opacity:0.3"></span>
+      </div>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="signInWithProvider('discord')">Continue with Discord</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="signInWithProvider('google')">Continue with Google</button>
       ${fromSettings
         ? `<button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateClose()">Not now</button>`
         : `<button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateUseOffline()">Use offline on this device only</button>`}
@@ -1771,8 +1940,11 @@ function gateForm(kind) {
       <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateChoice(${!!getMode()})">Back</button>
     </div>
     ${up ? `<div style="font-size:0.71rem;color:var(--dim);line-height:1.55;margin-top:14px">
-      A forgotten PIN cannot be reset automatically yet &mdash; ask the tool's maintainer to reset it for you. Keep a backup either way.
-    </div>` : ''}`;
+      Once you are in, link a Google or Discord account from Settings. It is the only way to reset a
+      forgotten PIN yourself &mdash; without one you would have to ask the tool's maintainer.
+    </div>` : `<div style="text-align:center;margin-top:14px">
+      <button class="btn btn-s" style="font-size:0.74rem;padding:4px 10px" onclick="showForgotPin()">Forgotten your PIN?</button>
+    </div>`}`;
   const wid = document.getElementById('gate-wid');
   wid.focus();
   ['gate-wid','gate-pin'].forEach(id => {
@@ -1841,6 +2013,7 @@ async function gateSubmit(kind) {
     // later cold boot — this is the moment they came back to change their mind.
     if (await checkDeletionPending()) return;
     maybeShowWizard();
+    maybeSuggestLinking();
   } catch(e) {
     msg.style.color = 'var(--red,#c66)';
     msg.textContent = e.message || 'Something went wrong. Please try again.';
@@ -7389,7 +7562,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   // Coming back from Google or Discord. Runs before the mode checks below,
   // because a successful return may be what puts this browser into cloud mode.
-  handleOAuthReturn();
+  const oauthOutcome = handleOAuthReturn();
   // A return from a real provider is a cross-origin navigation, so the line
   // above catches it on load. This is insurance for the case where the browser
   // treats the return as a same-document fragment change and never reloads.
@@ -7401,7 +7574,10 @@ document.addEventListener('DOMContentLoaded',()=>{
   // /settings or /manifest rather than the dashboard.
   bootRoute();
 
-  if (isFileCopy() && !getMode()) {
+  if (oauthOutcome === 'signin') {
+    // completeProviderSignIn() owns the rest of boot: it resolves the Writer
+    // ID, pulls the account and decides what to show.
+  } else if (isFileCopy() && !getMode()) {
     setMode('local');                   // the offline copy has only one mode
     maybeShowStyleIntro();
     maybeShowWizard();
@@ -7412,7 +7588,9 @@ document.addEventListener('DOMContentLoaded',()=>{
   } else {
     // The deletion check runs after the boot pull so it never races the
     // reconcile prompt for the one modal slot.
-    if (isCloud()) cloudBoot().then(checkDeletionPending);  // signed in — pull the server copy
+    // signed in — pull the server copy, then at most one prompt, in priority
+    // order: a pending deletion always outranks a suggestion to link.
+    if (isCloud()) cloudBoot().then(checkDeletionPending).then(p => { if (!p) maybeSuggestLinking(); });
     maybeShowStyleIntro();              // held back behind the gate on a first visit
     maybeShowWizard();
   }
