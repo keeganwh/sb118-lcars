@@ -209,6 +209,7 @@ const VERSIONS = [
       'Fixed: creating an account from Settings appeared to do nothing. The account was made and you were signed in, but the Settings page was still the one drawn for a signed-out writer, so it went on offering to set up an account \u2014 and clicking that reopened the sign-in screen, with no way out of the loop',
       'Fixed: the prompt to link a Google or Discord account never appeared after creating an account. It was opening underneath the Getting Started wizard, which covers the whole screen, so it could be neither seen nor dismissed. It now waits and appears once you have finished with the wizard',
       'Fixed: signing out from Settings left you on the Settings address, so the page you came back to was built around an account you no longer had. Signing out now returns you to the dashboard',
+      'Changed: linking a Google or Discord account is now a step of the Getting Started wizard, right after your account is created, rather than a message that appeared afterwards. It explains what it is for, offers both providers and can be declined \u2014 and if you already have one linked it says so instead of asking again',
     ],
   },
 ];
@@ -1708,6 +1709,7 @@ function wizGo(step) {
   if (!b) return;
   b.innerHTML = WIZ[step] ? WIZ[step]() : WIZ.welcome();
   b.parentElement.scrollTop = 0;
+  if (step === 'link') refreshWizLinkStep();
 }
 
 const WIZ = {
@@ -1789,7 +1791,7 @@ const WIZ = {
       <p style="margin:0 0 10px">You're signed in as <strong style="color:var(--text)">${(getAuth().writerId)||''}</strong>. Your work saves to your account a few seconds after each change, and will be there on any device you sign in on.</p>
       <p style="margin:0">A backup is still worth taking now and then — Settings → Backup Data.</p>
     </div>
-    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true)">Start writing</button></div>
+    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('link')">Next — one last thing</button></div>
     ${wizFoot(null)}` : isFileCopy() ? `
     <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Keep your work safe</div>
     <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
@@ -1809,8 +1811,55 @@ const WIZ = {
       <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true);showAuthGate(true)">Set up an account</button>
       <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizFinish(true)">Stay offline for now</button>
     </div>
-    ${wizFoot(null)}`
+    ${wizFoot(null)}`,
+
+  // Asked here rather than as a modal afterwards. A modal has to compete with
+  // the wizard for the screen and loses -- and a writer who once said "not now"
+  // never sees it again. This is the moment the account exists and the writer
+  // is still paying attention.
+  link: () => `
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">One last thing — a way back in</div>
+    <div id="wiz-link-body" style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
+      <p style="margin:0 0 10px">Right now your Writer ID and PIN are the only way into your account. If you
+        forget the PIN, there is no automatic way back in and you would have to ask the tool's maintainer.</p>
+      <p style="margin:0 0 10px">Linking a Google or Discord account fixes that, and makes signing in one
+        click. It is optional, nothing is posted anywhere, and your Writer ID and PIN keep working exactly
+        as they do now.</p>
+    </div>
+    <div id="wiz-link-actions" style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizLink('discord')">Link Discord</button>
+      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizLink('google')">Link Google</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="markLinkPromptSeen();wizFinish(true)">Not now — start writing</button>
+    </div>
+    ${wizFoot('acct')}`
 };
+
+// Linking leaves LCARS entirely, so the wizard has to be recorded as done
+// before we go or it reappears on the way back.
+function wizLink(provider) {
+  markWizardSeen();
+  markLinkPromptSeen();
+  closeWizard();
+  linkProvider(provider);
+}
+
+// A returning writer may already have linked something. Checked after the step
+// renders rather than before, because it is one network call and the offer is
+// the safe thing to show while it is in flight.
+async function refreshWizLinkStep() {
+  let list;
+  try { list = await fetchIdentities(); } catch(e) { return; }   // offline: leave the offer up
+  if (!list.length) return;
+  const body = document.getElementById('wiz-link-body');
+  const acts = document.getElementById('wiz-link-actions');
+  if (!body || !acts) return;
+  markLinkPromptSeen();
+  body.innerHTML = '<p style="margin:0">You already have <strong style="color:var(--text)">' +
+    esc(providerLabel(list[0].provider)) + '</strong> linked, so you can always get back in even if you ' +
+    'forget your PIN. You can change this any time in Settings.</p>';
+  acts.innerHTML = '<button class="btn btn-p" style="width:100%;justify-content:center" ' +
+    'onclick="wizFinish(true)">Start writing</button>';
+}
 
 // Reuses the normal restore path, so the file is validated and the
 // merge/overwrite choice is the same one Settings offers.
