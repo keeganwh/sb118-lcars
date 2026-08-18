@@ -208,6 +208,7 @@ const VERSIONS = [
       'Changed: signing in with a Google or Discord account that has not been linked to any Writer ID now says so and offers the Writer ID sign-in, rather than opening an empty LCARS',
       'Fixed: creating an account from Settings appeared to do nothing. The account was made and you were signed in, but the Settings page was still the one drawn for a signed-out writer, so it went on offering to set up an account \u2014 and clicking that reopened the sign-in screen, with no way out of the loop',
       'Fixed: the prompt to link a Google or Discord account never appeared after creating an account. It was opening underneath the Getting Started wizard, which covers the whole screen, so it could be neither seen nor dismissed. It now waits and appears once you have finished with the wizard',
+      'Fixed: signing out from Settings left you on the Settings address, so the page you came back to was built around an account you no longer had. Signing out now returns you to the dashboard',
     ],
   },
 ];
@@ -909,6 +910,10 @@ async function cloudSignIn(wid, pin) {
 function cloudSignOut() {
   clearAuth();
   setMode('');
+  // Signing out is done from Settings, and a signed-out writer has no settings
+  // to be on -- reloading there lands them on a page built around an account
+  // they no longer have. Same reason deleteAccount() does this.
+  try { syncRoute('dash', true); } catch(e) {}
   location.reload();
 }
 
