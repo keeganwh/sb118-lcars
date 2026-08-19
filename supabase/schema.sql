@@ -105,6 +105,15 @@ create trigger state_touch before update on public.state
 alter table public.writers drop column if exists recovery_email;
 
 -- ---------------------------------------------------------------------------
+-- link_prompt_seen : the offer of a recovery account has been made once
+-- ---------------------------------------------------------------------------
+-- Kept on the account rather than in the browser so the offer follows the
+-- writer: asked once, on any device, and never again -- whether they accepted,
+-- declined, or linked something later from Settings.
+alter table public.writers
+  add column if not exists link_prompt_seen boolean not null default false;
+
+-- ---------------------------------------------------------------------------
 -- Account deletion : soft delete now, real removal after a grace period
 -- ---------------------------------------------------------------------------
 --   * Asking for deletion only stamps deleted_at. That is an ordinary update

@@ -209,7 +209,9 @@ const VERSIONS = [
       'Fixed: creating an account from Settings appeared to do nothing. The account was made and you were signed in, but the Settings page was still the one drawn for a signed-out writer, so it went on offering to set up an account \u2014 and clicking that reopened the sign-in screen, with no way out of the loop',
       'Fixed: the prompt to link a Google or Discord account never appeared after creating an account. It was opening underneath the Getting Started wizard, which covers the whole screen, so it could be neither seen nor dismissed. It now waits and appears once you have finished with the wizard',
       'Fixed: signing out from Settings left you on the Settings address, so the page you came back to was built around an account you no longer had. Signing out now returns you to the dashboard',
-      'Changed: linking a Google or Discord account is now a step of the Getting Started wizard, right after your account is created, rather than a message that appeared afterwards. It explains what it is for, offers both providers and can be declined \u2014 and if you already have one linked it says so instead of asking again',
+      'Changed: connecting a Google or Discord account is now offered as the last step of creating or signing into an account, in the same window, rather than as a message that appeared afterwards. Writers with an existing account are asked once, the next time they sign in. Both providers are offered and it can be declined',
+      'Fixed: that offer no longer appears when you open Settings. It used to be raised on start-up, and start-up happens on every page load \u2014 including going straight to Settings, which is not a moment anyone wants interrupting',
+      'Changed: whether the offer has been made is remembered against your account rather than the browser, so it follows you and is asked exactly once no matter which device you next sign in on',
     ],
   },
 ];
@@ -928,11 +930,12 @@ function cloudSignOut() {
 // themselves: a display name, and a recovery email kept for identification.
 async function fetchWriterProfile() {
   const a = getAuth();
-  if (!a.uid) return { display_name: '', deleted_at: null };
-  const r = await supaFetch('/rest/v1/writers?select=display_name,deleted_at&id=eq.' + encodeURIComponent(a.uid));
+  if (!a.uid) return { display_name: '', deleted_at: null, link_prompt_seen: true };
+  const r = await supaFetch('/rest/v1/writers?select=display_name,deleted_at,link_prompt_seen&id=eq.' + encodeURIComponent(a.uid));
   if (!r.ok) throw new Error('Could not read your account details.');
   const row = (await r.json())[0] || {};
-  return { display_name: row.display_name || '', deleted_at: row.deleted_at || null };
+  return { display_name: row.display_name || '', deleted_at: row.deleted_at || null,
+           link_prompt_seen: !!row.link_prompt_seen };
 }
 
 async function patchWriterProfile(patch) {
@@ -1085,7 +1088,7 @@ async function completeProviderSignIn(f, why) {
   showToast('Signed in as ' + writerId);
   if (await checkDeletionPending()) return;
   if (why === 'recover') { showSetNewPin(true); return; }
-  maybeSuggestLinking();
+  maybeShowWizard();
 }
 
 function showProviderNotLinked() {
@@ -1149,35 +1152,6 @@ function showForgotPin() {
     </div>`, null, { extra: [
       { label: 'Continue with Discord', cls: 'btn-p', fn: "signInWithProvider('discord','recover')" },
       { label: 'Continue with Google', cls: 'btn-p', fn: "signInWithProvider('google','recover')" }] }), 60);
-}
-
-// Suggested once to writers with no linked account. Not nagging: dismissing it
-// is remembered, and it never appears over another dialog.
-const LINK_PROMPT_KEY = 'lcars_link_prompt_v1';
-function markLinkPromptSeen() { try { localStorage.setItem(LINK_PROMPT_KEY, '1'); } catch(e) {} }
-
-async function maybeSuggestLinking() {
-  if (!isCloud()) return;
-  try { if (localStorage.getItem(LINK_PROMPT_KEY)) return; } catch(e) { return; }
-  // Nothing else may be on screen. The wizard is its own overlay at a far
-  // higher z-index than the modal, so opening underneath it does not merely
-  // look wrong -- the prompt is invisible, and dismissing something you cannot
-  // see is not a thing anyone can do. wizFinish() calls back here afterwards.
-  if (!document.getElementById('mo').classList.contains('hidden')) return;
-  if (document.getElementById('wiz')) return;
-  let list;
-  try { list = await fetchIdentities(); } catch(e) { return; }   // offline: ask another day
-  if (list.length) { markLinkPromptSeen(); return; }             // already sorted
-  openModal('Add a way back in', `
-    <div style="font-size:0.87rem;line-height:1.65">
-      <p style="margin:0 0 8px">Right now your Writer ID and PIN are the only way into your account. If you
-        forget the PIN, nobody can reset it for you automatically.</p>
-      <p style="margin:0">Linking a Google or Discord account fixes that, and makes signing in one click.
-        It is optional, and your Writer ID and PIN keep working exactly as they do now.</p>
-    </div>`, null, { noCancel: true, extra: [
-      { label: 'Link Discord', cls: 'btn-p', fn: "markLinkPromptSeen();closeModal();linkProvider('discord')" },
-      { label: 'Link Google', cls: 'btn-p', fn: "markLinkPromptSeen();closeModal();linkProvider('google')" },
-      { label: 'Not now', fn: 'markLinkPromptSeen();closeModal()' }] });
 }
 
 async function fetchIdentities() {
@@ -1688,10 +1662,6 @@ function closeWizard() {
 function wizFinish(remember) {
   if (remember) markWizardSeen();
   closeWizard();
-  // A new writer meets the wizard immediately after creating an account, which
-  // is exactly when the suggestion to link one is due. It stands down while the
-  // wizard is up, so this is where it gets its turn.
-  maybeSuggestLinking();
 }
 
 function wizFoot(backStep) {
@@ -1709,7 +1679,6 @@ function wizGo(step) {
   if (!b) return;
   b.innerHTML = WIZ[step] ? WIZ[step]() : WIZ.welcome();
   b.parentElement.scrollTop = 0;
-  if (step === 'link') refreshWizLinkStep();
 }
 
 const WIZ = {
@@ -1791,7 +1760,7 @@ const WIZ = {
       <p style="margin:0 0 10px">You're signed in as <strong style="color:var(--text)">${(getAuth().writerId)||''}</strong>. Your work saves to your account a few seconds after each change, and will be there on any device you sign in on.</p>
       <p style="margin:0">A backup is still worth taking now and then — Settings → Backup Data.</p>
     </div>
-    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('link')">Next — one last thing</button></div>
+    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true)">Start writing</button></div>
     ${wizFoot(null)}` : isFileCopy() ? `
     <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Keep your work safe</div>
     <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
@@ -1811,55 +1780,8 @@ const WIZ = {
       <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true);showAuthGate(true)">Set up an account</button>
       <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizFinish(true)">Stay offline for now</button>
     </div>
-    ${wizFoot(null)}`,
-
-  // Asked here rather than as a modal afterwards. A modal has to compete with
-  // the wizard for the screen and loses -- and a writer who once said "not now"
-  // never sees it again. This is the moment the account exists and the writer
-  // is still paying attention.
-  link: () => `
-    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">One last thing — a way back in</div>
-    <div id="wiz-link-body" style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
-      <p style="margin:0 0 10px">Right now your Writer ID and PIN are the only way into your account. If you
-        forget the PIN, there is no automatic way back in and you would have to ask the tool's maintainer.</p>
-      <p style="margin:0 0 10px">Linking a Google or Discord account fixes that, and makes signing in one
-        click. It is optional, nothing is posted anywhere, and your Writer ID and PIN keep working exactly
-        as they do now.</p>
-    </div>
-    <div id="wiz-link-actions" style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
-      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizLink('discord')">Link Discord</button>
-      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizLink('google')">Link Google</button>
-      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="markLinkPromptSeen();wizFinish(true)">Not now — start writing</button>
-    </div>
-    ${wizFoot('acct')}`
+    ${wizFoot(null)}`
 };
-
-// Linking leaves LCARS entirely, so the wizard has to be recorded as done
-// before we go or it reappears on the way back.
-function wizLink(provider) {
-  markWizardSeen();
-  markLinkPromptSeen();
-  closeWizard();
-  linkProvider(provider);
-}
-
-// A returning writer may already have linked something. Checked after the step
-// renders rather than before, because it is one network call and the offer is
-// the safe thing to show while it is in flight.
-async function refreshWizLinkStep() {
-  let list;
-  try { list = await fetchIdentities(); } catch(e) { return; }   // offline: leave the offer up
-  if (!list.length) return;
-  const body = document.getElementById('wiz-link-body');
-  const acts = document.getElementById('wiz-link-actions');
-  if (!body || !acts) return;
-  markLinkPromptSeen();
-  body.innerHTML = '<p style="margin:0">You already have <strong style="color:var(--text)">' +
-    esc(providerLabel(list[0].provider)) + '</strong> linked, so you can always get back in even if you ' +
-    'forget your PIN. You can change this any time in Settings.</p>';
-  acts.innerHTML = '<button class="btn btn-p" style="width:100%;justify-content:center" ' +
-    'onclick="wizFinish(true)">Start writing</button>';
-}
 
 // Reuses the normal restore path, so the file is validated and the
 // merge/overwrite choice is the same one Settings offers.
@@ -1990,6 +1912,64 @@ function gateChoice(fromSettings) {
     </div>`}`;
 }
 
+// ── The recovery-account step of the gate ─────────────────────────────────
+// Shown in the gate window itself, immediately after an account is created or
+// signed into, and nowhere else. Deliberately not on boot: boot runs on every
+// page load, so a boot-time prompt appears when you open Settings, which is not
+// a moment anyone asked to be interrupted.
+//
+// Asked once per account, not once per browser -- the flag lives on the writers
+// row so it follows the writer to whatever device they next use.
+async function shouldOfferLinking() {
+  let list, prof;
+  try {
+    [list, prof] = await Promise.all([fetchIdentities(), fetchWriterProfile()]);
+  } catch(e) { return false; }          // unreadable: never block a sign-in over it
+  _writerProfile = prof;
+  // An account scheduled for deletion has a more urgent conversation waiting
+  // in gateFinish(); offering to link one to it would be absurd.
+  if (prof.deleted_at) return false;
+  return !list.length && !prof.link_prompt_seen;
+}
+
+function gateLinkStep(wid) {
+  const body = document.getElementById('gate-body');
+  if (!body) return;
+  body.innerHTML = `
+    <div style="font-size:1rem;font-weight:700;margin-bottom:8px">One last thing</div>
+    <div style="font-size:0.85rem;color:var(--dim);line-height:1.65;margin-bottom:14px">
+      <p style="margin:0 0 10px">Right now your Writer ID and PIN are the only way into your account. If you
+        forget the PIN there is no automatic way back in.</p>
+      <p style="margin:0">Connecting a Google or Discord account fixes that, and lets you sign in with one
+        click. Nothing is posted anywhere, and your Writer ID and PIN keep working exactly as they do now.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="gateLink('discord')">Connect Discord</button>
+      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="gateLink('google')">Connect Google</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateSkipLink('${esc(wid)}')">Not now</button>
+    </div>
+    <div style="font-size:0.71rem;color:var(--dim);line-height:1.55;margin-top:14px">
+      You can do this later from Settings &rarr; Your Account &amp; Data. You will not be asked again.
+    </div>`;
+}
+
+// Recorded before navigating away, because linking leaves LCARS entirely and
+// the writer may never come back to this screen.
+async function markLinkOffered() {
+  try { await patchWriterProfile({ link_prompt_seen: true }); } catch(e) {}
+  _writerProfile.link_prompt_seen = true;
+}
+
+async function gateLink(provider) {
+  await markLinkOffered();
+  linkProvider(provider);
+}
+
+async function gateSkipLink(wid) {
+  await markLinkOffered();
+  await gateFinish(wid);
+}
+
 function gateUseOffline() {
   setMode('local');
   gateClose();
@@ -2064,6 +2044,23 @@ function showTransferDone() {
   }
 }
 
+// Everything that happens once the gate is finished with, whichever way it was
+// finished with. Split out so the linking step can sit in front of it.
+async function gateFinish(wid) {
+  const who = normalizeWriterId(wid || getAuth().writerId || '');
+  gateClose();
+  await cloudBoot();
+  refreshAuthDependentViews();
+  showToast('Signed in as ' + who);
+  // Signing in from the old address is a migration, not a destination — the
+  // sims are on the account now, so send them where they should be writing.
+  if (movedBannerApplies()) { showTransferDone(); return; }
+  // Someone signing in mid-grace-period needs telling here, not only on a
+  // later cold boot — this is the moment they came back to change their mind.
+  if (await checkDeletionPending()) return;
+  maybeShowWizard();
+}
+
 async function gateSubmit(kind) {
   const msg = document.getElementById('gate-msg');
   const btn = document.getElementById('gate-go');
@@ -2079,18 +2076,10 @@ async function gateSubmit(kind) {
   try {
     if (kind === 'up') await cloudSignUp(wid, pin);
     else await cloudSignIn(wid, pin);
-    gateClose();
-    await cloudBoot();
-    refreshAuthDependentViews();
-    showToast('Signed in as ' + normalizeWriterId(wid));
-    // Signing in from the old address is a migration, not a destination — the
-    // sims are on the account now, so send them where they should be writing.
-    if (movedBannerApplies()) { showTransferDone(); return; }
-    // Someone signing in mid-grace-period needs telling here, not only on a
-    // later cold boot — this is the moment they came back to change their mind.
-    if (await checkDeletionPending()) return;
-    maybeShowWizard();
-    maybeSuggestLinking();
+    // Offer a recovery account as the next step of this same window, before
+    // the gate closes. gateFinish() carries on from whichever button is used.
+    if (await shouldOfferLinking()) { gateLinkStep(normalizeWriterId(wid)); return; }
+    await gateFinish(wid);
   } catch(e) {
     msg.style.color = 'var(--red,#c66)';
     msg.textContent = e.message || 'Something went wrong. Please try again.';
@@ -5898,7 +5887,7 @@ function saveCurrentAsTemplate() {
 // ── Account controls ──────────────────────────────────────────────────────
 // The recovery email lives on the server, so its button renders saying
 // "In case you forget your PIN." and swaps in the address when the row arrives.
-let _writerProfile = { display_name: '', deleted_at: null };
+let _writerProfile = { display_name: '', deleted_at: null, link_prompt_seen: true };
 
 function loadWriterProfile() {
   // Anchored on the Writer ID line, which is present for every signed-in
@@ -7665,9 +7654,10 @@ document.addEventListener('DOMContentLoaded',()=>{
   } else {
     // The deletion check runs after the boot pull so it never races the
     // reconcile prompt for the one modal slot.
-    // signed in — pull the server copy, then at most one prompt, in priority
-    // order: a pending deletion always outranks a suggestion to link.
-    if (isCloud()) cloudBoot().then(checkDeletionPending).then(p => { if (!p) maybeSuggestLinking(); });
+    // Nothing here ever asks about linking an account. That is a step of the
+    // gate, and boot runs on every page load -- which is how opening Settings
+    // ended up prompting.
+    if (isCloud()) cloudBoot().then(checkDeletionPending);
     maybeShowStyleIntro();              // held back behind the gate on a first visit
     maybeShowWizard();
   }
