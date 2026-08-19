@@ -195,3 +195,297 @@ create policy charpics_delete on storage.objects
     bucket_id = 'character-pics'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
+
+-- ---------------------------------------------------------------------------
+-- Roles : writer / moderator / super_admin
+-- ---------------------------------------------------------------------------
+-- Writers who linked a Google or Discord account can recover their own PIN.
+-- Everyone else has no way back in without a human, and this is that human.
+--
+--   writer       the default; can only ever see their own rows
+--   moderator    sees the PIN reset queue and can action or reject a request
+--   super_admin  the above, plus assigning roles
+--
+-- Moderators deliberately do NOT get a list of writers. The queue is the whole
+-- surface: they see requests that came to them, and nothing else.
+alter table public.writers
+  add column if not exists role text not null default 'writer';
+
+do $$ begin
+  alter table public.writers add constraint writers_role_valid
+    check (role in ('writer', 'moderator', 'super_admin'));
+exception when duplicate_object then null;
+end $$;
+
+-- BOOTSTRAP -- run this by hand, once, in the SQL Editor. There is deliberately
+-- no path to the first super admin from inside the app: something has to be
+-- trusted first, and a hand-run statement against your own database is it.
+--
+--   update public.writers set role = 'super_admin' where writer_id = 'V239806K11';
+--
+-- After that, super admins assign every other role from Settings -> Admin.
+
+-- Set when a moderator issues a temporary PIN. The writer is made to choose
+-- their own the moment they sign in with it, so a PIN that passed through a
+-- third party never stays valid for longer than one sign-in.
+alter table public.writers
+  add column if not exists must_change_pin boolean not null default false;
+
+-- ---------------------------------------------------------------------------
+-- my_role() : the caller's role, read outside RLS
+-- ---------------------------------------------------------------------------
+-- The queue's policy needs to ask "what is my role?", which means reading
+-- public.writers -- which has a policy of its own, which would ask again.
+-- Postgres detects that as infinite recursion and fails the query at run time.
+-- A security definer function reads the row with RLS bypassed, breaking the
+-- loop. It exposes only the caller's own role, so it hands out nothing they
+-- could not already see.
+create or replace function public.my_role()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select role from public.writers where id = auth.uid()), 'writer');
+$$;
+
+create or replace function public.is_moderator()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.my_role() in ('moderator', 'super_admin');
+$$;
+
+grant execute on function public.my_role()      to authenticated;
+grant execute on function public.is_moderator() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- pin_reset_requests : the queue
+-- ---------------------------------------------------------------------------
+-- Rows are never deleted. A request moves from 'open' to 'actioned' or
+-- 'rejected' and stays as a permanent record of who decided what, when, and
+-- what the requester offered as proof of identity -- which is the only thing
+-- anyone could go back to if a reset is ever disputed.
+create table if not exists public.pin_reset_requests (
+  id          uuid primary key default gen_random_uuid(),
+  writer_id   text not null,
+  note        text not null,
+  status      text not null default 'open'
+                check (status in ('open', 'actioned', 'rejected')),
+  created_at  timestamptz not null default now(),
+  decided_at  timestamptz,
+  decided_by  text
+);
+
+create index if not exists pin_reset_open_idx
+  on public.pin_reset_requests (created_at desc) where status = 'open';
+
+alter table public.pin_reset_requests enable row level security;
+
+-- Moderators read the queue. Nobody writes to it directly, from any role --
+-- filing and deciding both go through the functions below, which is what keeps
+-- the rate limit and the role checks impossible to sidestep.
+drop policy if exists pin_reset_read on public.pin_reset_requests;
+create policy pin_reset_read on public.pin_reset_requests
+  for select using (public.is_moderator());
+
+-- Table privileges are the outer gate, the policy the inner one. Only select is
+-- granted at all, so even a bug in a policy cannot open a direct write path.
+revoke all on table public.pin_reset_requests from anon, authenticated;
+grant select on table public.pin_reset_requests to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- request_pin_reset() : filed by someone who cannot sign in
+-- ---------------------------------------------------------------------------
+-- Callable by anon, necessarily: the whole point is that the person has lost
+-- their PIN and has no session. That makes it the one anonymous write in the
+-- schema, so the limits live inside it --
+--
+--   * one open request per Writer ID, and none within an hour of the last,
+--     so the queue cannot be flooded from one ID;
+--   * the note is required and capped, so a row cannot be used as storage;
+--   * an unknown Writer ID is accepted and silently dropped.
+--
+-- That last one is not about secrecy -- Writer IDs are public -- it is about
+-- not turning this into a way to find out which of them hold LCARS accounts.
+-- The cost is that someone who mistypes their own ID gets a cheerful
+-- confirmation and no help, so the app tells them to check it carefully.
+create or replace function public.request_pin_reset(p_writer_id text, p_note text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  wid text := upper(regexp_replace(coalesce(p_writer_id, ''), '[^A-Za-z0-9]', '', 'g'));
+  nte text := btrim(coalesce(p_note, ''));
+begin
+  if length(nte) < 10 then
+    raise exception 'Please say how we can confirm it is you -- an email address or Discord handle we can reach you at.';
+  end if;
+  if length(nte) > 500 then
+    nte := left(nte, 500);
+  end if;
+  if wid = '' then
+    raise exception 'Please enter your Writer ID.';
+  end if;
+
+  -- Unknown ID: say nothing, do nothing. Indistinguishable from success.
+  if not exists (select 1 from public.writers
+                  where writer_id = wid and deleted_at is null) then
+    return;
+  end if;
+
+  if exists (select 1 from public.pin_reset_requests
+              where writer_id = wid
+                and (status = 'open' or created_at > now() - interval '1 hour')) then
+    return;
+  end if;
+
+  insert into public.pin_reset_requests (writer_id, note) values (wid, nte);
+end $$;
+
+revoke all on function public.request_pin_reset(text, text) from public;
+grant execute on function public.request_pin_reset(text, text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- admin_action_reset() : issue a temporary PIN
+-- ---------------------------------------------------------------------------
+-- THE ONE UNSUPPORTED THING IN THIS SCHEMA. Everything else here uses an API
+-- Supabase documents. This writes auth.users.encrypted_password directly,
+-- because the hosted service offers no other way for one account to reset
+-- another's -- the key that would authorise it must never reach a browser.
+--
+-- If Supabase ever changes how passwords are hashed, this silently starts
+-- writing something their login cannot read: the moderator issues a temporary
+-- PIN and the writer finds it does not work. Nothing is lost or corrupted --
+-- the account, its data and the old PIN are untouched -- and the failure is
+-- immediate and obvious rather than quiet.
+--
+-- THE FALLBACK, if that day comes: stop writing the password here. Instead
+-- have this function mint a short-lived one-time token on the writers row, and
+-- have the writer redeem it in LCARS to set their own PIN through Supabase's
+-- supported password-update API -- the same call changePin() already makes.
+-- The queue, the roles, the moderator flow and the whole admin view stay
+-- exactly as they are; only this function and the handoff copy change.
+create or replace function public.admin_action_reset(p_request_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  req    public.pin_reset_requests;
+  target uuid;
+  me     text;
+  pin    text := '';
+  alpha  text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   -- no I/O/0/1 to mistake
+  i      integer;
+begin
+  if not public.is_moderator() then
+    raise exception 'You do not have permission to action reset requests.';
+  end if;
+
+  select * into req from public.pin_reset_requests where id = p_request_id;
+  if not found then raise exception 'That request no longer exists.'; end if;
+  if req.status <> 'open' then raise exception 'That request has already been decided.'; end if;
+
+  select id into target from public.writers
+   where writer_id = req.writer_id and deleted_at is null;
+  if target is null then raise exception 'That Writer ID no longer has an account.'; end if;
+
+  for i in 1..10 loop
+    pin := pin || substr(alpha, 1 + floor(random() * length(alpha))::int, 1);
+  end loop;
+
+  update auth.users
+     set encrypted_password = extensions.crypt(pin, extensions.gen_salt('bf')),
+         updated_at = now()
+   where id = target;
+
+  -- Any session opened with the old PIN goes. If the reason for the reset was
+  -- that someone else got in, leaving their session alive would defeat it.
+  delete from auth.sessions where user_id = target;
+
+  update public.writers set must_change_pin = true where id = target;
+
+  select writer_id into me from public.writers where id = auth.uid();
+  update public.pin_reset_requests
+     set status = 'actioned', decided_at = now(), decided_by = me
+   where id = p_request_id;
+
+  return pin;
+end $$;
+
+revoke all on function public.admin_action_reset(uuid) from public, anon;
+grant execute on function public.admin_action_reset(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- admin_reject_reset() : close a request without acting on it
+-- ---------------------------------------------------------------------------
+-- There is nowhere to send a reply -- the requester has no session and the
+-- auth address is synthetic -- so rejecting only closes the row. It exists so
+-- an obviously bogus request stops sitting in the queue inflating every
+-- moderator's badge, not as a way to communicate.
+create or replace function public.admin_reject_reset(p_request_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare me text;
+begin
+  if not public.is_moderator() then
+    raise exception 'You do not have permission to reject reset requests.';
+  end if;
+  select writer_id into me from public.writers where id = auth.uid();
+  update public.pin_reset_requests
+     set status = 'rejected', decided_at = now(), decided_by = me
+   where id = p_request_id and status = 'open';
+  if not found then raise exception 'That request has already been decided.'; end if;
+end $$;
+
+revoke all on function public.admin_reject_reset(uuid) from public, anon;
+grant execute on function public.admin_reject_reset(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- admin_set_role() : super admins only
+-- ---------------------------------------------------------------------------
+-- Addressed by Writer ID rather than by browsing a list, so promoting someone
+-- means already knowing who they are. Demoting yourself is refused: with no
+-- super admin left, the only way back is another hand-run SQL statement, and
+-- one misclick should not cost that.
+create or replace function public.admin_set_role(p_writer_id text, p_role text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  wid text := upper(regexp_replace(coalesce(p_writer_id, ''), '[^A-Za-z0-9]', '', 'g'));
+  target uuid;
+begin
+  if public.my_role() <> 'super_admin' then
+    raise exception 'Only a super admin can assign roles.';
+  end if;
+  if p_role not in ('writer', 'moderator', 'super_admin') then
+    raise exception 'Unknown role.';
+  end if;
+
+  select id into target from public.writers
+   where writer_id = wid and deleted_at is null;
+  if target is null then raise exception 'No account with that Writer ID.'; end if;
+
+  if target = auth.uid() and p_role <> 'super_admin' then
+    raise exception 'You cannot remove your own super admin role.';
+  end if;
+
+  update public.writers set role = p_role where id = target;
+end $$;
+
+revoke all on function public.admin_set_role(text, text) from public, anon;
+grant execute on function public.admin_set_role(text, text) to authenticated;
