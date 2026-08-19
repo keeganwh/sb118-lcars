@@ -212,6 +212,15 @@ const VERSIONS = [
       'Changed: connecting a Google or Discord account is now offered as the last step of creating or signing into an account, in the same window, rather than as a message that appeared afterwards. Writers with an existing account are asked once, the next time they sign in. Both providers are offered and it can be declined',
       'Fixed: that offer no longer appears when you open Settings. It used to be raised on start-up, and start-up happens on every page load \u2014 including going straight to Settings, which is not a moment anyone wants interrupting',
       'Changed: whether the offer has been made is remembered against your account rather than the browser, so it follows you and is asked exactly once no matter which device you next sign in on',
+      'Added: moderators. A writer can now be given a moderator or super admin role, so the fleet can look after its own accounts \u2014 previously anyone who lost their PIN without a linked account had to find the maintainer',
+      'Added: Request a PIN reset, on the Forgotten your PIN? screen. If you never linked a Google or Discord account, or they are not working, you can now ask a moderator directly. You give your Writer ID and a note saying how they can check the request really came from you \u2014 a Discord handle or an email address they can reach you at',
+      'Added: an Admin panel for moderators, with a count in the header of requests waiting. Every moderator sees the same count, so a request cannot sit unnoticed because one person did not log in',
+      'Added: moderators can issue a temporary PIN from the panel, to pass on however that writer asked to be contacted. The PIN is shown once and never stored anywhere readable, the writer\u2019s old PIN and any open sessions stop working immediately, and LCARS makes them choose their own PIN the moment they sign in with it',
+      'Added: requests can also be rejected, with a confirmation first. Rejecting only closes the request \u2014 there is nowhere to send a reply, since whoever filed it is locked out \u2014 so a request that might be genuine is better followed up in person',
+      'Added: an Archive of every request ever decided, showing who actioned or rejected it and when. Nothing is ever deleted, so a reset can always be accounted for afterwards',
+      'Added: super admins can assign roles from the panel, by Writer ID. Moderators only ever see the reset queue \u2014 there is no list of writers and no access to anyone\u2019s sims',
+      'Changed: a request filed against a Writer ID with no LCARS account is accepted and quietly dropped, so this cannot be used to find out who has an account. The confirmation says to double-check the Writer ID, because a typo is the one mistake with no other symptom',
+      'Fixed: the introduction to the Delta Prime look could paint over a prompt that had to be answered \u2014 including the one asking you to replace a temporary PIN, which has no way to dismiss it. It now waits for the next visit if anything is already on screen',
     ],
   },
 ];
@@ -482,7 +491,17 @@ function maybeShowStyleIntro() {
   if ((S.settings.prefs || {}).seenStyleIntro === STYLE_VERSION) return;
   // Deferred, so re-check on fire: a direct hit on /settings or /manifest opens
   // its view in between, and the intro must not steal the modal from under it.
-  setTimeout(() => { if (_routeView === 'dash') showStyleIntro(); }, 400);
+  // The same goes for anything already on screen. Boot raises prompts that must
+  // be answered -- the reconcile question, a pending deletion, a temporary PIN
+  // that has to be changed -- and every one of them lands after this timer was
+  // set. An introduction to the new colours can wait for the next load; those
+  // cannot, and showChooseOwnPin() in particular has no cancel button, so
+  // painting over it would strand the writer on a PIN someone else has read.
+  setTimeout(() => {
+    if (_routeView !== 'dash') return;
+    if (!document.getElementById('mo').classList.contains('hidden')) return;
+    showStyleIntro();
+  }, 400);
 }
 
 function closeStyleMenu(){ toggleStyleMenu(false); }
@@ -1147,11 +1166,12 @@ function showForgotPin() {
     <div style="font-size:0.87rem;line-height:1.65">
       <p style="margin:0 0 10px">If you linked a Google or Discord account, sign in with it and you can set a
         new PIN straight away.</p>
-      <p style="margin:0 0 4px;color:var(--dim);font-size:0.8rem">If you did not link one, ask the tool's
-        maintainer to reset it for you \u2014 there is no automatic way back in without it.</p>
+      <p style="margin:0 0 4px;color:var(--dim);font-size:0.8rem">No linked account, or the options above
+        are not working? Ask a moderator to reset it for you.</p>
     </div>`, null, { extra: [
       { label: 'Continue with Discord', cls: 'btn-p', fn: "signInWithProvider('discord','recover')" },
-      { label: 'Continue with Google', cls: 'btn-p', fn: "signInWithProvider('google','recover')" }] }), 60);
+      { label: 'Continue with Google', cls: 'btn-p', fn: "signInWithProvider('google','recover')" },
+      { label: 'Request a PIN reset', fn: 'showRequestReset()' }] }), 60);
 }
 
 async function fetchIdentities() {
@@ -1270,6 +1290,356 @@ function paintIdentities(list) {
     return setBtn(`confirmUnlinkProvider('${identityKey(found)}','${p.id}')`, 'link', p.label + ' — linked',
       (who ? esc(who) + '. ' : '') + 'Click to unlink.');
   }).join('');
+}
+
+// ── Roles, the reset queue and the admin view ─────────────────────────────
+// Writers who linked a provider recover their own PIN. Everyone else has no
+// automatic way back in, and this is the human route: they file a request, and
+// any moderator can action it without leaving LCARS.
+//
+// Nothing here is a security boundary. The header button, the view and every
+// guard below are conveniences — the real checks are row level security on
+// pin_reset_requests and the role tests inside the security definer functions,
+// both of which hold whether or not this page cooperates. Typing /admin with a
+// writer's account gets you a view that asks the database for the queue and is
+// handed nothing back.
+let _myRole = 'writer';
+let _adminOpen = 0;              // open requests, as of the last count
+let _adminTab = 'open';
+let _adminTimer = null;
+
+function isModerator() { return _myRole === 'moderator' || _myRole === 'super_admin'; }
+function isSuperAdmin() { return _myRole === 'super_admin'; }
+
+// Calls a Postgres function over PostgREST. Errors come back as {message}, and
+// the messages these functions raise are written to be shown as they are.
+async function supaRpc(fn, args) {
+  const r = await supaFetch('/rest/v1/rpc/' + fn, { method: 'POST', body: JSON.stringify(args || {}) });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(supaErr(j, 'That did not work.'));
+  return j;
+}
+
+// The role is read once per boot and cached. It decides what is drawn, never
+// what is permitted, so a stale copy costs a wasted click and nothing more.
+async function loadMyRole() {
+  if (!isCloud()) { _myRole = 'writer'; return _myRole; }
+  try { _myRole = (await supaRpc('my_role')) || 'writer'; }
+  catch(e) { _myRole = 'writer'; }
+  return _myRole;
+}
+
+// The badge is the whole point of the panel being in the header: a request is
+// no use to anyone if it sits unseen. Every moderator sees the same count,
+// because it is a count of the queue rather than of anything assigned.
+async function refreshAdminBadge() {
+  const btn = document.getElementById('btn-admin');
+  const badge = document.getElementById('admin-badge');
+  if (!btn || !badge) return;
+  btn.classList.toggle('hidden', !isModerator() || !isCloud());
+  if (!isModerator() || !isCloud()) return;
+  try {
+    const r = await supaFetch('/rest/v1/pin_reset_requests?select=id&status=eq.open', {
+      method: 'GET', headers: { 'Prefer': 'count=exact', 'Range': '0-0' }
+    });
+    if (!r.ok) return;
+    const cr = r.headers.get('content-range') || '';
+    const n = Number((cr.split('/')[1] || '0')) || 0;
+    _adminOpen = n;
+    badge.textContent = n > 99 ? '99+' : String(n);
+    badge.classList.toggle('hidden', n === 0);
+    btn.classList.toggle('has-pending', n > 0);
+  } catch(e) { /* offline — the count can wait for the next pass */ }
+}
+
+// Boot, and then a quiet poll while the app is open. Ten minutes: a PIN reset
+// is not urgent to the minute, and every moderator's browser is asking.
+async function initAdmin() {
+  if (!isCloud()) return;
+  await loadMyRole();
+  if (!isModerator()) return;
+  refreshAdminBadge();
+  if (_adminTimer) clearInterval(_adminTimer);
+  _adminTimer = setInterval(refreshAdminBadge, 10 * 60 * 1000);
+}
+
+async function fetchResetRequests(open) {
+  const q = open ? 'status=eq.open&order=created_at.asc'
+                 : 'status=neq.open&order=decided_at.desc&limit=100';
+  const r = await supaFetch('/rest/v1/pin_reset_requests?select=*&' + q);
+  if (!r.ok) throw new Error('Could not read the queue.');
+  return await r.json();
+}
+
+function openAdmin(fromRoute) { showView('admin', fromRoute); }
+
+function adminTab(tab) { _adminTab = tab; renderAdminView(); }
+
+function renderAdminView() {
+  const el = document.getElementById('view-admin');
+  if (!el) return;
+
+  if (!isCloud() || !isModerator()) {
+    el.innerHTML = `
+      <div class="set-wrap">
+        <div class="set-card">
+          <div class="msec">ADMIN</div>
+          <div class="set-block">
+            <p style="font-size:0.87rem;line-height:1.65;margin:0">You do not have access to this area.</p>
+            <span class="set-note">Moderator tools are for the writers who look after accounts for the fleet.</span>
+          </div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const open = _adminTab === 'open';
+  el.innerHTML = `
+    <div class="set-wrap">
+      <div class="set-head">
+        <span class="set-sub">MODERATOR TOOLS &middot; signed in as ${esc(getAuth().writerId || '')} (${esc(roleLabel(_myRole))})</span>
+      </div>
+      <div class="set-card">
+        <div class="msec">PIN RESET REQUESTS</div>
+        <div class="set-block">
+          <div class="adm-tabs">
+            <button class="btn ${open ? 'btn-p' : 'btn-s'}" onclick="adminTab('open')">${ic('alert')} Waiting${_adminOpen ? ' (' + _adminOpen + ')' : ''}</button>
+            <button class="btn ${open ? 'btn-s' : 'btn-p'}" onclick="adminTab('done')">${ic('archive')} Archive</button>
+          </div>
+          <div id="adm-list"><span class="set-note">Loading…</span></div>
+        </div>
+      </div>
+      ${isSuperAdmin() ? adminRolesCard() : ''}
+    </div>`;
+
+  fetchResetRequests(open)
+    .then(rows => paintResetRequests(rows, open))
+    .catch(() => {
+      const l = document.getElementById('adm-list');
+      if (l) l.innerHTML = '<span class="set-note" style="color:var(--red,#c66)">The queue could not be read — check your connection.</span>';
+    });
+  if (open) refreshAdminBadge();
+}
+
+function roleLabel(r) {
+  return r === 'super_admin' ? 'super admin' : r === 'moderator' ? 'moderator' : 'writer';
+}
+
+function fmtWhen(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) +
+         ' at ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+function paintResetRequests(rows, open) {
+  const el = document.getElementById('adm-list');
+  if (!el) return;
+  if (!rows.length) {
+    el.innerHTML = '<span class="set-note">' +
+      (open ? 'Nothing waiting. Requests appear here as they are filed.'
+            : 'Nothing decided yet.') + '</span>';
+    return;
+  }
+  el.innerHTML = rows.map(q => `
+    <div class="adm-req${open ? '' : ' adm-req-done'}">
+      <div class="adm-req-hdr">
+        <span class="adm-req-wid">${esc(q.writer_id)}</span>
+        <span class="adm-req-when">${esc(fmtWhen(q.created_at))}</span>
+        ${open ? '' : `<span class="adm-req-tag adm-${esc(q.status)}">${q.status === 'actioned' ? 'Reset issued' : 'Rejected'}</span>`}
+      </div>
+      <div class="adm-req-note">${esc(q.note)}</div>
+      ${open ? `
+      <div class="adm-req-acts">
+        <button class="btn btn-p" onclick="confirmActionReset('${q.id}','${esc(q.writer_id)}')">${ic('check')} Issue a temporary PIN</button>
+        <button class="btn btn-s" onclick="confirmRejectReset('${q.id}','${esc(q.writer_id)}')">${ic('x')} Reject</button>
+      </div>` : `
+      <div class="adm-req-foot">${esc(q.status === 'actioned' ? 'Issued by' : 'Rejected by')}
+        ${esc(q.decided_by || 'a moderator')} &middot; ${esc(fmtWhen(q.decided_at))}</div>`}
+    </div>`).join('');
+}
+
+// The whole point of the confirm is that the moderator has read the note and
+// satisfied themselves, so the note is in front of them while they decide.
+function confirmActionReset(id, wid) {
+  openModal('Issue a temporary PIN', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 10px">This will reset the PIN for <strong>${esc(wid)}</strong> and give you a
+        temporary one to pass on. Their existing PIN stops working immediately, and they will be made to
+        choose a new one as soon as they sign in.</p>
+      <p style="margin:0;color:var(--dim);font-size:0.8rem">Only do this once you are satisfied the request
+        really came from them — send the temporary PIN back the way they asked to be contacted, never
+        anywhere public.</p>
+    </div>`, () => {
+      supaRpc('admin_action_reset', { p_request_id: id })
+        .then(pin => { closeModal(); showTempPin(wid, pin); refreshAdminBadge(); })
+        .catch(e => showToast(e.message, 5200));
+      return false;
+    }, { ok: 'Issue it' });
+}
+
+// Shown once and never stored anywhere readable. Losing it before it is passed
+// on is not a disaster — action the request again for a fresh one.
+function showTempPin(wid, pin) {
+  openModal('Temporary PIN for ' + wid, `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 10px">Send this to them however they asked to be contacted. It is shown only
+        now — LCARS does not keep a readable copy.</p>
+      <div class="adm-pin" id="adm-temp-pin">${esc(pin)}</div>
+      <p style="margin:10px 0 0;color:var(--dim);font-size:0.8rem">They sign in with their Writer ID and this
+        PIN, and LCARS will ask them to choose a new one straight away.</p>
+    </div>`, null, { noCancel: true, extra: [
+      { label: 'Copy the PIN', cls: 'btn-p', fn: `copyTempPin('${esc(pin)}')` },
+      { label: 'Done', fn: 'closeModal();renderAdminView()' }] });
+}
+
+function copyTempPin(pin) {
+  navigator.clipboard.writeText(pin)
+    .then(() => showToast('Temporary PIN copied'))
+    .catch(() => showToast('Could not copy — select it and copy by hand', 4000));
+}
+
+function confirmRejectReset(id, wid) {
+  openModal('Reject this request', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 10px">The request from <strong>${esc(wid)}</strong> will be closed and will stop
+        showing in everyone's queue. It stays in the Archive as a record.</p>
+      <p style="margin:0;color:var(--dim);font-size:0.8rem">There is no way to reply — whoever filed it is
+        locked out, so nothing LCARS sends could reach them. If it might be genuine, contact them yourself
+        rather than rejecting it.</p>
+    </div>`, () => {
+      supaRpc('admin_reject_reset', { p_request_id: id })
+        .then(() => { closeModal(); showToast('Request rejected'); refreshAdminBadge(); renderAdminView(); })
+        .catch(e => showToast(e.message, 5200));
+      return false;
+    }, { ok: 'Reject it' });
+}
+
+// Roles are assigned by typing a Writer ID rather than by picking from a list.
+// Moderators are trusted with other people's accounts, so promoting someone
+// should mean already knowing exactly who they are.
+function adminRolesCard() {
+  return `
+    <div class="set-card">
+      <div class="msec">ROLES</div>
+      <div class="set-block">
+        <span class="set-note" style="margin:0 0 8px">Moderators see the reset queue and nothing else — no
+          list of writers, no access to anyone's sims. Super admins can also assign roles.</span>
+        <div class="mf"><label class="ml">WRITER ID</label>
+          <input class="mi" id="adm-role-wid" placeholder="A239809JP3" autocomplete="off"></div>
+        <div class="mf"><label class="ml">ROLE</label>
+          <select class="mi" id="adm-role-val">
+            <option value="writer">Writer</option>
+            <option value="moderator">Moderator</option>
+            <option value="super_admin">Super admin</option>
+          </select></div>
+        <div id="adm-role-msg" style="font-size:0.76rem;line-height:1.5;min-height:1.1em;color:var(--dim)"></div>
+        <button class="btn btn-p" onclick="submitSetRole()">${ic('check')} Set role</button>
+      </div>
+    </div>`;
+}
+
+function submitSetRole() {
+  const msg = document.getElementById('adm-role-msg');
+  const wid = (document.getElementById('adm-role-wid').value || '').trim();
+  const role = document.getElementById('adm-role-val').value;
+  if (!validWriterId(wid)) {
+    msg.style.color = 'var(--red,#c66)';
+    msg.textContent = 'That does not look like a Writer ID — it should be ten characters, like A239809JP3.';
+    return;
+  }
+  msg.style.color = 'var(--dim)'; msg.textContent = 'Saving…';
+  supaRpc('admin_set_role', { p_writer_id: normalizeWriterId(wid), p_role: role })
+    .then(() => {
+      msg.textContent = normalizeWriterId(wid) + ' is now a ' + roleLabel(role) + '.';
+      document.getElementById('adm-role-wid').value = '';
+    })
+    .catch(e => { msg.style.color = 'var(--red,#c66)'; msg.textContent = e.message; });
+}
+
+// ── Asking for a reset ────────────────────────────────────────────────────
+// Filed by someone with no session, so it goes through request_pin_reset()
+// rather than a table write. An unknown Writer ID is accepted and dropped on
+// the floor — so the confirmation has to tell them to check what they typed,
+// since that is the one mistake with no other symptom.
+function showRequestReset() {
+  closeModal();
+  setTimeout(() => openModal('Request a PIN reset', `
+    <div style="font-size:0.85rem;line-height:1.6;margin-bottom:12px">
+      A moderator will reset your PIN by hand and send you a temporary one. Tell them how to check the
+      request really came from you — an email address or Discord handle they can reach you at.
+    </div>
+    <div class="mf"><label class="ml">YOUR WRITER ID</label>
+      <input class="mi" id="rr-wid" placeholder="A239809JP3" autocomplete="off"></div>
+    <div class="mf"><label class="ml">HOW CAN WE CONFIRM IT IS YOU?</label>
+      <textarea class="mi" id="rr-note" rows="3" style="resize:vertical"
+        placeholder="e.g. I'm @name on the SB118 Discord, or email me at name@example.com"></textarea></div>
+    <div id="rr-msg" style="font-size:0.76rem;line-height:1.5;min-height:1.1em;color:var(--red,#c66)"></div>
+  `, () => {
+    const msg = document.getElementById('rr-msg');
+    const wid = (document.getElementById('rr-wid').value || '').trim();
+    const note = (document.getElementById('rr-note').value || '').trim();
+    if (!validWriterId(wid)) { msg.textContent = 'That does not look like a Writer ID — it should be ten characters, like A239809JP3.'; return false; }
+    if (note.length < 10) { msg.textContent = 'Please say how a moderator can confirm it is you.'; return false; }
+    msg.style.color = 'var(--dim)'; msg.textContent = 'Sending…';
+    supaRpc('request_pin_reset', { p_writer_id: normalizeWriterId(wid), p_note: note })
+      .then(() => { closeModal(); showResetRequested(normalizeWriterId(wid)); })
+      .catch(e => { msg.style.color = 'var(--red,#c66)'; msg.textContent = e.message; });
+    return false;
+  }, { ok: 'Send the request' }), 60);
+}
+
+function showResetRequested(wid) {
+  openModal('Request sent', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 10px">A moderator will be in touch using the contact details you gave.</p>
+      <p style="margin:0;color:var(--dim);font-size:0.8rem">If you do not hear anything, check you typed your
+        Writer ID exactly right — <strong>${esc(wid)}</strong>. A request filed against an ID that has no
+        LCARS account cannot reach anyone, and nothing will tell you so.</p>
+    </div>`, null, { noCancel: true, extra: [
+      { label: 'Back to sign in', cls: 'btn-p', fn: 'closeModal();showAuthGate(false)' }] });
+}
+
+// ── The temporary PIN, on the other side ──────────────────────────────────
+// A PIN that has been read out over Discord is not a PIN. must_change_pin is
+// set when one is issued, and this is what makes it last exactly one sign-in.
+async function checkMustChangePin() {
+  if (!isCloud()) return false;
+  try {
+    const a = getAuth();
+    if (!a.uid) return false;
+    const r = await supaFetch('/rest/v1/writers?select=must_change_pin&id=eq.' + encodeURIComponent(a.uid));
+    if (!r.ok) return false;
+    const row = (await r.json())[0];
+    if (!row || !row.must_change_pin) return false;
+    showChooseOwnPin();
+    return true;
+  } catch(e) { return false; }
+}
+
+function showChooseOwnPin() {
+  openModal('Choose your own PIN', `
+    <div style="font-size:0.85rem;line-height:1.6;margin-bottom:12px">
+      You signed in with a temporary PIN issued by a moderator. Someone else has seen it, so choose one of
+      your own now — the temporary one stops working as soon as you do.
+    </div>
+    <div class="mf"><label class="ml">NEW PIN <span style="font-weight:normal;opacity:0.6">(at least 6 characters)</span></label>
+      <input class="mi" id="newpin-a" type="password" autocomplete="new-password"></div>
+    <div class="mf"><label class="ml">NEW PIN AGAIN</label>
+      <input class="mi" id="newpin-b" type="password" autocomplete="new-password"></div>
+    <div id="newpin-msg" style="font-size:0.76rem;line-height:1.5;min-height:1.1em;color:var(--red,#c66)"></div>
+  `, () => {
+    const msg = document.getElementById('newpin-msg');
+    const a = document.getElementById('newpin-a').value;
+    const b = document.getElementById('newpin-b').value;
+    if (a !== b) { msg.textContent = 'The two PINs do not match.'; return false; }
+    msg.style.color = 'var(--dim)'; msg.textContent = 'Saving…';
+    setNewPin(a)
+      .then(() => patchWriterProfile({ must_change_pin: false }))
+      .then(() => { closeModal(); showToast('PIN set — that is the one to use from now on'); })
+      .catch(e => { msg.style.color = 'var(--red,#c66)'; msg.textContent = e.message; });
+    return false;
+  }, { ok: 'Set my PIN', noCancel: true });
 }
 
 // Snapshots are ten full copies of a sim's HTML apiece. Kept in the main payload
@@ -1863,6 +2233,8 @@ let _gateEl = null;
 // renderSettingsView() reloads the profile and linked accounts on its own.
 function refreshAuthDependentViews() {
   if (_routeView === 'settings') renderSettingsView();
+  if (_routeView === 'admin') renderAdminView();
+  initAdmin();
   updateViewButtons();
 }
 
@@ -2058,6 +2430,9 @@ async function gateFinish(wid) {
   // Someone signing in mid-grace-period needs telling here, not only on a
   // later cold boot — this is the moment they came back to change their mind.
   if (await checkDeletionPending()) return;
+  // A temporary PIN has been read by a moderator and sent over Discord or
+  // email. Trading it for one of their own comes before anything else.
+  if (await checkMustChangePin()) return;
   maybeShowWizard();
 }
 
@@ -5415,12 +5790,13 @@ function downloadOfflineCopy() {
 //
 // Every view change goes through showView, which is also what keeps the URL
 // honest: it is the one place syncRoute is called from.
-const VIEW_IDS = { dash: 'workspace', settings: 'view-settings', manifest: 'view-manifest' };
+const VIEW_IDS = { dash: 'workspace', settings: 'view-settings', manifest: 'view-manifest', admin: 'view-admin' };
 
 function showView(view, fromRoute) {
   if (!VIEW_IDS[view]) view = 'dash';
   if (view === 'settings') renderSettingsView();
   else if (view === 'manifest') prepManifest();
+  else if (view === 'admin') renderAdminView();
 
   // Hiding a view leaves it mounted — the editor and its unsaved keystrokes
   // are still there, untouched, when the dashboard comes back.
@@ -5443,6 +5819,13 @@ function updateViewButtons() {
     const on = _routeView === 'manifest';
     mb.innerHTML = on ? ic('pencil') + ' Sim Editor' : ic('user') + ' Character Manifest';
     mb.onclick = () => showView(on ? 'dash' : 'manifest');
+  }
+  const ab = document.getElementById('btn-admin');
+  if (ab) {
+    const on = _routeView === 'admin';
+    ab.classList.toggle('btn-p', on);
+    ab.classList.toggle('btn-s', !on);
+    ab.onclick = () => showView(on ? 'dash' : 'admin');
   }
   const sb = document.getElementById('btn-settings');
   if (sb) {
@@ -7511,7 +7894,7 @@ function resizePicture(file, cb) {
 // served as .../LCARS.html on GitHub Pages where there are no rewrites, there
 // is no path to push to — ROUTES stays off, every view opens exactly as it did
 // before, and the routes degrade to the dashboard.
-const ROUTE_VIEWS = ['settings', 'manifest'];
+const ROUTE_VIEWS = ['settings', 'manifest', 'admin'];
 let _routeView = 'dash';
 
 // Returns {base, view} when the current URL is one this app can route, else
@@ -7657,7 +8040,16 @@ document.addEventListener('DOMContentLoaded',()=>{
     // Nothing here ever asks about linking an account. That is a step of the
     // gate, and boot runs on every page load -- which is how opening Settings
     // ended up prompting.
-    if (isCloud()) cloudBoot().then(checkDeletionPending);
+    // initAdmin() only reads a role and a count -- it raises nothing, so it is
+    // safe on every load. checkMustChangePin() does raise a modal, but only for
+    // someone who signed in with a temporary PIN a moderator issued, and only
+    // when the deletion prompt has not already claimed the slot.
+    if (isCloud()) {
+      cloudBoot()
+        .then(checkDeletionPending)
+        .then(busy => { if (!busy) return checkMustChangePin(); });
+      initAdmin();
+    }
     maybeShowStyleIntro();              // held back behind the gate on a first visit
     maybeShowWizard();
   }

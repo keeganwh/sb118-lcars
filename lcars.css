@@ -1066,6 +1066,47 @@ body.hc .contact-card-bar{color:#000}
    from the pointer position in applyWithReveal(), not the control's centre. */
 ::view-transition-old(root){animation:none}
 ::view-transition-new(root){animation:vt-reveal .6s cubic-bezier(.22,.72,.2,1)}
+/* ── ADMIN VIEW ──
+   Borrows the Settings page furniture (.set-wrap, .set-card, .msec) so the
+   moderator tools read as part of the same application rather than a console
+   bolted on. Only the queue itself needs rules of its own. */
+#view-admin{display:block;overflow:auto}
+
+/* The badge is the reason the button is in the header at all: a request nobody
+   notices is a writer left locked out. Sized to sit on the button without
+   changing its height. */
+#btn-admin{position:relative}
+#admin-badge{display:inline-block;min-width:16px;margin-left:6px;padding:0 4px;
+  border-radius:8px;background:var(--red,#c66);color:#fff;
+  font-size:0.66rem;font-weight:bold;line-height:16px;text-align:center}
+#btn-admin.has-pending{border-color:var(--red,#c66)}
+
+.adm-tabs{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+
+.adm-req{border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;
+  background:var(--bg)}
+.adm-req-done{opacity:0.72}
+.adm-req-hdr{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.adm-req-wid{font-family:var(--mono,monospace);font-size:0.9rem;font-weight:bold;letter-spacing:1px;
+  color:var(--amber)}
+.adm-req-when{font-size:0.72rem;color:var(--dim)}
+.adm-req-tag{font-size:0.66rem;letter-spacing:1px;text-transform:uppercase;padding:2px 8px;
+  border-radius:10px;border:1px solid var(--border);color:var(--dim)}
+.adm-actioned{border-color:var(--amber);color:var(--amber)}
+
+/* The note is the only evidence a moderator has, and it is written by whoever
+   filed the request -- so it wraps and breaks rather than escaping its box. */
+.adm-req-note{font-size:0.85rem;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;
+  padding:8px 10px;border-left:3px solid var(--border);color:var(--fg)}
+.adm-req-acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.adm-req-foot{font-size:0.72rem;color:var(--dim);margin-top:8px}
+
+/* Shown once, read aloud or pasted into a message. Big, spaced and selectable
+   -- someone is going to copy this by eye. */
+.adm-pin{font-family:var(--mono,monospace);font-size:1.5rem;letter-spacing:4px;text-align:center;
+  padding:14px 10px;border:1px solid var(--amber);border-radius:8px;color:var(--amber);
+  user-select:all;word-break:break-all}
+
 /* ── RESPONSIVE ──
    Kept last so it outranks the skin overrides above. Covers the header and the
    two views built as pages (Settings has its own rules with its section). */
@@ -1120,4 +1161,11 @@ body.hc .contact-card-bar{color:#000}
   :root[data-skin="prime"] body{background:#fff!important;color:#000!important}
   :root[data-skin="prime"] body #editor{color:#000!important}
   :root[data-skin="prime"] body *{backdrop-filter:none!important}
+}
+
+/* The admin view is a page like Settings, so it takes the same narrow-screen
+   padding. The queue's action buttons go full width rather than crowding. */
+@media (max-width: 820px){
+  .adm-req-acts .btn{flex:1 1 100%}
+  .adm-pin{font-size:1.2rem;letter-spacing:3px}
 }

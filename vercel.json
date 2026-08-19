@@ -4,6 +4,7 @@
     { "source": "/", "destination": "/LCARS.html" },
     { "source": "/settings", "destination": "/LCARS.html" },
     { "source": "/manifest", "destination": "/LCARS.html" },
+    { "source": "/admin", "destination": "/LCARS.html" },
     { "source": "/guide", "destination": "/LCARS-Guide-v2.html" }
   ],
   "headers": [

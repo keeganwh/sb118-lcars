@@ -26,6 +26,15 @@ _On `main` and live, not yet cut as a version._
 - Changed: connecting a Google or Discord account is now offered as the last step of creating or signing into an account, in the same window, rather than as a message that appeared afterwards. Writers with an existing account are asked once, the next time they sign in. Both providers are offered and it can be declined
 - Fixed: that offer no longer appears when you open Settings. It used to be raised on start-up, and start-up happens on every page load — including going straight to Settings, which is not a moment anyone wants interrupting
 - Changed: whether the offer has been made is remembered against your account rather than the browser, so it follows you and is asked exactly once no matter which device you next sign in on
+- Added: moderators. A writer can now be given a moderator or super admin role, so the fleet can look after its own accounts — previously anyone who lost their PIN without a linked account had to find the maintainer
+- Added: Request a PIN reset, on the Forgotten your PIN? screen. If you never linked a Google or Discord account, or they are not working, you can now ask a moderator directly. You give your Writer ID and a note saying how they can check the request really came from you — a Discord handle or an email address they can reach you at
+- Added: an Admin panel for moderators, with a count in the header of requests waiting. Every moderator sees the same count, so a request cannot sit unnoticed because one person did not log in
+- Added: moderators can issue a temporary PIN from the panel, to pass on however that writer asked to be contacted. The PIN is shown once and never stored anywhere readable, the writer's old PIN and any open sessions stop working immediately, and LCARS makes them choose their own PIN the moment they sign in with it
+- Added: requests can also be rejected, with a confirmation first. Rejecting only closes the request — there is nowhere to send a reply, since whoever filed it is locked out — so a request that might be genuine is better followed up in person
+- Added: an Archive of every request ever decided, showing who actioned or rejected it and when. Nothing is ever deleted, so a reset can always be accounted for afterwards
+- Added: super admins can assign roles from the panel, by Writer ID. Moderators only ever see the reset queue — there is no list of writers and no access to anyone's sims
+- Changed: a request filed against a Writer ID with no LCARS account is accepted and quietly dropped, so this cannot be used to find out who has an account. The confirmation says to double-check the Writer ID, because a typo is the one mistake with no other symptom
+- Fixed: the introduction to the Delta Prime look could paint over a prompt that had to be answered — including the one asking you to replace a temporary PIN, which has no way to dismiss it. It now waits for the next visit if anything is already on screen
 
 ## v4.23 — 2026-08-15
 
