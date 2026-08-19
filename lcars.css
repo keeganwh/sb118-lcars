@@ -1107,6 +1107,28 @@ body.hc .contact-card-bar{color:#000}
   padding:14px 10px;border:1px solid var(--amber);border-radius:8px;color:var(--amber);
   user-select:all;word-break:break-all}
 
+/* The roster. A table rather than cards: four short columns that want to line
+   up, and scanning down a column is the whole point of having a list. */
+.adm-w-count{font-size:0.72rem;color:var(--dim);margin:10px 0 6px}
+.adm-w-scroll{max-height:340px;overflow:auto;border:1px solid var(--border);border-radius:8px}
+.adm-w-tbl{width:100%;border-collapse:collapse;font-size:0.8rem}
+.adm-w-tbl th{position:sticky;top:0;z-index:1;background:var(--panel);text-align:left;
+  font-size:0.66rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--amber);
+  padding:8px 10px;border-bottom:1px solid var(--border)}
+.adm-w-tbl td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+.adm-w-tbl tr:last-child td{border-bottom:0}
+.adm-w-id{font-family:var(--mono,monospace);letter-spacing:0.5px;white-space:nowrap}
+.adm-w-when{white-space:nowrap;color:var(--dim);font-size:0.75rem}
+.adm-w-none{color:var(--dim);font-style:italic}
+.adm-w-you{margin-left:6px;padding:1px 6px;border-radius:8px;border:1px solid var(--amber);
+  color:var(--amber);font-size:0.6rem;letter-spacing:1px;text-transform:uppercase}
+.adm-w-del{margin-left:6px;padding:1px 6px;border-radius:8px;border:1px solid var(--red,#c66);
+  color:var(--red,#c66);font-size:0.6rem;letter-spacing:1px;text-transform:uppercase}
+.adm-w-going td{opacity:0.6}
+.adm-w-role{padding:3px 6px;font-size:0.76rem;min-width:120px}
+.adm-w-role:disabled{opacity:0.5;cursor:not-allowed}
+#adm-w-filter{margin-bottom:4px}
+
 /* ── RESPONSIVE ──
    Kept last so it outranks the skin overrides above. Covers the header and the
    two views built as pages (Settings has its own rules with its section). */
@@ -1168,4 +1190,8 @@ body.hc .contact-card-bar{color:#000}
 @media (max-width: 820px){
   .adm-req-acts .btn{flex:1 1 100%}
   .adm-pin{font-size:1.2rem;letter-spacing:3px}
+  /* Four columns will not fit a phone. The table scrolls sideways inside its
+     own box rather than pushing the page wider. */
+  .adm-w-scroll{max-height:60vh}
+  .adm-w-tbl{min-width:520px}
 }

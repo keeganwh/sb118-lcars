@@ -489,3 +489,47 @@ end $$;
 
 revoke all on function public.admin_set_role(text, text) from public, anon;
 grant execute on function public.admin_set_role(text, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- admin_list_writers() : the roster, for super admins only
+-- ---------------------------------------------------------------------------
+-- Deliberately not a policy on public.writers. Widening writers_own would mean
+-- every query against that table carries a role test forever, and a mistake in
+-- it would be a mistake in the table every writer reads on every boot. A
+-- function is the narrow version of the same permission: it returns four
+-- columns, to one role, and the rest of the app is untouched.
+--
+-- Note what is NOT returned -- nothing about anyone's sims, and no auth
+-- identity. This answers "who holds an account and what can they do", which is
+-- what assigning a role needs, and nothing further.
+--
+-- Moderators are excluded on purpose. They exist to action a queue; a roster
+-- would make a compromised moderator account worth more without making the
+-- queue work any better.
+create or replace function public.admin_list_writers()
+returns table (
+  writer_id    text,
+  display_name text,
+  role         text,
+  created_at   timestamptz,
+  deleted_at   timestamptz,
+  is_me        boolean
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if public.my_role() <> 'super_admin' then
+    raise exception 'Only a super admin can view the writer list.';
+  end if;
+  return query
+    select w.writer_id, w.display_name, w.role, w.created_at, w.deleted_at,
+           (w.id = auth.uid()) as is_me
+      from public.writers w
+     order by w.created_at;
+end $$;
+
+revoke all on function public.admin_list_writers() from public, anon;
+grant execute on function public.admin_list_writers() to authenticated;

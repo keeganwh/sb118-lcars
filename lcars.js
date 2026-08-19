@@ -221,6 +221,10 @@ const VERSIONS = [
       'Added: super admins can assign roles from the panel, by Writer ID. Moderators only ever see the reset queue \u2014 there is no list of writers and no access to anyone\u2019s sims',
       'Changed: a request filed against a Writer ID with no LCARS account is accepted and quietly dropped, so this cannot be used to find out who has an account. The confirmation says to double-check the Writer ID, because a typo is the one mistake with no other symptom',
       'Fixed: the introduction to the Delta Prime look could paint over a prompt that had to be answered \u2014 including the one asking you to replace a temporary PIN, which has no way to dismiss it. It now waits for the next visit if anything is already on screen',
+      'Added: super admins now see a list of every account in the Admin panel \u2014 Writer ID, display name if one is set, when they joined, and their role. It scrolls, and there is a filter box for finding someone by either Writer ID or name',
+      'Changed: a role is now set from the row itself rather than by typing a Writer ID into a separate box, which was two chances to promote the wrong person. Changing one asks you to confirm, and says what the new role can do',
+      'Added: your own row cannot be changed, because with no super admin left the only way back is a hand-run database statement. Accounts in their 48-hour deletion window are marked as such',
+      'Changed: moderators still see no writer list \u2014 the roster is super admins only. It shows who holds an account and what they can do, and nothing about anyone\u2019s sims',
     ],
   },
 ];
@@ -1412,6 +1416,8 @@ function renderAdminView() {
       ${isSuperAdmin() ? adminRolesCard() : ''}
     </div>`;
 
+  if (isSuperAdmin()) loadWriters();
+
   fetchResetRequests(open)
     .then(rows => paintResetRequests(rows, open))
     .catch(() => {
@@ -1515,46 +1521,130 @@ function confirmRejectReset(id, wid) {
     }, { ok: 'Reject it' });
 }
 
-// Roles are assigned by typing a Writer ID rather than by picking from a list.
-// Moderators are trusted with other people's accounts, so promoting someone
-// should mean already knowing exactly who they are.
+// The roster. Super admins only, and the role is set from the row itself --
+// looking someone up and then retyping their Writer ID into a separate box was
+// two chances to promote the wrong person.
 function adminRolesCard() {
   return `
     <div class="set-card">
-      <div class="msec">ROLES</div>
+      <div class="msec">WRITERS &amp; ROLES</div>
       <div class="set-block">
-        <span class="set-note" style="margin:0 0 8px">Moderators see the reset queue and nothing else — no
-          list of writers, no access to anyone's sims. Super admins can also assign roles.</span>
-        <div class="mf"><label class="ml">WRITER ID</label>
-          <input class="mi" id="adm-role-wid" placeholder="A239809JP3" autocomplete="off"></div>
-        <div class="mf"><label class="ml">ROLE</label>
-          <select class="mi" id="adm-role-val">
-            <option value="writer">Writer</option>
-            <option value="moderator">Moderator</option>
-            <option value="super_admin">Super admin</option>
-          </select></div>
-        <div id="adm-role-msg" style="font-size:0.76rem;line-height:1.5;min-height:1.1em;color:var(--dim)"></div>
-        <button class="btn btn-p" onclick="submitSetRole()">${ic('check')} Set role</button>
+        <span class="set-note" style="margin:0 0 10px">Moderators see the reset queue and nothing else — no
+          writer list, no access to anyone's sims. Super admins can also assign roles.</span>
+        <input class="mi" id="adm-w-filter" placeholder="Filter by Writer ID or display name…"
+               autocomplete="off" oninput="paintWriters()">
+        <div id="adm-writers"><span class="set-note">Loading…</span></div>
       </div>
     </div>`;
 }
 
-function submitSetRole() {
-  const msg = document.getElementById('adm-role-msg');
-  const wid = (document.getElementById('adm-role-wid').value || '').trim();
-  const role = document.getElementById('adm-role-val').value;
-  if (!validWriterId(wid)) {
-    msg.style.color = 'var(--red,#c66)';
-    msg.textContent = 'That does not look like a Writer ID — it should be ten characters, like A239809JP3.';
+let _writers = [];
+
+function loadWriters() {
+  if (!isSuperAdmin()) return;
+  supaRpc('admin_list_writers')
+    .then(rows => { _writers = rows || []; paintWriters(); })
+    .catch(e => {
+      const el = document.getElementById('adm-writers');
+      if (el) el.innerHTML = '<span class="set-note" style="color:var(--red,#c66)">' + esc(e.message) + '</span>';
+    });
+}
+
+const ROLE_OPTS = [
+  { v: 'writer',      l: 'Writer' },
+  { v: 'moderator',   l: 'Moderator' },
+  { v: 'super_admin', l: 'Super admin' },
+];
+
+function paintWriters() {
+  const el = document.getElementById('adm-writers');
+  if (!el) return;
+  const f = ((document.getElementById('adm-w-filter') || {}).value || '').trim().toUpperCase();
+  const rows = _writers.filter(w =>
+    !f || (w.writer_id || '').includes(f) || (w.display_name || '').toUpperCase().includes(f));
+
+  if (!rows.length) {
+    el.innerHTML = '<span class="set-note">' +
+      (_writers.length ? 'No writer matches that.' : 'No accounts yet.') + '</span>';
     return;
   }
-  msg.style.color = 'var(--dim)'; msg.textContent = 'Saving…';
-  supaRpc('admin_set_role', { p_writer_id: normalizeWriterId(wid), p_role: role })
-    .then(() => {
-      msg.textContent = normalizeWriterId(wid) + ' is now a ' + roleLabel(role) + '.';
-      document.getElementById('adm-role-wid').value = '';
-    })
-    .catch(e => { msg.style.color = 'var(--red,#c66)'; msg.textContent = e.message; });
+
+  el.innerHTML = `
+    <div class="adm-w-count">${rows.length} of ${_writers.length} account${_writers.length === 1 ? '' : 's'}</div>
+    <div class="adm-w-scroll">
+      <table class="adm-w-tbl">
+        <thead><tr><th>Writer ID</th><th>Display name</th><th>Joined</th><th>Role</th></tr></thead>
+        <tbody>
+          ${rows.map(w => `
+            <tr${w.deleted_at ? ' class="adm-w-going"' : ''}>
+              <td class="adm-w-id">${esc(w.writer_id)}${w.is_me ? '<span class="adm-w-you">you</span>' : ''}
+                ${w.deleted_at ? '<span class="adm-w-del">deletion pending</span>' : ''}</td>
+              <td>${w.display_name ? esc(w.display_name) : '<span class="adm-w-none">not set</span>'}</td>
+              <td class="adm-w-when">${esc(fmtJoined(w.created_at))}</td>
+              <td>
+                <select class="mi adm-w-role" ${w.is_me ? 'disabled title="You cannot change your own role — with no super admin left, the only way back is a hand-run SQL statement"' : ''}
+                        onchange="setRoleFromRow('${esc(w.writer_id)}', this)">
+                  ${ROLE_OPTS.map(o => `<option value="${o.v}"${w.role === o.v ? ' selected' : ''}>${o.l}</option>`).join('')}
+                </select>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div id="adm-w-msg" class="set-note" style="min-height:1.1em"></div>`;
+}
+
+function fmtJoined(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// Changing a role from a dropdown is one keystroke away from an accident, and
+// promoting the wrong person to super admin is not quietly undoable -- they can
+// demote you. So a change is confirmed, and the select snaps back if it is not.
+function setRoleFromRow(wid, sel) {
+  const to = sel.value;
+  const was = (_writers.find(w => w.writer_id === wid) || {}).role || 'writer';
+  if (to === was) return;
+  const revert = () => { sel.value = was; };
+
+  openModal('Change role', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 10px"><strong>${esc(wid)}</strong> becomes a <strong>${esc(roleLabel(to))}</strong>.</p>
+      <p style="margin:0;color:var(--dim);font-size:0.8rem">${
+        to === 'super_admin'
+          ? 'A super admin can see every account, assign roles, and action reset requests — including changing your role.'
+          : to === 'moderator'
+            ? 'A moderator can see the PIN reset queue and issue temporary PINs. They cannot see this list.'
+            : 'They lose access to the reset queue and the moderator tools.'}</p>
+    </div>`, () => {
+      const msg = document.getElementById('adm-w-msg');
+      supaRpc('admin_set_role', { p_writer_id: wid, p_role: to })
+        .then(() => {
+          closeModal();
+          const w = _writers.find(x => x.writer_id === wid);
+          if (w) w.role = to;
+          showToast(wid + ' is now a ' + roleLabel(to));
+          paintWriters();
+        })
+        .catch(e => {
+          closeModal(); revert();
+          if (msg) { msg.style.color = 'var(--red,#c66)'; msg.textContent = e.message; }
+          else showToast(e.message, 5200);
+        });
+      return false;
+    }, { ok: 'Change it' });
+  // openModal has no cancel callback -- Cancel just hides it. Without this, a
+  // dismissed confirm would leave the dropdown showing a role that was never
+  // set, which reads as though it had been.
+  const mo = document.getElementById('mo');
+  const watch = setInterval(() => {
+    if (mo.classList.contains('hidden')) {
+      clearInterval(watch);
+      const w = _writers.find(x => x.writer_id === wid);
+      if (w && w.role !== sel.value) revert();
+    }
+  }, 200);
 }
 
 // ── Asking for a reset ────────────────────────────────────────────────────

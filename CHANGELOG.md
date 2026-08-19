@@ -35,6 +35,10 @@ _On `main` and live, not yet cut as a version._
 - Added: super admins can assign roles from the panel, by Writer ID. Moderators only ever see the reset queue — there is no list of writers and no access to anyone's sims
 - Changed: a request filed against a Writer ID with no LCARS account is accepted and quietly dropped, so this cannot be used to find out who has an account. The confirmation says to double-check the Writer ID, because a typo is the one mistake with no other symptom
 - Fixed: the introduction to the Delta Prime look could paint over a prompt that had to be answered — including the one asking you to replace a temporary PIN, which has no way to dismiss it. It now waits for the next visit if anything is already on screen
+- Added: super admins now see a list of every account in the Admin panel — Writer ID, display name if one is set, when they joined, and their role. It scrolls, and there is a filter box for finding someone by either Writer ID or name
+- Changed: a role is now set from the row itself rather than by typing a Writer ID into a separate box, which was two chances to promote the wrong person. Changing one asks you to confirm, and says what the new role can do
+- Added: your own row cannot be changed, because with no super admin left the only way back is a hand-run database statement. Accounts in their 48-hour deletion window are marked as such
+- Changed: moderators still see no writer list — the roster is super admins only. It shows who holds an account and what they can do, and nothing about anyone's sims
 
 ## v4.23 — 2026-08-15
 
