@@ -181,3 +181,87 @@ already talk to that person; the writer changes it on next sign-in.
 - Tests carefully on the Vercel preview and reports precisely. Trust the reports.
 - Prefers fewer moving parts over more capability.
 - Sends corrections mid-turn; read them as they arrive.
+
+---
+
+# Session 4 — roles and the admin panel (2026-08-19)
+
+Built, committed, **not yet applied to the live project and not verified
+against it.** The sandbox blocks every outbound host, so all of it was proved
+against an intercepted Supabase — same limitation as session 3, same
+consequence: the user is the only route to real verification.
+
+## Settled with the user, do not re-litigate
+
+- **The temporary PIN writes `auth.users.encrypted_password` via `crypt()`.**
+  Chosen with the cost named: it is the one unsupported thing in the schema,
+  and if Supabase changes password hashing the issued PIN simply will not work.
+  The fallback — approval mints a one-time token, the writer sets their own PIN
+  through the supported API — is written into `admin_action_reset()`'s comment
+  so it does not have to be re-derived.
+- **The maintainer's Writer ID is `V239806K11`.** Asked for across three
+  sessions; it is now in the schema's bootstrap comment.
+- **The oracle question is moot** — Writer IDs are already public. Unknown IDs
+  are still dropped silently, but the reason is "do not reveal who holds an
+  account", not the IDs themselves.
+- **Moderators see the queue only.** No writer list, no access to sims.
+- **Every request is kept forever.** Archive tab, with who decided and when.
+- **Rejecting takes a confirmation.**
+- **"Request a PIN reset" is offered to everyone**, not only the unlinked. The
+  user's point: someone whose linked account is misbehaving needs the same
+  door, and making people diagnose themselves before they can ask for help is
+  the wrong shape.
+
+## Architecture
+
+- **`my_role()` exists to break an RLS recursion.** The queue's policy needs the
+  caller's role, which lives in `writers`, whose own policy would ask again —
+  Postgres calls that infinite recursion and fails at query time, not deploy
+  time. A `security definer` read breaks the loop.
+- **Client-side guards are cosmetic and the code says so.** The header button,
+  the view, `isModerator()` — all conveniences. RLS on `pin_reset_requests` and
+  the role tests inside the functions are the boundary. `/admin` as a writer
+  draws a refusal card rather than an empty queue.
+- **`request_pin_reset()` is the schema's only anonymous write** — necessarily,
+  the requester has no session. Rate limit (one open request per ID, none
+  within an hour) and note validation live inside the function, not in a policy.
+- **`must_change_pin` makes a temporary PIN last exactly one sign-in.** A PIN
+  read out over Discord is not a PIN.
+- **Actioning deletes the target's `auth.sessions`.** If the reason for the
+  reset was that somebody else got in, leaving their session alive defeats it.
+- **`admin_set_role()` refuses to demote yourself.** With no super admin left
+  the only way back is another hand-run statement.
+
+## Landmines — added this session
+
+- **The Delta Prime intro fires on a 400ms timer and painted over whatever boot
+  had raised.** Found by the harness, not by reading. It was covering the
+  choose-your-own-PIN prompt, which is `noCancel` — so a writer would have
+  carried on using a PIN a moderator had read. `maybeShowStyleIntro()` now
+  checks `#mo` is hidden as well as the route. Any *new* boot-time prompt needs
+  the same thought: this is the third bug in this family.
+- **`Content-Range` is a cross-origin header and is invisible unless exposed.**
+  The badge count reads it. Real Supabase names it in
+  `Access-Control-Expose-Headers`; the first mock did not, which is what made
+  the count go red. Fix the mock first — it was right to.
+- **Routing is off when served as `/LCARS.html`**, so a back-button assertion
+  passes or fails for the wrong reason. Test `applyRoute()` directly.
+
+## Test harness
+
+Rebuilt in the scratchpad, **not committed** — `lib.js`, `run.sh`, `suite.sh`,
+`smoke.js`, `regress.js`, `admin-check.js` with modes
+`moderator | writer | action | reject | roles | request | temppin | route`.
+`smoke.js` carries the function-presence list, which is the guard against the
+splice landmine. All green at commit d4adc47.
+
+Traps, on top of session 3's: seeding `seenStyleIntro` with a value that does
+not match `STYLE_VERSION` raises the intro over everything; and the belt-and-
+braces `closeModal()` after boot will tear down the very prompt a test is
+about — `temppin` has to skip it.
+
+## Next
+
+1. **Apply the schema and verify live.** Bootstrap line, then file a request
+   against a spare Writer ID and action it end to end.
+2. Session 4 of the roadmap — read-only share links — is next in priority order.

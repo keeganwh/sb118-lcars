@@ -99,22 +99,29 @@ and a one-time recovery code (the user found it sloppy, and retention is poor).
 
 ### Still open — next session
 
-- [ ] **Roles and the admin panel.**
-      For writers with nothing linked, who are the ones who actually need help.
-      `writers.role` of `writer` / `moderator` / `super_admin`. A "Forgotten your
-      PIN?" route for the unlinked files a request; moderators action the queue,
-      super admins also assign roles. Bootstrapping the first super admin is one
-      hand-run SQL statement — **the maintainer's real Writer ID is needed for
-      it and was never given, so ask.**
-      Agreed scope: moderators see the request queue only, not a writer list.
-      A reset hands the moderator a temporary PIN to pass on however they
-      already talk to that person; the writer changes it on next sign-in.
-      _Done when: a writer with no linked account can ask for a PIN reset, and any moderator can action it without leaving LCARS._
-      _The temporary-PIN half writes `auth.users.encrypted_password` via `crypt()`
-      in a `security definer` function. That is the one unsupported thing in any
-      of this — it touches Supabase's internal schema and would break if they
-      change password hashing. Recoverable (fix the function, reset again), but
-      decide deliberately rather than by accident._
+- [x] **Roles and the admin panel.**
+      `writers.role` of `writer` / `moderator` / `super_admin`. "Forgotten your
+      PIN?" now offers **Request a PIN reset** to anyone -- not only the
+      unlinked -- since "my linked account is not working" needs the same door.
+      A request carries the Writer ID, a timestamp and a mandatory free-text
+      note saying how the requester can be verified. Moderators see the queue
+      and nothing else; a count in the header means every moderator sees a
+      waiting request without going looking. Actioning issues a temporary PIN,
+      shown once, which `must_change_pin` turns into exactly one sign-in.
+      Rejecting takes a confirmation. Every decided request is kept in an
+      Archive with who decided it and when.
+      _Bootstrap: the schema carries the one hand-run statement, against
+      V239806K11._
+      _The temporary PIN writes `auth.users.encrypted_password` via `crypt()`.
+      Chosen deliberately over a one-time token; the fallback if Supabase ever
+      changes password hashing is written into the function's own comment._
+
+- [ ] **Apply the schema, then verify the panel live.** Nothing in the admin
+      work has run against the real project -- the sandbox blocks every
+      outbound host, so it was all proved against an intercepted Supabase.
+      Order: apply `supabase/schema.sql`, run the bootstrap line for
+      V239806K11, then file a request against a spare Writer ID and action it.
+      _Done when: a real temporary PIN signs a real account in and is replaced._
 
 - [ ] **Two edge cases never exercised against the live project.**
       1. Linking a provider account already linked to a *different* Writer ID.
