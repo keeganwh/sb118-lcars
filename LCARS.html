@@ -207,8 +207,8 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
         <button class="tbb" id="tbb-s" onclick="ec('strikeThrough')" title="Strikethrough"><s>S</s></button>
         <button class="tbb" onclick="doLink()" title="Link (Ctrl+K)"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg></button>
         <div class="tsep"></div>
-        <button class="tbb tbb-names" onclick="doIndent()" title="Indent (Tab)" style="padding:3px 5px"><svg class="ic" aria-hidden="true"><use href="#i-indent"/></svg></button>
-        <button class="tbb tbb-names" onclick="doOutdent()" title="Outdent (Shift+Tab)" style="padding:3px 5px"><svg class="ic" aria-hidden="true"><use href="#i-outdent"/></svg></button>
+        <button class="tbb tbb-names" id="tbb-ind" onclick="doIndent()" title="Indent (Tab)" style="padding:3px 5px"><svg class="ic" aria-hidden="true"><use href="#i-indent"/></svg></button>
+        <button class="tbb tbb-names" id="tbb-outd" onclick="doOutdent()" title="Outdent (Shift+Tab)" style="padding:3px 5px"><svg class="ic" aria-hidden="true"><use href="#i-outdent"/></svg></button>
         <div class="tsep"></div>
         <!-- Dropdown mode (default) -->
         <div class="tb-dd-wrap tb-ins-wrap" id="tb-ins-wrap">

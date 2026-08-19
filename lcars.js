@@ -192,6 +192,10 @@ const VERSIONS = [
     changes: [
       'Changed: new icon \u2014 the gold delta \u2014 in the browser tab, and on your home screen if you add LCARS to it from a phone',
       'Added: the delta now sits in the top-left LCARS badge as well, on a dark disc with a fine light ring. The disc is not quite solid, so the duty-post colour tints it \u2014 and it keeps the delta legible even on Operations gold, where the badge is the same colour as the mark',
+      'Fixed: Academy sims were still auto-formatting some markers \u2014 ((Location)) came out bold and ((OOC)) italic, both on screen and when copied out. Neither shows now, and neither is carried onto the clipboard. The coloured highlights on Actions, Comms and Thoughts stay, since those are only ever visual aids and were never copied out anyway',
+      'Fixed: pasting formatted text into an Academy sim kept its bold and italics until the sim was next reopened. Pasted text is now stripped as it goes in',
+      'Changed: Academy sims allow more of the toolbar than they used to \u2014 links, source view, paragraph markers and the whole Insert marker menu are all available again. Bold, italic, strikethrough, indenting and the Auto Format toggles stay switched off, which is what the plain-text rule actually asks for',
+      'Fixed: in an Academy sim the bold, italic and strikethrough buttons were only dimmed, not disabled, and editing the raw source could put formatting back. Both routes are now closed off',
     ],
   },
 ];
@@ -545,13 +549,18 @@ function isAcademyDoc(doc) {
   const m = S.missions[doc.missionId];
   return m ? m.simType === 'academy' : false;
 }
+// Is the sim currently open in the editor an Academy sim?
+function isAcademyActive() {
+  return !!(curId && isAcademyDoc(S.docs[curId]));
+}
 
 function stripFormattingHtml(html) {
   if (!html) return html;
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
-  // Unwrap rich formatting tags: bold, italic, strikethrough, links
-  tmp.querySelectorAll('strong, b, em, i, s, strike, u, a').forEach(el => {
+  // Unwrap rich formatting tags: bold, italic, strikethrough, underline.
+  // Links are allowed in Academy sims, so <a> is deliberately left intact.
+  tmp.querySelectorAll('strong, b, em, i, s, strike, u').forEach(el => {
     const p = el.parentNode; if (!p) return;
     while (el.firstChild) p.insertBefore(el.firstChild, el);
     p.removeChild(el);
@@ -1826,7 +1835,11 @@ function toggleSourceView() {
     // Exit source mode — apply edits back to editor
     _sourceMode = false;
     const ta = document.getElementById('src-mode-ta');
-    if (ta) { ed.innerHTML = ta.value; ta.remove(); schedSave(); setTimeout(transformNow, 0); }
+    if (ta) {
+      // Source editing can reintroduce formatting an Academy sim isn't allowed to keep
+      ed.innerHTML = isAcademyActive() ? stripFormattingHtml(ta.value) : ta.value;
+      ta.remove(); schedSave(); setTimeout(transformNow, 0);
+    }
     ed.style.display = '';
     if (btn) { btn.classList.remove('tbb-active'); btn.title = 'View / edit raw HTML source of this sim'; }
   }
@@ -2035,7 +2048,10 @@ function installPasteHandler() {
     e.preventDefault();
     const html = e.clipboardData.getData('text/html');
     const plain = e.clipboardData.getData('text/plain');
-    const cleaned = html ? cleanPasteHTML(html) : plainToHTML(plain);
+    let cleaned = html ? cleanPasteHTML(html) : plainToHTML(plain);
+    // Academy sims accept plain text only — strip formatting as it comes in,
+    // rather than leaving it to survive until the doc is next reopened
+    if (isAcademyActive()) cleaned = stripFormattingHtml(cleaned);
     const ed = document.getElementById('editor');
     document.execCommand('insertHTML', false, cleaned);
     normalizeEditorContent(ed);
@@ -2087,8 +2103,9 @@ function installCopyHandler() {
       p.replaceChild(span, bq);
     });
 
-    // Preserve bold on location markers and italic on OOC markers before unwrapping
-    const prefs = getPrefs();
+    // Preserve bold on location markers and italic on OOC markers before unwrapping.
+    // Academy sims are plain text — no auto-formatting is rendered, so none is copied out.
+    const prefs = isAcademyActive() ? {} : getPrefs();
     if (prefs.boldLocations) {
       tmp.querySelectorAll('.lm').forEach(span => {
         const strong = document.createElement('strong');
@@ -2326,6 +2343,7 @@ function setIndentLevel(el, n) {
 let _indentUndo = [];   // [{el, fromLevel}]
 
 function doIndent() {
+  if (isAcademyActive()) return;   // indenting is unavailable in Academy sims
   const block = getCaretBlock();
   if (!block) return;
   const from = getIndentLevel(block);
@@ -2336,6 +2354,7 @@ function doIndent() {
 }
 
 function doOutdent() {
+  if (isAcademyActive()) return;   // indenting is unavailable in Academy sims
   const block = getCaretBlock();
   if (!block) return;
   const from = getIndentLevel(block);
@@ -3083,7 +3102,11 @@ function removeConfirmedPair(a, b) {
 // ================================================================
 // TOOLBAR ACTIONS
 // ================================================================
-function ec(cmd) { document.getElementById('editor').focus(); document.execCommand(cmd,false,null); }
+function ec(cmd) {
+  // Bold / italic / strikethrough are unavailable in Academy sims
+  if (isAcademyActive() && ['bold','italic','underline','strikeThrough'].includes(cmd)) return;
+  document.getElementById('editor').focus(); document.execCommand(cmd,false,null);
+}
 
 function doLink() {
   const sel = window.getSelection();
@@ -5600,7 +5623,7 @@ document.addEventListener('keydown',e=>{
   if(e.ctrlKey&&!e.shiftKey){
     if(e.key==='b'){e.preventDefault();if(!acad)ec('bold');}
     if(e.key==='i'){e.preventDefault();if(!acad)ec('italic');}
-    if(e.key==='k'){e.preventDefault();if(!acad)doLink();}
+    if(e.key==='k'){e.preventDefault();doLink();}
     // Intercept Ctrl+Z when there are pending indent undo entries
     if(e.key==='z'&&_indentUndo.length){
       const entry = _indentUndo.pop();
