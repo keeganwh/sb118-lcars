@@ -65,53 +65,69 @@ Code" note moved off the Dashboard into About LCARS.
 
 ## Session 3 — Account recovery and true deletion
 
-> **Start with a methods discussion, not code.** How PIN reset should work is
-> genuinely unsettled, and the options differ in what they cost to run. The
-> user's stated preference is **keep it simple**, and they are open to
-> collecting different data from writers or offering fewer recovery routes if
-> that avoids standing up another service. Agree the approach first.
->
-> The constraint driving all of it: the auth account's email is synthetic
-> (`<writerid>@lcars.local`), chosen so sign-in needs no server lookup. It
-> cannot receive mail, so Supabase's built-in password-reset flow has nowhere
-> to send. Options include emailing `writers.recovery_email` from an Edge
-> Function via an external sender; making the real email the auth identity and
-> using the built-in flow, at the cost of the no-lookup sign-in design; or
-> **dropping email entirely** in favour of a one-time recovery code issued at
-> signup and regenerable from Settings, which needs no external service at all.
-> Verify current Supabase behaviour and limits against their docs rather than
-> assuming — the free tier's built-in mailer is rate-limited and documented as
-> development-only.
+**Method settled 2026-08-19, do not re-litigate.** No Edge Function, no email
+provider, no domain, no secrets. Two mechanisms carry the whole session:
 
-True deletion is the simpler half and is blocked only on the `service_role`
-key, which must never be in a page served to writers. Whether it still shares
-an Edge Function with recovery depends on what recovery turns out to need.
+| Need | How |
+|---|---|
+| Remove a login (anon key cannot) | `security definer` Postgres function in `supabase/schema.sql` |
+| Recover a forgotten PIN | a linked Google or Discord identity on the same auth user |
 
-> **Deferred edge cases — check before merging to main.**
-> Both are real paths that were skipped during preview testing as low-frequency,
-> and neither is covered end-to-end against the live project yet:
-> 1. *Linking a provider account that is already linked to a different Writer ID.*
->    Should refuse with "That account is already linked". The translation exists
->    in `prettyOAuthError`; the live refusal text has never been seen, so the
->    match may not fire.
-> 2. *Deleting an account while the server is unreachable.* Covered by the
->    harness (`account-check.js offline`) but never exercised by hand.
+Options weighed and rejected: emailing `writers.recovery_email` via Resend (needs
+a paid domain and a vendor), making the real email the auth identity (costs the
+no-lookup sign-in and leaks a Writer-ID→email oracle — and Supabase's built-in
+mailer only delivers to project team members anyway, so it was never an option),
+and a one-time recovery code (the user found it sloppy, and retention is poor).
 
-- [ ] **Self-serve PIN reset.** _Method to be agreed first — see the note above._
-      `writers.recovery_email` is collected today but nothing has ever sent to it; it exists for identification only.
+- [x] **Self-serve PIN reset.**
+      Writer ID + PIN stays the primary sign-in, so the auth address is still
+      derived from the Writer ID with no server lookup. A linked provider is an
+      *additional* identity on the same auth user — a faster way in, and the way
+      back in. "Forgotten your PIN?" → sign in with the linked account → set a
+      new PIN from that session. `recovery_email` is gone entirely.
       _Done when: a writer who has lost their PIN can get back into their account without the maintainer._
+      _Caveat: only for writers who linked something. Everyone else still needs
+      the maintainer — that gap is what the admin panel below closes._
 
 - [x] **True account deletion.**
-      Done without an Edge Function: a `security definer` Postgres function
-      (`purge_expired_deletions`) does what the anon key cannot, and lives in
-      `supabase/schema.sql` like everything else. No provider, no secrets, and it
-      moves with the database if the fleet ever takes over hosting.
-      Deletion is now two-stage — asking for it stamps `writers.deleted_at`
-      (an ordinary update under the existing RLS policy, so nothing privileged
-      is involved in the reversible half), and the login is removed only once a
-      **48-hour grace period** lapses. Purge runs lazily on any signed-in boot
-      rather than depending on a scheduler.
+      `purge_expired_deletions()` does what the anon key cannot. Deletion is
+      two-stage: asking stamps `writers.deleted_at` (an ordinary update under the
+      existing RLS policy — nothing privileged in the reversible half), and the
+      login goes only once a **48-hour grace period** lapses. Purge runs lazily
+      on any signed-in boot rather than depending on a scheduler.
       _Done when: deleting an account also removes the login, freeing the Writer ID to be registered again._
+
+### Still open — next session
+
+- [ ] **Roles and the admin panel.**
+      For writers with nothing linked, who are the ones who actually need help.
+      `writers.role` of `writer` / `moderator` / `super_admin`. A "Forgotten your
+      PIN?" route for the unlinked files a request; moderators action the queue,
+      super admins also assign roles. Bootstrapping the first super admin is one
+      hand-run SQL statement — **the maintainer's real Writer ID is needed for
+      it and was never given, so ask.**
+      Agreed scope: moderators see the request queue only, not a writer list.
+      A reset hands the moderator a temporary PIN to pass on however they
+      already talk to that person; the writer changes it on next sign-in.
+      _Done when: a writer with no linked account can ask for a PIN reset, and any moderator can action it without leaving LCARS._
+      _The temporary-PIN half writes `auth.users.encrypted_password` via `crypt()`
+      in a `security definer` function. That is the one unsupported thing in any
+      of this — it touches Supabase's internal schema and would break if they
+      change password hashing. Recoverable (fix the function, reset again), but
+      decide deliberately rather than by accident._
+
+- [ ] **Two edge cases never exercised against the live project.**
+      1. Linking a provider account already linked to a *different* Writer ID.
+         Should refuse with "That account is already linked". The translation
+         exists in `prettyOAuthError`, but the live refusal text has never been
+         seen, so the match may not fire.
+      2. Deleting an account while the server is unreachable. Covered by
+         `account-check.js offline`, never done by hand.
+
+- [ ] **Orphaned auth users.** Logins whose `writers` row was deleted by hand
+      still hold their Writer ID. Find with a left join from `auth.users`; delete
+      from the dashboard or with a `created_at` guard so an in-progress signup is
+      never caught. Historical only — deletion through LCARS no longer does this.
 
 ---
 

@@ -3,3 +3,4 @@
 - [Session log July 2026](session_lcars_2026-07.md) — features/fixes shipped, architecture notes, data size warning, git workflow reminders
 - [Platform plan Aug 2026](session_lcars_2026-08-platform-plan.md) — **read before starting any ROADMAP phase.** The Vercel + Supabase shift: decisions, reasoning, key code locations, landmines
 - [Views & Settings Aug 2026](session_lcars_2026-08-views.md) — **read alongside the platform plan.** The view layer, Settings as a page, template editing, the responsive-CSS ordering trap, and the browser test harness
+- [Recovery & deletion Aug 2026](session_lcars_2026-08-recovery-deletion.md) — **read before touching accounts, auth or boot.** Why recovery is OAuth-linking rather than email, `security definer` instead of Edge Functions, the 48-hour deletion grace period, and five boot/overlay landmines
