@@ -45,6 +45,9 @@ _On `main` and live, not yet cut as a version._
 - Changed: a role is now set from the row itself rather than by typing a Writer ID into a separate box, which was two chances to promote the wrong person. Changing one asks you to confirm, and says what the new role can do
 - Added: your own row cannot be changed, because with no super admin left the only way back is a hand-run database statement. Accounts in their 48-hour deletion window are marked as such
 - Changed: moderators still see no writer list — the roster is super admins only. It shows who holds an account and what they can do, and nothing about anyone's sims
+- Fixed: sims pasted in from Google Docs or Word copied out double spaced. Those apps hand LCARS paragraph blocks, which look right in the editor but carry spacing of their own everywhere else — so every line, and every blank line, arrived with a gap around it. Copying out now produces the same plain blocks a sim typed in LCARS does. Sims you have already pasted in are fixed too, and nothing about what is stored changes
+- Fixed: blank lines pasted in from Google Docs could vanish entirely when copied into some apps, while showing as a full blank line in others
+- Fixed: lines separated by a soft line break ran together into one line when copied as plain text — in Discord in particular, where only plain text is accepted
 
 ## v4.23 — 2026-08-15
 

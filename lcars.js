@@ -231,6 +231,9 @@ const VERSIONS = [
       'Changed: a role is now set from the row itself rather than by typing a Writer ID into a separate box, which was two chances to promote the wrong person. Changing one asks you to confirm, and says what the new role can do',
       'Added: your own row cannot be changed, because with no super admin left the only way back is a hand-run database statement. Accounts in their 48-hour deletion window are marked as such',
       'Changed: moderators still see no writer list \u2014 the roster is super admins only. It shows who holds an account and what they can do, and nothing about anyone\u2019s sims',
+      'Fixed: sims pasted in from Google Docs or Word copied out double spaced. Those apps hand LCARS paragraph blocks, which look right in the editor but carry spacing of their own everywhere else \u2014 so every line, and every blank line, arrived with a gap around it. Copying out now produces the same plain blocks a sim typed in LCARS does. Sims you have already pasted in are fixed too, and nothing about what is stored changes',
+      'Fixed: blank lines pasted in from Google Docs could vanish entirely when copied into some apps, while showing as a full blank line in others',
+      'Fixed: lines separated by a soft line break ran together into one line when copied as plain text \u2014 in Discord in particular, where only plain text is accepted',
     ],
   },
 ];
@@ -3152,7 +3155,24 @@ function installCopyHandler() {
     // Capture plain text before modifying tmp for HTML-clipboard compatibility.
     // Walk top-level children manually — innerText on a detached node has no layout
     // context and silently falls back to textContent (no block-level newlines).
-    const plainLine = n => (n.textContent || '').replace(/ /g, ' ');
+    // <br> inside a block is a line break, but textContent drops it silently --
+    // which is how a run of <br>-separated lines came out as one long line.
+    const plainLine = n => {
+      let t;
+      if (n.nodeType === 1 && /<br\s*\/?>/i.test(n.innerHTML || '')) {
+        const probe = document.createElement('div');
+        // A <br> at the very end of a block is a height placeholder holding the
+        // line open, not a break -- counting it adds a blank line that is not
+        // there. Drop it, then the rest are real breaks.
+        probe.innerHTML = (n.innerHTML || '')
+          .replace(/(<br\s*\/?>\s*)$/i, '')
+          .replace(/<br\s*\/?>/gi, '\n');
+        t = probe.textContent || '';
+      } else {
+        t = n.textContent || '';
+      }
+      return t.replace(/ /g, ' ');
+    };
     const plainText = [...tmp.childNodes].flatMap(n => {
       // Lists are one node holding many lines — expand them, or every bullet
       // would run together into a single line of plain text
@@ -3164,13 +3184,29 @@ function installCopyHandler() {
       return [plainLine(n)];
     }).join('\n');
 
+    // Paste from Google Docs or Word arrives as <p> blocks and is stored that way.
+    // LCARS styles p and div identically (#editor p,#editor div{margin:0}) so it
+    // looks right here — but <p> carries a default margin everywhere else, so a
+    // pasted sim copied into Word or a forum came out double spaced, and every
+    // empty <p> became a blank paragraph with margins of its own. Typed sims are
+    // <div> and never had the problem. Converting on the way out fixes sims that
+    // already exist, and leaves what is stored untouched.
+    tmp.querySelectorAll('p').forEach(para => {
+      const d = document.createElement('div');
+      [...para.attributes].forEach(a => d.setAttribute(a.name, a.value));
+      while (para.firstChild) d.appendChild(para.firstChild);
+      para.parentNode.replaceChild(d, para);
+    });
+
     // Empty-line blocks use <br> as a height placeholder — replace with NBSP so paste
     // targets (Word, Google Docs, forum editors) render a visible blank line instead of
-    // collapsing it to nothing
-    tmp.querySelectorAll('div, p').forEach(block => {
-      if (block.childNodes.length === 1 && block.firstChild.nodeName === 'BR') {
-        block.replaceChildren(document.createTextNode(' '));
-      }
+    // collapsing it to nothing. Blocks pasted from Google Docs are emptier still —
+    // no <br>, nothing inside at all — and collapsed to nothing in some targets while
+    // showing as a full blank line in others, so they need the same treatment.
+    tmp.querySelectorAll('div').forEach(block => {
+      const onlyBr = block.childNodes.length === 1 && block.firstChild.nodeName === 'BR';
+      const empty  = !block.childNodes.length || !(block.textContent || '').trim();
+      if (onlyBr || empty) block.replaceChildren(document.createTextNode(' '));
     });
 
     e.clipboardData.setData('text/html', tmp.innerHTML);
