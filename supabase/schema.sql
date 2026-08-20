@@ -90,6 +90,78 @@ create trigger state_touch before update on public.state
   for each row execute function public.touch_updated_at();
 
 -- ---------------------------------------------------------------------------
+-- recovery_email : removed
+-- ---------------------------------------------------------------------------
+-- It was collected for identification and nothing was ever sent to it -- the
+-- auth address is synthetic and cannot receive mail. A linked Google or Discord
+-- account replaces it and gives a real, verified address for free, so the
+-- column and the addresses in it go rather than sitting there implying a
+-- recovery route that does not exist.
+--
+-- ORDER MATTERS: only run this once the app version that stopped selecting the
+-- column is live. PostgREST errors on a select naming a column that is gone, so
+-- dropping it while an older build is still deployed breaks sign-in for
+-- everyone.
+alter table public.writers drop column if exists recovery_email;
+
+-- ---------------------------------------------------------------------------
+-- link_prompt_seen : the offer of a recovery account has been made once
+-- ---------------------------------------------------------------------------
+-- Kept on the account rather than in the browser so the offer follows the
+-- writer: asked once, on any device, and never again -- whether they accepted,
+-- declined, or linked something later from Settings.
+alter table public.writers
+  add column if not exists link_prompt_seen boolean not null default false;
+
+-- ---------------------------------------------------------------------------
+-- Account deletion : soft delete now, real removal after a grace period
+-- ---------------------------------------------------------------------------
+--   * Asking for deletion only stamps deleted_at. That is an ordinary update
+--     against the writer's own row, so the existing writers_own policy already
+--     allows it -- no elevated privileges are involved in the reversible half.
+--   * Actually removing the login is the part the anon key cannot do, so it
+--     lives in a security definer function below.
+alter table public.writers add column if not exists deleted_at timestamptz;
+
+comment on column public.writers.deleted_at is
+  'Set when a writer asks to delete their account. Nothing is destroyed until the
+   grace period runs out, so a change of mind -- or a misclick -- is recoverable.';
+
+create index if not exists writers_deleted_idx
+  on public.writers (deleted_at) where deleted_at is not null;
+
+-- Deleting an auth.users row is what frees the Writer ID to be registered
+-- again, and it needs privileges the anon key does not have. This runs as the
+-- function owner instead. It takes no arguments and only ever touches rows
+-- whose grace period has already expired, so there is no input to abuse: the
+-- worst a caller can do is make a deletion happen that was going to happen
+-- anyway. Every other table cascades off auth.users.
+create or replace function public.purge_expired_deletions()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare purged integer;
+begin
+  with gone as (
+    delete from auth.users u
+     using public.writers w
+     where w.id = u.id
+       and w.deleted_at is not null
+       and w.deleted_at < now() - interval '48 hours'
+    returning u.id
+  )
+  select count(*) into purged from gone;
+  return purged;
+end $$;
+
+-- Callable by a signed-in writer only. The app calls it on boot, which is
+-- often enough at this scale -- there is no scheduler to depend on.
+revoke all on function public.purge_expired_deletions() from public, anon;
+grant execute on function public.purge_expired_deletions() to authenticated;
+
+-- ---------------------------------------------------------------------------
 -- Storage bucket for character pictures (replaces base64 pictureDataUrl)
 -- ---------------------------------------------------------------------------
 insert into storage.buckets (id, name, public)

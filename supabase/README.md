@@ -47,10 +47,13 @@ Without this, OAuth logins bounce back to the wrong place.
 
 ## Notes
 
-- **PIN reset is not self-serve yet.** Because the auth email is synthetic, the
-  standard "forgot password" mail has nowhere to go. For now a forgotten PIN is
-  reset from Dashboard → Authentication → Users. `writers.recovery_email` exists
-  so a writer can be identified; wiring up genuine self-serve reset needs an Edge
-  Function and is tracked in `ROADMAP.md`.
+- **PIN reset runs through a linked account.** The auth email is synthetic and
+  cannot receive mail, and Supabase's built-in mailer only delivers to project
+  team members — so recovery is a linked Google or Discord identity on the same
+  auth user instead. A writer who never linked one still needs resetting by hand
+  from Dashboard → Authentication → Users. `recovery_email` is gone.
+- **No Edge Functions.** Anything beyond the anon key — removing a login,
+  purging an expired deletion — is a `security definer` function in
+  `schema.sql`, so applying the schema is the whole deployment.
 - **Free tier** pauses a project after ~1 week with no activity. It resumes from
   the dashboard, but is worth knowing during quiet stretches early on.

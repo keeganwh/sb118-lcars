@@ -24,6 +24,9 @@ Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same 
 | **Editor** | Native `contenteditable` | The `#editor` div. Rich text via `document.execCommand` plus custom debounced transform passes (markers, name-bolding, character colouring). |
 | **Local storage** | `localStorage` | The local cache and the offline source of truth. `lcars_v1` (`SKEY`) data, `lcars_style_v1` skin mirror, `lcars_auth_v1` / `lcars_mode_v1` session. Per-origin, so previews hold separate data. |
 | **Accounts & sync** | Supabase | Project `nyjpqaelilrqzmnangft`. Tables `writers`, `state`, `snapshots`, all under RLS. Reached over plain `fetch` — no SDK, no CDN script. Sign-in is Writer ID + PIN; the auth email is derived as `<writerid>@lcars.local` so sign-in needs no server lookup. |
+| **Recovery** | Linked OAuth identity | A Google or Discord account can be linked to the same auth user — a second way in, and the way back from a forgotten PIN. No email is involved anywhere; the synthetic address cannot receive mail and Supabase's built-in mailer only delivers to project team members. |
+| **Privileged operations** | `security definer` Postgres functions | Removing a login and purging an expired deletion are beyond the anon key. They run as database-owner functions declared in `supabase/schema.sql` and called over PostgREST — deliberately **not** Edge Functions, so there are no server secrets and nothing to deploy separately. |
+| **Account deletion** | Two-stage, 48-hour grace | Asking stamps `writers.deleted_at`; the login goes only after the window, via `purge_expired_deletions()`. Signing back in within 48 hours cancels it and restores everything. |
 | **Snapshots** | Own Supabase table | Fetched on demand rather than carried in the synced payload, capped at ten per sim on both sides. |
 | **Offline** | First-class mode | The first-run gate offers an account or offline-only. Every network call is gated on `isCloud()`. |
 | **Hosting** | Vercel | `vercel.json` rewrites `/`, `/settings`, `/manifest` to `LCARS.html` and `/guide` to the guide, and sets no-cache headers on the three app files. |
@@ -61,7 +64,6 @@ No third-party JavaScript is loaded, ever. That is what keeps the single-file of
 
 ## Still to decide / watch
 
-- **PIN reset is not self-serve.** The synthetic auth email cannot receive mail, so the built-in reset flow has nowhere to send. Method is unsettled — see `ROADMAP.md` session 3.
-- **True account deletion** needs the `service_role` key, so it needs an Edge Function. Today "delete account" clears the data rows but leaves the login registered.
+- **A writer who never linked an account and forgets their PIN still needs the maintainer.** That is the accepted residual case; linking is nudged once, and retention is expected to be low.
 - **Supabase free tier** is ~500 MB of database, enough for roughly 250–500 writers at 1–2 MB each, and pauses a project after ~1 week idle.
 - **Mobile** — the header, Settings and the Manifest are responsive; the editor, toolbar and the two resizable sidebars are not yet.

@@ -1,5 +1,32 @@
 # LCARS SB118 Writing Tool — Changelog
 
+## Unreleased
+
+_On `main` and live, not yet cut as a version._
+
+- Changed: new icon — the gold delta — in the browser tab, and on your home screen if you add LCARS to it from a phone
+- Added: the delta now sits in the top-left LCARS badge as well, on a dark disc with a fine light ring. The disc is not quite solid, so the duty-post colour tints it — and it keeps the delta legible even on Operations gold, where the badge is the same colour as the mark
+- Changed: deleting your account now really removes it. It used to clear your sims but leave the login registered, so the Writer ID could never be used again and signing back in gave you an empty LCARS — the login itself is now removed too, and the Writer ID becomes free to register again
+- Added: a 48-hour grace period on account deletion. Nothing is destroyed straight away — sign in again with your Writer ID and PIN within 48 hours and you can cancel, and everything comes back exactly as it was. Settings shows how long is left
+- Changed: if the server cannot be reached while deleting an account, the deletion is refused outright rather than wiping the device and leaving the account behind
+- Removed: the recovery email. Nothing was ever sent to it — your sign-in address is synthetic and cannot receive mail — so it was held for identification only and implied a recovery route that did not exist. Creating an account no longer asks for it, and Settings no longer offers it. Linking a Google or Discord account replaces it, and is coming next
+- Fixed: after confirming an account deletion the reminder about the 48-hour window did not appear if you had deleted from Settings. Opening a view tears down whatever dialog is on screen, and the reminder was raised a moment before that happened — deleting now returns you to the dashboard, and the reminder is raised after the view has settled
+- Fixed: signing back in during the 48-hour window did not offer to keep your account. The prompt only appeared if you went looking for it in Settings, which is the one place you would not think to look — it now comes up as soon as you sign in
+- Fixed: keeping an account after changing your mind left the Settings tile still showing a countdown until the page was navigated away from and back
+- Added: Linked accounts, in Settings → Your Account & Data. You can now link a Google or Discord account to your Writer ID. It is optional, and your Writer ID and PIN keep working exactly as before — a linked account is a second way in, and the way back in if you forget your PIN
+- Added: linked accounts can be unlinked again from the same place, with a confirmation first. Your Writer ID login is never listed there, because it is not something you linked and must never look removable
+- Fixed: unlinking a Google or Discord account failed with “identity_id must be an UUID”. A linked account carries two different identifiers — one of its own and one belonging to the provider — and LCARS was sending the provider’s
+- Added: sign in with Google or Discord. Once you have linked an account, Continue with Discord or Continue with Google on the sign-in screen takes you straight in — LCARS works out which Writer ID is yours from the account itself
+- Added: Forgotten your PIN? on the sign-in screen. Sign in with your linked Google or Discord account and you can set a new PIN there and then, without anyone else being involved. If you never linked an account it says so plainly rather than sending you round in circles — that case still needs the maintainer
+- Added: a one-time nudge to link an account, for writers who have not. It explains that a Writer ID and PIN alone leave no way back in if the PIN is forgotten. Declining it is remembered and it does not ask again
+- Changed: signing in with a Google or Discord account that has not been linked to any Writer ID now says so and offers the Writer ID sign-in, rather than opening an empty LCARS
+- Fixed: creating an account from Settings appeared to do nothing. The account was made and you were signed in, but the Settings page was still the one drawn for a signed-out writer, so it went on offering to set up an account — and clicking that reopened the sign-in screen, with no way out of the loop
+- Fixed: the prompt to link a Google or Discord account never appeared after creating an account. It was opening underneath the Getting Started wizard, which covers the whole screen, so it could be neither seen nor dismissed. It now waits and appears once you have finished with the wizard
+- Fixed: signing out from Settings left you on the Settings address, so the page you came back to was built around an account you no longer had. Signing out now returns you to the dashboard
+- Changed: connecting a Google or Discord account is now offered as the last step of creating or signing into an account, in the same window, rather than as a message that appeared afterwards. Writers with an existing account are asked once, the next time they sign in. Both providers are offered and it can be declined
+- Fixed: that offer no longer appears when you open Settings. It used to be raised on start-up, and start-up happens on every page load — including going straight to Settings, which is not a moment anyone wants interrupting
+- Changed: whether the offer has been made is remembered against your account rather than the browser, so it follows you and is asked exactly once no matter which device you next sign in on
+
 ## v4.23 — 2026-08-15
 
 - Removed: the "Import Sims" Markdown/Google Docs importer in Settings — exporting a Doc to Markdown and re-importing it was clunky, and better ways to bring sims in are being built. Backup and Restore are unaffected

@@ -10,7 +10,7 @@ Before a work session, make sure these are in place:
 
 - **GitHub repo** — `keeganwh/sb118-lcars`. Pushing to `main` deploys to production.
 - **Vercel** — the live app, at <https://sb118-lcars.vercel.app/>. GitHub Pages still serves the same `main` behind a notice pointing people at the new address.
-- **Supabase** — project `nyjpqaelilrqzmnangft`, holding accounts and synced sims. Dashboard access matters for the things that aren't self-serve yet: resetting a forgotten PIN (Authentication → Users) and removing a login for real. The free tier pauses a project after ~1 week idle, so it may need waking after a quiet stretch.
+- **Supabase** — project `nyjpqaelilrqzmnangft`, holding accounts and synced sims. Dashboard access still matters for the one case that isn't self-serve: a writer who forgot their PIN and never linked a Google or Discord account (Authentication → Users). The free tier pauses a project after ~1 week idle, so it may need waking after a quiet stretch.
 - **My own LCARS account** — Writer ID + PIN. Nothing to configure per device any more; signing in is the whole setup.
 - **A backup habit** — Settings → Your Account & Data exports a JSON file. Sync means my sims are no longer only in one browser, but a local backup is still the thing that survives an account problem.
 

@@ -192,6 +192,26 @@ const VERSIONS = [
     changes: [
       'Changed: new icon \u2014 the gold delta \u2014 in the browser tab, and on your home screen if you add LCARS to it from a phone',
       'Added: the delta now sits in the top-left LCARS badge as well, on a dark disc with a fine light ring. The disc is not quite solid, so the duty-post colour tints it \u2014 and it keeps the delta legible even on Operations gold, where the badge is the same colour as the mark',
+      'Changed: deleting your account now really removes it. It used to clear your sims but leave the login registered, so the Writer ID could never be used again and signing back in gave you an empty LCARS \u2014 the login itself is now removed too, and the Writer ID becomes free to register again',
+      'Added: a 48-hour grace period on account deletion. Nothing is destroyed straight away \u2014 sign in again with your Writer ID and PIN within 48 hours and you can cancel, and everything comes back exactly as it was. Settings shows how long is left',
+      'Changed: if the server cannot be reached while deleting an account, the deletion is refused outright rather than wiping the device and leaving the account behind',
+      'Removed: the recovery email. Nothing was ever sent to it \u2014 your sign-in address is synthetic and cannot receive mail \u2014 so it was held for identification only and implied a recovery route that did not exist. Creating an account no longer asks for it, and Settings no longer offers it. Linking a Google or Discord account replaces it, and is coming next',
+      'Fixed: after confirming an account deletion the reminder about the 48-hour window did not appear if you had deleted from Settings. Opening a view tears down whatever dialog is on screen, and the reminder was raised a moment before that happened \u2014 deleting now returns you to the dashboard, and the reminder is raised after the view has settled',
+      'Fixed: signing back in during the 48-hour window did not offer to keep your account. The prompt only appeared if you went looking for it in Settings, which is the one place you would not think to look \u2014 it now comes up as soon as you sign in',
+      'Fixed: keeping an account after changing your mind left the Settings tile still showing a countdown until the page was navigated away from and back',
+      'Added: Linked accounts, in Settings \u2192 Your Account & Data. You can now link a Google or Discord account to your Writer ID. It is optional, and your Writer ID and PIN keep working exactly as before \u2014 a linked account is a second way in, and the way back in if you forget your PIN',
+      'Added: linked accounts can be unlinked again from the same place, with a confirmation first. Your Writer ID login is never listed there, because it is not something you linked and must never look removable',
+      'Fixed: unlinking a Google or Discord account failed with \u201cidentity_id must be an UUID\u201d. A linked account carries two different identifiers \u2014 one of its own and one belonging to the provider \u2014 and LCARS was sending the provider\u2019s',
+      'Added: sign in with Google or Discord. Once you have linked an account, Continue with Discord or Continue with Google on the sign-in screen takes you straight in \u2014 LCARS works out which Writer ID is yours from the account itself',
+      'Added: Forgotten your PIN? on the sign-in screen. Sign in with your linked Google or Discord account and you can set a new PIN there and then, without anyone else being involved. If you never linked an account it says so plainly rather than sending you round in circles \u2014 that case still needs the maintainer',
+      'Added: a one-time nudge to link an account, for writers who have not. It explains that a Writer ID and PIN alone leave no way back in if the PIN is forgotten. Declining it is remembered and it does not ask again',
+      'Changed: signing in with a Google or Discord account that has not been linked to any Writer ID now says so and offers the Writer ID sign-in, rather than opening an empty LCARS',
+      'Fixed: creating an account from Settings appeared to do nothing. The account was made and you were signed in, but the Settings page was still the one drawn for a signed-out writer, so it went on offering to set up an account \u2014 and clicking that reopened the sign-in screen, with no way out of the loop',
+      'Fixed: the prompt to link a Google or Discord account never appeared after creating an account. It was opening underneath the Getting Started wizard, which covers the whole screen, so it could be neither seen nor dismissed. It now waits and appears once you have finished with the wizard',
+      'Fixed: signing out from Settings left you on the Settings address, so the page you came back to was built around an account you no longer had. Signing out now returns you to the dashboard',
+      'Changed: connecting a Google or Discord account is now offered as the last step of creating or signing into an account, in the same window, rather than as a message that appeared afterwards. Writers with an existing account are asked once, the next time they sign in. Both providers are offered and it can be declined',
+      'Fixed: that offer no longer appears when you open Settings. It used to be raised on start-up, and start-up happens on every page load \u2014 including going straight to Settings, which is not a moment anyone wants interrupting',
+      'Changed: whether the offer has been made is remembered against your account rather than the browser, so it follows you and is asked exactly once no matter which device you next sign in on',
       'Fixed: Academy sims were still auto-formatting some markers \u2014 ((Location)) came out bold and ((OOC)) italic, both on screen and when copied out. Neither shows now, and neither is carried onto the clipboard. The coloured highlights on Actions, Comms and Thoughts stay, since those are only ever visual aids and were never copied out anyway',
       'Fixed: pasting formatted text into an Academy sim kept its bold and italics until the sim was next reopened. Pasted text is now stripped as it goes in',
       'Changed: Academy sims allow more of the toolbar than they used to \u2014 links, source view, paragraph markers and the whole Insert marker menu are all available again. Bold, italic, strikethrough, indenting and the Auto Format toggles stay switched off, which is what the plain-text rule actually asks for',
@@ -862,7 +882,7 @@ async function supaFetch(path, opts = {}, retry = true) {
   return res;
 }
 
-async function cloudSignUp(wid, pin, recoveryEmail) {
+async function cloudSignUp(wid, pin) {
   const w = normalizeWriterId(wid);
   const r = await fetch(SUPA_URL + '/auth/v1/signup', {
     method: 'POST',
@@ -880,7 +900,7 @@ async function cloudSignUp(wid, pin, recoveryEmail) {
   await supaFetch('/rest/v1/writers', {
     method: 'POST',
     headers: { 'Prefer': 'resolution=merge-duplicates' },
-    body: JSON.stringify({ id: j.user.id, writer_id: w, recovery_email: (recoveryEmail || '').trim() || null })
+    body: JSON.stringify({ id: j.user.id, writer_id: w })
   });
   setMode('cloud');
   return w;
@@ -904,6 +924,10 @@ async function cloudSignIn(wid, pin) {
 function cloudSignOut() {
   clearAuth();
   setMode('');
+  // Signing out is done from Settings, and a signed-out writer has no settings
+  // to be on -- reloading there lands them on a page built around an account
+  // they no longer have. Same reason deleteAccount() does this.
+  try { syncRoute('dash', true); } catch(e) {}
   location.reload();
 }
 
@@ -917,11 +941,12 @@ function cloudSignOut() {
 // themselves: a display name, and a recovery email kept for identification.
 async function fetchWriterProfile() {
   const a = getAuth();
-  if (!a.uid) return { display_name: '', recovery_email: '' };
-  const r = await supaFetch('/rest/v1/writers?select=display_name,recovery_email&id=eq.' + encodeURIComponent(a.uid));
+  if (!a.uid) return { display_name: '', deleted_at: null, link_prompt_seen: true };
+  const r = await supaFetch('/rest/v1/writers?select=display_name,deleted_at,link_prompt_seen&id=eq.' + encodeURIComponent(a.uid));
   if (!r.ok) throw new Error('Could not read your account details.');
   const row = (await r.json())[0] || {};
-  return { display_name: row.display_name || '', recovery_email: row.recovery_email || '' };
+  return { display_name: row.display_name || '', deleted_at: row.deleted_at || null,
+           link_prompt_seen: !!row.link_prompt_seen };
 }
 
 async function patchWriterProfile(patch) {
@@ -939,13 +964,6 @@ async function saveDisplayName(name) {
   const v = (name || '').trim();
   if (v.length > 60) throw new Error('That is longer than 60 characters.');
   await patchWriterProfile({ display_name: v || null });
-  return v;
-}
-
-async function saveRecoveryEmail(email) {
-  const v = (email || '').trim();
-  if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new Error('That does not look like an email address.');
-  await patchWriterProfile({ recovery_email: v || null });
   return v;
 }
 
@@ -971,6 +989,298 @@ async function changePin(currentPin, newPin) {
   const r = await supaFetch('/auth/v1/user', { method: 'PUT', body: JSON.stringify({ password: newPin }) });
   const j = await r.json().catch(() => null);
   if (!r.ok) throw new Error(supaErr(j, 'Could not change your PIN.'));
+}
+
+// ── Linked accounts (Google / Discord) ────────────────────────────────────
+// Optional, and deliberately additive: the Writer ID and PIN remain the primary
+// sign-in, so deriving the auth address from the Writer ID still needs no server
+// lookup. A linked provider is a second identity on the same auth user — a
+// faster way in, and the way back in when the PIN is forgotten.
+const PROVIDERS = [
+  { id: 'discord', label: 'Discord' },
+  { id: 'google',  label: 'Google'  },
+];
+
+function providerLabel(id) {
+  const p = PROVIDERS.find(x => x.id === id);
+  return p ? p.label : id;
+}
+
+// Why we sent the browser to a provider. The return leg has no other way of
+// telling a link apart from a sign-in, and they end very differently.
+// sessionStorage rather than localStorage: it survives the redirect round trip
+// in this tab and cannot leak into another one.
+const OAUTH_INTENT_KEY = 'lcars_oauth_intent_v1';
+function setOAuthIntent(v) { try { sessionStorage.setItem(OAUTH_INTENT_KEY, v); } catch(e) {} }
+function takeOAuthIntent() {
+  let v = '';
+  try { v = sessionStorage.getItem(OAUTH_INTENT_KEY) || ''; sessionStorage.removeItem(OAUTH_INTENT_KEY); } catch(e) {}
+  return v || 'link';
+}
+
+// Must be on the project's allowed redirect list in Supabase, or the provider
+// bounces back with a redirect error rather than returning here.
+function oauthRedirectTo() {
+  return location.origin + (routeUrl('settings') || '/');
+}
+
+// The JWT cannot ride on a top-level navigation, which is the whole difficulty
+// with linking. skip_http_redirect=true makes the endpoint hand back the
+// provider URL as JSON instead of a 302, so the authenticated part happens over
+// fetch and only the harmless navigation that follows is a plain one.
+async function linkProvider(provider) {
+  const a = getAuth();
+  if (!a.access_token) { showToast('You are not signed in.'); return; }
+  const q = '?provider=' + encodeURIComponent(provider) +
+            '&skip_http_redirect=true' +
+            '&redirect_to=' + encodeURIComponent(oauthRedirectTo());
+  let r, j;
+  try {
+    r = await supaFetch('/auth/v1/user/identities/authorize' + q);
+    j = await r.json().catch(() => null);
+  } catch(e) {
+    showToast('Could not reach the server — try again.');
+    return;
+  }
+  if (!r.ok || !j || !j.url) {
+    showToast(supaErr(j, 'Could not start linking. Manual linking may be turned off for this project.'));
+    return;
+  }
+  location.href = j.url;
+}
+
+// A trap worth naming: an identity carries TWO ids. 'identity_id' is the uuid
+// GoTrue's own records use, and the only thing the unlink endpoint accepts;
+// 'id' is the provider's user id -- a Discord snowflake or a Google subject.
+// Passing the wrong one fails with "identity_id must be an UUID".
+function identityKey(i) { return (i && (i.identity_id || i.id)) || ''; }
+
+// Signing in with a provider, as opposed to linking one. No JWT exists yet, so
+// this is a plain top-level navigation and needs no apikey -- /authorize is a
+// browser endpoint.
+function signInWithProvider(provider, intent) {
+  setOAuthIntent(intent || 'signin');
+  location.href = SUPA_URL + '/auth/v1/authorize?provider=' + encodeURIComponent(provider) +
+                  '&redirect_to=' + encodeURIComponent(location.origin + '/');
+}
+
+// Coming back from a provider sign-in. The fragment proves who the auth user
+// is but says nothing about which Writer ID that is, so it is looked up from
+// the writers row -- readable under RLS precisely because it is our own.
+async function completeProviderSignIn(f, why) {
+  saveAuth({ access_token: f.access_token, refresh_token: f.refresh_token,
+             expires_at: Date.now() + f.expires_in * 1000 });
+  setMode('cloud');
+
+  let uid = '', writerId = '';
+  try {
+    const ur = await supaFetch('/auth/v1/user');
+    if (!ur.ok) throw new Error('user');
+    uid = (await ur.json()).id || '';
+    saveAuth({ ...getAuth(), uid });
+    const wr = await supaFetch('/rest/v1/writers?select=writer_id&id=eq.' + encodeURIComponent(uid));
+    if (!wr.ok) throw new Error('writers');
+    const row = (await wr.json())[0];
+    writerId = (row && row.writer_id) || '';
+  } catch(e) {
+    clearAuth(); setMode('');
+    showAuthGate(false);
+    showToast('Could not reach the server \u2014 sign in with your Writer ID and PIN.', 5200);
+    return;
+  }
+
+  // A provider account nobody has attached to a Writer ID. Signing them into
+  // a blank account would be worse than saying so.
+  if (!writerId) { clearAuth(); setMode(''); showProviderNotLinked(); return; }
+
+  saveAuth({ ...getAuth(), writerId });
+  await cloudBoot();
+  refreshAuthDependentViews();
+  showToast('Signed in as ' + writerId);
+  if (await checkDeletionPending()) return;
+  if (why === 'recover') { showSetNewPin(true); return; }
+  maybeShowWizard();
+}
+
+function showProviderNotLinked() {
+  openModal('That account is not linked yet', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 8px">You signed in successfully, but that Google or Discord account has not been
+        linked to a Writer ID, so there is nothing for LCARS to open.</p>
+      <p style="margin:0">Sign in with your Writer ID and PIN, then link it under
+        <strong>Settings \u2192 Your Account &amp; Data \u2192 Linked accounts</strong>. After that you can use it
+        to sign in, and to get back in if you forget your PIN.</p>
+    </div>`, null, { noCancel: true, extra: [
+      { label: 'Sign in with a Writer ID', cls: 'btn-p', fn: 'closeModal();showAuthGate(false)' }] });
+}
+
+// Recovery: a session obtained from a linked provider is enough to set a new
+// PIN, because the current PIN is exactly what has been lost. changePin() is
+// the other path and still demands the old one.
+async function setNewPin(newPin) {
+  if ((newPin || '').length < 6) throw new Error('Your new PIN must be at least 6 characters.');
+  const r = await supaFetch('/auth/v1/user', { method: 'PUT', body: JSON.stringify({ password: newPin }) });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(supaErr(j, 'Could not set your new PIN.'));
+}
+
+function showSetNewPin(afterRecovery) {
+  openModal(afterRecovery ? 'Set a new PIN' : 'Set a new PIN', `
+    <div style="font-size:0.85rem;line-height:1.6;margin-bottom:12px">
+      ${afterRecovery
+        ? 'You are back in. Choose a new PIN now \u2014 you will need it next time you sign in with your Writer ID.'
+        : 'Choose a new PIN.'}
+    </div>
+    <div class="mf"><label class="ml">NEW PIN <span style="font-weight:normal;opacity:0.6">(at least 6 characters)</span></label>
+      <input class="mi" id="newpin-a" type="password" autocomplete="new-password"></div>
+    <div class="mf"><label class="ml">NEW PIN AGAIN</label>
+      <input class="mi" id="newpin-b" type="password" autocomplete="new-password"></div>
+    <div id="newpin-msg" style="font-size:0.76rem;line-height:1.5;min-height:1.1em;color:var(--red,#c66)"></div>
+  `, () => {
+    const msg = document.getElementById('newpin-msg');
+    const a = document.getElementById('newpin-a').value;
+    const b = document.getElementById('newpin-b').value;
+    if (a !== b) { msg.textContent = 'The two PINs do not match.'; return false; }
+    msg.style.color = 'var(--dim)'; msg.textContent = 'Saving\u2026';
+    setNewPin(a)
+      .then(() => { closeModal(); showToast('PIN set \u2014 use it next time you sign in'); })
+      .catch(e => { msg.style.color = 'var(--red,#c66)'; msg.textContent = e.message; });
+    return false;
+  }, { ok: 'Set my PIN', noCancel: !!afterRecovery });
+}
+
+// Offered from the sign-in form. Only ever a route back in for someone who
+// linked an account beforehand -- everyone else needs the maintainer, and the
+// copy says so rather than leaving them clicking hopefully.
+function showForgotPin() {
+  gateClose();
+  setTimeout(() => openModal('Forgotten your PIN?', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 10px">If you linked a Google or Discord account, sign in with it and you can set a
+        new PIN straight away.</p>
+      <p style="margin:0 0 4px;color:var(--dim);font-size:0.8rem">If you did not link one, ask the tool's
+        maintainer to reset it for you \u2014 there is no automatic way back in without it.</p>
+    </div>`, null, { extra: [
+      { label: 'Continue with Discord', cls: 'btn-p', fn: "signInWithProvider('discord','recover')" },
+      { label: 'Continue with Google', cls: 'btn-p', fn: "signInWithProvider('google','recover')" }] }), 60);
+}
+
+async function fetchIdentities() {
+  const r = await supaFetch('/auth/v1/user');
+  if (!r.ok) throw new Error('Could not read your linked accounts.');
+  const u = await r.json();
+  // The email identity is the Writer ID login itself — it is not something a
+  // writer linked, and it must never look unlinkable.
+  return (u.identities || []).filter(i => i.provider !== 'email');
+}
+
+async function unlinkProvider(identityId) {
+  const r = await supaFetch('/auth/v1/user/identities/' + encodeURIComponent(identityId), { method: 'DELETE' });
+  if (!r.ok) throw new Error(supaErr(await r.json().catch(() => null), 'Could not unlink that account.'));
+}
+
+function confirmUnlinkProvider(identityId, provider) {
+  const label = providerLabel(provider);
+  openModal('Unlink ' + label, `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 8px">You will no longer be able to sign in with ${esc(label)}, or use it to get
+        back in if you forget your PIN.</p>
+      <p style="margin:0">Your Writer ID and PIN are unaffected, and nothing is deleted.</p>
+    </div>`, () => {
+      unlinkProvider(identityId)
+        .then(() => { showToast(label + ' unlinked'); loadIdentities(); closeModal(); })
+        .catch(e => showToast(prettyOAuthError(e.message), 5200));
+      return false;
+    }, { ok: 'Unlink' });
+}
+
+// The return leg. Supabase sends the browser back to redirect_to with the
+// outcome in the URL fragment — tokens on success, an error description on
+// failure. The fragment is cleared either way so a reload cannot replay it.
+function readOAuthFragment() {
+  const h = (location.hash || '').replace(/^#/, '');
+  if (!h || h.indexOf('=') === -1) return null;
+  const p = new URLSearchParams(h);
+  if (!p.get('access_token') && !p.get('error') && !p.get('error_description')) return null;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch(e) {}
+  return {
+    access_token: p.get('access_token'),
+    refresh_token: p.get('refresh_token'),
+    expires_in: Number(p.get('expires_in') || 3600),
+    error: p.get('error_description') || p.get('error'),
+  };
+}
+
+// Provider errors arrive as machine text; these are the ones a writer can
+// actually meet, so they get said in words that suggest what to do.
+function prettyOAuthError(msg) {
+  const m = String(msg || '');
+  if (/already.*linked|identity.*already/i.test(m))
+    return 'That account is already linked — to this Writer ID or to another one.';
+  if (/manual linking.*disabled|not enabled/i.test(m))
+    return 'Account linking is turned off for LCARS right now. Tell the maintainer.';
+  if (/redirect/i.test(m))
+    return 'That sign-in came back to an address LCARS does not recognise. Tell the maintainer.';
+  return m.replace(/\+/g, ' ') || 'That did not work. Please try again.';
+}
+
+// Returns 'signin' when a provider sign-in has taken over the rest of boot,
+// so the caller knows not to raise the gate or start its own load. 'link' and
+// null both leave boot to carry on as normal.
+function handleOAuthReturn() {
+  const f = readOAuthFragment();
+  if (!f) return null;
+  const why = takeOAuthIntent();
+
+  if (f.error) {
+    setTimeout(() => showToast(prettyOAuthError(f.error), 5200), 500);
+    // A failed sign-in must not leave a half-made session behind; a failed
+    // link changes nothing, so the existing session stands.
+    if (why !== 'link') { clearAuth(); setMode(''); }
+    return null;
+  }
+  if (!f.access_token) return null;
+
+  if (why === 'link') {
+    // Same auth user — keep the Writer ID and uid already on file and take
+    // only the freshened session.
+    const a = getAuth();
+    saveAuth({ ...a, access_token: f.access_token, refresh_token: f.refresh_token || a.refresh_token,
+               expires_at: Date.now() + f.expires_in * 1000 });
+    setMode('cloud');
+    setTimeout(() => showToast('Account linked'), 500);
+    return 'link';
+  }
+
+  completeProviderSignIn(f, why);
+  return 'signin';
+}
+
+function loadIdentities() {
+  const el = document.getElementById('acct-links');
+  if (!el || !isCloud()) return;
+  fetchIdentities()
+    .then(paintIdentities)
+    .catch(() => {
+      el.innerHTML = '<span class="set-note" style="margin:0;color:var(--red,#c66)">' +
+                     'Linked accounts could not be read — check your connection.</span>';
+    });
+}
+
+function paintIdentities(list) {
+  const el = document.getElementById('acct-links');
+  if (!el) return;
+  el.innerHTML = PROVIDERS.map(p => {
+    const found = (list || []).find(i => i.provider === p.id);
+    if (!found) {
+      return setBtn(`linkProvider('${p.id}')`, 'link', 'Link ' + p.label,
+        'Sign in with ' + p.label + ', and use it if you forget your PIN.');
+    }
+    const d = found.identity_data || {};
+    const who = d.email || d.name || d.full_name || d.preferred_username || '';
+    return setBtn(`confirmUnlinkProvider('${identityKey(found)}','${p.id}')`, 'link', p.label + ' — linked',
+      (who ? esc(who) + '. ' : '') + 'Click to unlink.');
+  }).join('');
 }
 
 // Snapshots are ten full copies of a sim's HTML apiece. Kept in the main payload
@@ -1079,6 +1389,7 @@ function hasLocalData() {
 // browser also has local work.
 async function cloudBoot() {
   if (!isCloud()) return;
+  purgeExpiredDeletions();          // clears out anyone whose grace period lapsed
   setSyncStatus('syncing', 'Loading…');
   let row;
   try { row = await loadFromCloud(); }
@@ -1172,13 +1483,47 @@ async function eraseAllData() {
   }
 }
 
+// ── Account deletion ──────────────────────────────────────────────────────
+// Deletion happens in two stages. Asking for it only stamps deleted_at on the
+// writers row and signs the writer out — nothing is destroyed, so a misclick
+// costs nothing. Once the grace period has run out, purge_expired_deletions()
+// removes the auth.users row, and every table cascades off it. That second
+// stage is the one the anon key cannot do, which is why it is a security
+// definer function in the database rather than code here.
+const DELETION_GRACE_HOURS = 48;
+const DELETE_NOTICE_KEY = 'lcars_delete_notice_v1';
+
+function deletionDeadline(deletedAt) {
+  return new Date(new Date(deletedAt).getTime() + DELETION_GRACE_HOURS * 3600 * 1000);
+}
+
+// Deliberately vague at the low end: "3 hours" is more use to someone deciding
+// whether to act now than a countdown to the minute.
+function deletionRemaining(deletedAt) {
+  const ms = deletionDeadline(deletedAt).getTime() - Date.now();
+  if (ms <= 0) return 'any moment now';
+  const h = Math.floor(ms / 3600000);
+  if (h >= 1) return h + (h === 1 ? ' hour' : ' hours');
+  return Math.max(1, Math.round(ms / 60000)) + ' minutes';
+}
+
 function confirmDeleteAccount() {
+  // Already scheduled: the useful thing to offer is the way out, not a second
+  // confirmation of something that has already been asked for.
+  if (_writerProfile && _writerProfile.deleted_at) {
+    closeModal();
+    setTimeout(() => showDeletionPending(_writerProfile.deleted_at), 60);
+    return;
+  }
   closeModal();
   setTimeout(() => openModal('Delete account and all data',
     eraseConfirmBody('DELETE',
-      `<p style="margin:0 0 8px">This removes your sims, characters and revision history from the server, and wipes this device's copy.</p>
-       <p style="margin:0 0 8px">Your Writer ID stays registered as a login — signing in with it again would give you an empty LCARS. To have the login itself removed, ask the tool's maintainer.</p>
-       <p style="margin:0"><strong>There is no undo.</strong> Take a backup first if there is anything you want to keep.</p>`),
+      `<p style="margin:0 0 8px">This removes your sims, characters and revision history, and frees your
+        Writer ID to be registered again.</p>
+       <p style="margin:0 0 8px"><strong>You have ${DELETION_GRACE_HOURS} hours to change your mind.</strong>
+        Nothing is destroyed straight away — sign in again with your Writer ID and PIN before then and
+        everything comes back exactly as it was. After that it is gone for good.</p>
+       <p style="margin:0">Take a backup first if there is anything you want to keep.</p>`),
     () => {
       const v = (document.getElementById('erase-confirm').value || '').trim().toUpperCase();
       if (v !== 'DELETE') { showToast('Type DELETE to confirm'); return false; }
@@ -1187,24 +1532,97 @@ function confirmDeleteAccount() {
     { ok: 'Delete my account' }), 60);
 }
 
+// Stamping deleted_at is an ordinary update against the writer's own row, so
+// the existing RLS policy covers it — no special privileges in this half.
 async function deleteAccount() {
   const a = getAuth();
   if (a.uid) {
-    const uid = encodeURIComponent(a.uid);
     try {
-      await supaFetch('/rest/v1/snapshots?writer_uid=eq.' + uid, { method: 'DELETE' });
-      await supaFetch('/rest/v1/state?writer_uid=eq.' + uid, { method: 'DELETE' });
-      await supaFetch('/rest/v1/writers?id=eq.' + uid, { method: 'DELETE' });
+      const r = await supaFetch('/rest/v1/writers?id=eq.' + encodeURIComponent(a.uid), {
+        method: 'PATCH',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ deleted_at: new Date().toISOString() })
+      });
+      if (!r.ok) throw new Error('rejected');
     } catch(e) {
       alert('Could not reach the server, so nothing was deleted. Check your connection and try again.');
       return;
     }
   }
+  // The local copy goes now so the device looks signed out and empty, which is
+  // what was asked for. The server copy is what a change of mind restores from.
+  try { localStorage.setItem(DELETE_NOTICE_KEY, String(Date.now())); } catch(e) {}
   S.docs = {}; S.missions = {}; S.scenes = {}; S.characters = {}; S.templates = [];
   persist();
   clearAuth();
   setMode('');
+  // Deleting is done from Settings, but there is no account to have settings
+  // for any more — come back on the dashboard.
+  try { syncRoute('dash', true); } catch(e) {}
   location.reload();
+}
+
+// Shown once, after the reload that follows a deletion request.
+function maybeShowDeleteNotice() {
+  let stamp = null;
+  try { stamp = localStorage.getItem(DELETE_NOTICE_KEY); } catch(e) {}
+  if (!stamp) return false;
+  try { localStorage.removeItem(DELETE_NOTICE_KEY); } catch(e) {}
+  openModal('Your account is scheduled for deletion', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 8px">You have been signed out and this device's copy has been cleared.</p>
+      <p style="margin:0 0 8px">Your sims are held on the server for <strong>${DELETION_GRACE_HOURS} hours</strong>.
+        Sign in again with your Writer ID and PIN before then and you can cancel the deletion — everything
+        comes back.</p>
+      <p style="margin:0">After that, your account and everything in it are removed for good, and your
+        Writer ID becomes available to register again.</p>
+    </div>`, null, { noCancel: true, extra: [
+      { label: 'Understood', cls: 'btn-p', fn: 'closeModal();showAuthGate(false)' }] });
+  return true;
+}
+
+// Offered at boot when a writer signs back in during the grace period.
+function showDeletionPending(deletedAt) {
+  openModal('This account is scheduled for deletion', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 8px">Everything is still here, but this account and all of its sims will be
+        removed in about <strong>${deletionRemaining(deletedAt)}</strong>.</p>
+      <p style="margin:0">If you did not mean to delete it, or you have changed your mind, keep it now —
+        after the deadline there is nothing anyone can restore.</p>
+    </div>`, null, { noCancel: true, extra: [
+      { label: 'Keep my account', cls: 'btn-p', fn: 'cancelAccountDeletion()' },
+      { label: 'Leave it scheduled', fn: 'closeModal()' }
+    ] });
+}
+
+async function cancelAccountDeletion() {
+  try { await patchWriterProfile({ deleted_at: null }); }
+  catch(e) { showToast('Could not reach the server — try again.'); return; }
+  _writerProfile.deleted_at = null;
+  paintWriterProfile();     // the Settings tile is on screen behind this modal
+  closeModal();
+  showToast('Deletion cancelled — your account is safe');
+}
+
+// Fire and forget. Nothing in the UI waits on it, and at this scale a boot from
+// any signed-in writer comes round often enough to stand in for a scheduler.
+function purgeExpiredDeletions() {
+  supaFetch('/rest/v1/rpc/purge_expired_deletions', { method: 'POST', body: '{}' }).catch(() => {});
+}
+
+// Returns true when it put a prompt on screen, so callers can hold back
+// anything that would paint over it.
+async function checkDeletionPending() {
+  // Never steal a modal that is already up — the reconcile prompt has to be
+  // answered or the writer's local work is left in limbo. This will come round
+  // again on the next boot.
+  if (!document.getElementById('mo').classList.contains('hidden')) return false;
+  try {
+    const pr = await fetchWriterProfile();
+    _writerProfile = pr;
+    if (pr.deleted_at) { showDeletionPending(pr.deleted_at); return true; }
+  } catch(e) { /* offline — the prompt can wait */ }
+  return false;
 }
 
 // ================================================================
@@ -1449,6 +1867,16 @@ function ackMoved() {
 // "Use offline" sets mode to 'local' and the app never touches the network.
 let _gateEl = null;
 
+// A view drawn while signed out is wrong the moment that changes: Settings
+// shows an entirely different card offline, so a writer who has just created
+// an account is left looking at an invitation to create one, and clicking it
+// reopens the gate forever. Rebuilding the view is the whole fix --
+// renderSettingsView() reloads the profile and linked accounts on its own.
+function refreshAuthDependentViews() {
+  if (_routeView === 'settings') renderSettingsView();
+  updateViewButtons();
+}
+
 function gateClose() {
   if (_gateEl) { _gateEl.remove(); _gateEl = null; }
 }
@@ -1479,6 +1907,13 @@ function gateChoice(fromSettings) {
     <div style="display:flex;flex-direction:column;gap:8px">
       <button class="btn btn-p" style="width:100%;justify-content:center" onclick="gateForm('in')">Sign in with your Writer ID</button>
       <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateForm('up')">Create an account</button>
+      <div style="display:flex;align-items:center;gap:8px;margin:2px 0">
+        <span style="flex:1;height:1px;background:var(--dim);opacity:0.3"></span>
+        <span style="font-size:0.68rem;color:var(--dim);letter-spacing:0.08em">OR</span>
+        <span style="flex:1;height:1px;background:var(--dim);opacity:0.3"></span>
+      </div>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="signInWithProvider('discord')">Continue with Discord</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="signInWithProvider('google')">Continue with Google</button>
       ${fromSettings
         ? `<button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateClose()">Not now</button>`
         : `<button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateUseOffline()">Use offline on this device only</button>`}
@@ -1486,6 +1921,64 @@ function gateChoice(fromSettings) {
     ${fromSettings ? '' : `<div style="font-size:0.71rem;color:var(--dim);line-height:1.55;margin-top:14px">
       Offline keeps everything in this browser and sends nothing anywhere. Clearing your browser data will erase it, so take backups. You can switch to an account later from Settings.
     </div>`}`;
+}
+
+// ── The recovery-account step of the gate ─────────────────────────────────
+// Shown in the gate window itself, immediately after an account is created or
+// signed into, and nowhere else. Deliberately not on boot: boot runs on every
+// page load, so a boot-time prompt appears when you open Settings, which is not
+// a moment anyone asked to be interrupted.
+//
+// Asked once per account, not once per browser -- the flag lives on the writers
+// row so it follows the writer to whatever device they next use.
+async function shouldOfferLinking() {
+  let list, prof;
+  try {
+    [list, prof] = await Promise.all([fetchIdentities(), fetchWriterProfile()]);
+  } catch(e) { return false; }          // unreadable: never block a sign-in over it
+  _writerProfile = prof;
+  // An account scheduled for deletion has a more urgent conversation waiting
+  // in gateFinish(); offering to link one to it would be absurd.
+  if (prof.deleted_at) return false;
+  return !list.length && !prof.link_prompt_seen;
+}
+
+function gateLinkStep(wid) {
+  const body = document.getElementById('gate-body');
+  if (!body) return;
+  body.innerHTML = `
+    <div style="font-size:1rem;font-weight:700;margin-bottom:8px">One last thing</div>
+    <div style="font-size:0.85rem;color:var(--dim);line-height:1.65;margin-bottom:14px">
+      <p style="margin:0 0 10px">Right now your Writer ID and PIN are the only way into your account. If you
+        forget the PIN there is no automatic way back in.</p>
+      <p style="margin:0">Connecting a Google or Discord account fixes that, and lets you sign in with one
+        click. Nothing is posted anywhere, and your Writer ID and PIN keep working exactly as they do now.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="gateLink('discord')">Connect Discord</button>
+      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="gateLink('google')">Connect Google</button>
+      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateSkipLink('${esc(wid)}')">Not now</button>
+    </div>
+    <div style="font-size:0.71rem;color:var(--dim);line-height:1.55;margin-top:14px">
+      You can do this later from Settings &rarr; Your Account &amp; Data. You will not be asked again.
+    </div>`;
+}
+
+// Recorded before navigating away, because linking leaves LCARS entirely and
+// the writer may never come back to this screen.
+async function markLinkOffered() {
+  try { await patchWriterProfile({ link_prompt_seen: true }); } catch(e) {}
+  _writerProfile.link_prompt_seen = true;
+}
+
+async function gateLink(provider) {
+  await markLinkOffered();
+  linkProvider(provider);
+}
+
+async function gateSkipLink(wid) {
+  await markLinkOffered();
+  await gateFinish(wid);
 }
 
 function gateUseOffline() {
@@ -1508,21 +2001,20 @@ function gateForm(kind) {
       <label class="ml">PIN <span style="font-weight:normal;opacity:0.6">(at least 6 characters)</span></label>
       <input class="mi" id="gate-pin" type="password" autocomplete="${up ? 'new-password' : 'current-password'}">
     </div>
-    ${up ? `<div class="mf" style="margin-bottom:10px">
-      <label class="ml">RECOVERY EMAIL <span style="font-weight:normal;opacity:0.6">(optional)</span></label>
-      <input class="mi" id="gate-email" type="email" autocomplete="email" placeholder="so you can be identified if you forget your PIN">
-    </div>` : ''}
     <div id="gate-msg" style="font-size:0.76rem;line-height:1.5;min-height:1.1em;margin:6px 0 12px;color:var(--red,#c66)"></div>
     <div style="display:flex;flex-direction:column;gap:8px">
       <button class="btn btn-p" id="gate-go" style="width:100%;justify-content:center" onclick="gateSubmit('${kind}')">${up ? 'Create account' : 'Sign in'}</button>
       <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateChoice(${!!getMode()})">Back</button>
     </div>
     ${up ? `<div style="font-size:0.71rem;color:var(--dim);line-height:1.55;margin-top:14px">
-      A forgotten PIN cannot be reset automatically yet &mdash; ask the tool's maintainer to reset it for you. Keep a backup either way.
-    </div>` : ''}`;
+      Once you are in, link a Google or Discord account from Settings. It is the only way to reset a
+      forgotten PIN yourself &mdash; without one you would have to ask the tool's maintainer.
+    </div>` : `<div style="text-align:center;margin-top:14px">
+      <button class="btn btn-s" style="font-size:0.74rem;padding:4px 10px" onclick="showForgotPin()">Forgotten your PIN?</button>
+    </div>`}`;
   const wid = document.getElementById('gate-wid');
   wid.focus();
-  ['gate-wid','gate-pin','gate-email'].forEach(id => {
+  ['gate-wid','gate-pin'].forEach(id => {
     const n = document.getElementById(id);
     if (n) n.addEventListener('keydown', e => { if (e.key === 'Enter') gateSubmit(kind); });
   });
@@ -1563,12 +2055,28 @@ function showTransferDone() {
   }
 }
 
+// Everything that happens once the gate is finished with, whichever way it was
+// finished with. Split out so the linking step can sit in front of it.
+async function gateFinish(wid) {
+  const who = normalizeWriterId(wid || getAuth().writerId || '');
+  gateClose();
+  await cloudBoot();
+  refreshAuthDependentViews();
+  showToast('Signed in as ' + who);
+  // Signing in from the old address is a migration, not a destination — the
+  // sims are on the account now, so send them where they should be writing.
+  if (movedBannerApplies()) { showTransferDone(); return; }
+  // Someone signing in mid-grace-period needs telling here, not only on a
+  // later cold boot — this is the moment they came back to change their mind.
+  if (await checkDeletionPending()) return;
+  maybeShowWizard();
+}
+
 async function gateSubmit(kind) {
   const msg = document.getElementById('gate-msg');
   const btn = document.getElementById('gate-go');
   const wid = (document.getElementById('gate-wid').value || '').trim();
   const pin = document.getElementById('gate-pin').value || '';
-  const email = (document.getElementById('gate-email') || {}).value || '';
 
   if (!validWriterId(wid)) { msg.textContent = 'That does not look like a Writer ID — it should be ten characters, like A239809JP3.'; return; }
   if (pin.length < 6) { msg.textContent = 'Your PIN needs to be at least 6 characters.'; return; }
@@ -1577,15 +2085,12 @@ async function gateSubmit(kind) {
   msg.textContent = kind === 'up' ? 'Creating your account…' : 'Signing in…';
   btn.disabled = true;
   try {
-    if (kind === 'up') await cloudSignUp(wid, pin, email);
+    if (kind === 'up') await cloudSignUp(wid, pin);
     else await cloudSignIn(wid, pin);
-    gateClose();
-    await cloudBoot();
-    showToast('Signed in as ' + normalizeWriterId(wid));
-    // Signing in from the old address is a migration, not a destination — the
-    // sims are on the account now, so send them where they should be writing.
-    if (movedBannerApplies()) { showTransferDone(); return; }
-    maybeShowWizard();
+    // Offer a recovery account as the next step of this same window, before
+    // the gate closes. gateFinish() carries on from whichever button is used.
+    if (await shouldOfferLinking()) { gateLinkStep(normalizeWriterId(wid)); return; }
+    await gateFinish(wid);
   } catch(e) {
     msg.style.color = 'var(--red,#c66)';
     msg.textContent = e.message || 'Something went wrong. Please try again.';
@@ -5198,10 +5703,18 @@ function settingsAccountCard() {
         <div class="set-tiles" style="margin-top:10px">
           ${setBtn('showDisplayName()', 'user', 'Display name', 'Helps friends find you, not for logins.', {id:'acct-dn-tile'})}
           ${setBtn('showChangePin()', 'hexagon', 'Change my PIN', 'Requires your current PIN to change.')}
-          ${setBtn('showRecoveryEmail()', 'link', 'Recovery email', 'In case you forget your PIN.', {id:'acct-rec-tile', descId:'acct-rec-hint'})}
           ${setBtn('showShareContact()', 'copy', 'Share my contact', 'Copy + paste to connect with other writers.')}
           ${setBtn('saveToCloud()', 'arrow-up', 'Sync data now', 'Push/sync manually (for those who like pushing buttons).')}
           ${setBtn('cloudSignOut()', 'move-right', 'Sign out', 'Signs out in this browser. Nothing is deleted.')}
+        </div>
+      </div>
+
+      <div class="set-block">
+        <div class="ml">LINKED ACCOUNTS</div>
+        <div class="set-note">Optional. Link Google or Discord to sign in with one click &mdash; and to get
+          back into your account if you ever forget your PIN. Your Writer ID and PIN keep working either way.</div>
+        <div class="set-tiles" style="margin-top:6px" id="acct-links">
+          <span class="set-note" style="margin:0">Loading&hellip;</span>
         </div>
       </div>
       ` : isFileCopy() ? `
@@ -5246,7 +5759,8 @@ function settingsAccountCard() {
           ${setBtn('confirmEraseData()', 'trash', 'Erase my sims and characters',
             isCloud() ? 'Empties LCARS on all your devices.' : 'Empties LCARS in this browser.', {danger:true})}
           ${isCloud() ? setBtn('confirmDeleteAccount()', 'alert', 'Delete my account',
-            'Removes your data from the server too.', {danger:true}) : ''}
+            `Removes everything after ${DELETION_GRACE_HOURS} hours. Reversible until then.`,
+            {danger:true, id:'acct-del-tile', descId:'acct-del-hint'}) : ''}
         </div>
       </div>
     </div>`;
@@ -5474,25 +5988,32 @@ function saveCurrentAsTemplate() {
 // ── Account controls ──────────────────────────────────────────────────────
 // The recovery email lives on the server, so its button renders saying
 // "In case you forget your PIN." and swaps in the address when the row arrives.
-let _writerProfile = { display_name: '', recovery_email: '' };
+let _writerProfile = { display_name: '', deleted_at: null, link_prompt_seen: true };
 
 function loadWriterProfile() {
-  if (!document.getElementById('acct-rec-tile')) return;
+  // Anchored on the Writer ID line, which is present for every signed-in
+  // writer. It used to key off the recovery-email tile, so removing that tile
+  // would have silently taken the display name and the deletion countdown with
+  // it -- exactly the kind of quiet breakage this codebase specialises in.
+  if (!document.getElementById('acct-who')) return;
+  loadIdentities();
   fetchWriterProfile().then(pr => {
     _writerProfile = pr;
     paintWriterProfile();
   }).catch(() => {
-    const el = document.getElementById('acct-rec-hint');
-    if (el) el.innerHTML = '<span style="color:var(--red,#c66)">Could not be read \u2014 check your connection.</span>';
+    const el = document.getElementById('acct-del-hint');
+    if (el) el.innerHTML = '<span style="color:var(--red,#c66)">Account details could not be read \u2014 check your connection.</span>';
   });
 }
 
 function paintWriterProfile() {
-  const re = document.getElementById('acct-rec-hint');
-  if (re) re.innerHTML = _writerProfile.recovery_email
-    ? '<strong>' + esc(_writerProfile.recovery_email) + '</strong>'
-    : 'In case you forget your PIN.';
-  // The display name and the Writer ID carry equal weight \u2014 one is what people
+  const del = document.getElementById('acct-del-hint');
+  if (del) del.innerHTML = _writerProfile.deleted_at
+    ? '<strong style="color:var(--red,#c66)">Scheduled — about ' + esc(deletionRemaining(_writerProfile.deleted_at)) +
+      ' left.</strong> Open this to keep your account.'
+    : `Removes everything after ${DELETION_GRACE_HOURS} hours. Reversible until then.`;
+
+  // The display name and the Writer ID carry equal weight — one is what people
   // call you, the other is what the fleet calls you.
   const who = document.getElementById('acct-who');
   if (who) {
@@ -5562,12 +6083,6 @@ function showShareContact() {
       .catch(() => showToast('Copy failed \u2014 check clipboard permissions.'));
     return false;                          // stays open so it can be copied again
   }, { ok: ic('copy') + ' Copy' });
-}
-
-function showRecoveryEmail() {
-  showWriterField('recovery_email', 'Recovery email', 'RECOVERY EMAIL', 'you@example.com',
-    'Nothing is sent to it \u2014 it is held so you can be identified if you forget your PIN. ' +
-    'Leave it empty to remove it.', saveRecoveryEmail);
 }
 
 function showChangePin() {
@@ -7214,17 +7729,40 @@ document.addEventListener('DOMContentLoaded',()=>{
   const icon = document.querySelector('link[rel=icon]');
   if (mark && icon) mark.src = icon.href;
   showMovedBanner();                  // only appears on the old GitHub Pages address
-  if (isFileCopy() && !getMode()) {
+
+  // Coming back from Google or Discord. Runs before the mode checks below,
+  // because a successful return may be what puts this browser into cloud mode.
+  const oauthOutcome = handleOAuthReturn();
+  // A return from a real provider is a cross-origin navigation, so the line
+  // above catches it on load. This is insurance for the case where the browser
+  // treats the return as a same-document fragment change and never reloads.
+  window.addEventListener('hashchange', handleOAuthReturn);
+
+  // Routing is settled BEFORE anything raises a modal. applyRoute() begins with
+  // closeModal(), so a gate or notice opened first was torn down again the
+  // moment the route resolved — which only showed up when the reload landed on
+  // /settings or /manifest rather than the dashboard.
+  bootRoute();
+
+  if (oauthOutcome === 'signin') {
+    // completeProviderSignIn() owns the rest of boot: it resolves the Writer
+    // ID, pulls the account and decides what to show.
+  } else if (isFileCopy() && !getMode()) {
     setMode('local');                   // the offline copy has only one mode
     maybeShowStyleIntro();
     maybeShowWizard();
   } else if (!getMode()) {
-    showAuthGate(false);                // first visit — the wizard follows once resolved
+    // Someone who has just asked to delete their account lands here signed out.
+    // Tell them what happens next before the gate invites them to sign in.
+    if (!maybeShowDeleteNotice()) showAuthGate(false);   // first visit — wizard follows once resolved
   } else {
-    if (isCloud()) cloudBoot();         // signed in — pull the server copy
+    // The deletion check runs after the boot pull so it never races the
+    // reconcile prompt for the one modal slot.
+    // Nothing here ever asks about linking an account. That is a step of the
+    // gate, and boot runs on every page load -- which is how opening Settings
+    // ended up prompting.
+    if (isCloud()) cloudBoot().then(checkDeletionPending);
     maybeShowStyleIntro();              // held back behind the gate on a first visit
     maybeShowWizard();
   }
-
-  bootRoute();
 });

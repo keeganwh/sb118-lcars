@@ -17,7 +17,8 @@ For more depth: `TECH_STACK.md` (stack), `ROADMAP.md` (what's next), `USER_PROTO
 - **Routing** — History API. `/`, `/settings`, `/manifest`, `/guide`, rewritten to the app by `vercel.json`. On Pages, which has no rewrites, the routes degrade to the dashboard.
 - **Editor** — native `contenteditable` `#editor` div. Markers, name-bolding and character colouring are applied by debounced transform passes on input.
 - **Storage** — `localStorage` is the local cache and the offline source of truth: `lcars_v1` (`SKEY`) for data, `lcars_style_v1` for the skin mirror (read before `<body>` for a flash-free first paint), `lcars_auth_v1` and `lcars_mode_v1` for the session.
-- **Cloud** — Supabase tables `writers`, `state`, `snapshots`, all under RLS. Sign-in is Writer ID + PIN, with the auth email derived as `<writerid>@lcars.local` so it needs no server lookup. Snapshots live in their own table, fetched on demand, capped at ten per sim. Every network call is gated on `isCloud()`; offline-only is a first-class mode.
+- **Cloud** — Supabase tables `writers`, `state`, `snapshots`, all under RLS. Sign-in is Writer ID + PIN, with the auth email derived as `<writerid>@lcars.local` so it needs no server lookup. A Google or Discord identity can be linked to the same auth user, which is both a second way in and the route back from a forgotten PIN. Snapshots live in their own table, fetched on demand, capped at ten per sim. Every network call is gated on `isCloud()`; offline-only is a first-class mode.
+- **Privileged operations** — anything the anon key cannot do (removing a login, purging an expired deletion) is a `security definer` Postgres function in `supabase/schema.sql`, called over PostgREST. **There are deliberately no Edge Functions and no server secrets** — see the recovery/deletion memory file for why.
 - **Offline download** — `api/download.js` re-inlines the three files into one self-contained `LCARS.html` on demand, so "download one file and run it with no network" still holds.
 - **UI** — hand-written LCARS CSS. Classic skin (Dark/Light/High-contrast) plus the Delta Prime skin, via CSS variables. Fonts from Google Fonts, loaded dynamically.
 
@@ -79,7 +80,8 @@ Entries are read by writers, not developers. Write them in plain language, sayin
 
 - Don't edit `CHANGELOG.md` or `APP_VERSION` except on an explicit version bump.
 - Don't add a build step, a bundler or npm dependencies — the zero-dependency, plain-`fetch` design is deliberate, and it is what keeps the offline download working.
-- Don't put the Supabase `service_role` key anywhere in this repo or the app. The anon key is fine; RLS is what protects the data.
+- Don't put the Supabase `service_role` key anywhere in this repo or the app. The anon key is fine; RLS is what protects the data, and privileged work goes through `security definer` functions instead.
+- Don't reintroduce a recovery email or an Edge Function for account recovery. Both were considered at length and rejected — the reasoning is in `memory/session_lcars_2026-08-recovery-deletion.md`.
 - Don't recreate the `main-ikuxoc` branch.
 
 ## Key files
@@ -94,4 +96,4 @@ Entries are read by writers, not developers. Write them in plain language, sayin
 
 ## Project memory
 
-Cross-session memory lives in `memory/` (committed to GitHub). At session start, read `memory/MEMORY.md` for the index, then load relevant files. **Read `memory/session_lcars_2026-08-platform-plan.md` and `memory/session_lcars_2026-08-views.md` before starting any roadmap phase** — they hold the decisions behind the current architecture, so they don't get re-litigated.
+Cross-session memory lives in `memory/` (committed to GitHub). At session start, read `memory/MEMORY.md` for the index, then load relevant files. **Read `memory/session_lcars_2026-08-platform-plan.md`, `memory/session_lcars_2026-08-views.md` and `memory/session_lcars_2026-08-recovery-deletion.md` before starting any roadmap phase** (the last one before touching accounts, auth or boot in particular) — they hold the decisions behind the current architecture, so they don't get re-litigated.

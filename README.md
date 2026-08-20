@@ -17,6 +17,7 @@ A browser-based sim writing tool for [Starbase 118](https://www.starbase118.net/
 - **Academy Mode** — plain-text sims for training missions
 - **Copy out clean** — a sim goes to the clipboard formatted and ready to paste into email or Discord
 - **Accounts and sync** — sign in with your Writer ID and your sims follow you between devices
+- **Linked accounts** — optionally link Google or Discord as a second way in, and the way back if you forget your PIN
 - **Offline mode** — use it with no account and no network at all
 - **Backup** — full JSON export and restore
 
