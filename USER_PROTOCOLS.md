@@ -8,10 +8,11 @@ _My personal playbook for working on LCARS with Claude. This is for **me** (the 
 
 Before a work session, make sure these are in place:
 
-- **GitHub repo** — `keeganwh/sb118-lcars`. `main` auto-deploys to GitHub Pages, so anything I push to `main` goes live in ~30 seconds. Treat `main` as production.
-- **GitHub Pages** — the live app. Confirm it's serving from `main`.
-- **A GitHub Personal Access Token (PAT)** — for Gist cloud sync inside the app. It's stored per-browser and is **not** synced, so I re-enter it on each new device. Keep the token and the Gist ID somewhere I can find them (password manager).
-- **A backup habit** — Settings → Backup Data exports a JSON file. Do this regularly; localStorage can be wiped by a browser clear. My live dataset is close to the ~1 MB Gist ceiling, so an off-Gist backup matters.
+- **GitHub repo** — `keeganwh/sb118-lcars`. Pushing to `main` deploys to production.
+- **Vercel** — the live app, at <https://sb118-lcars.vercel.app/>. GitHub Pages still serves the same `main` behind a notice pointing people at the new address.
+- **Supabase** — project `nyjpqaelilrqzmnangft`, holding accounts and synced sims. Dashboard access still matters for the one case that isn't self-serve: a writer who forgot their PIN and never linked a Google or Discord account (Authentication → Users). The free tier pauses a project after ~1 week idle, so it may need waking after a quiet stretch.
+- **My own LCARS account** — Writer ID + PIN. Nothing to configure per device any more; signing in is the whole setup.
+- **A backup habit** — Settings → Your Account & Data exports a JSON file. Sync means my sims are no longer only in one browser, but a local backup is still the thing that survives an account problem.
 
 ---
 
@@ -23,6 +24,8 @@ Start each session by pointing Claude at the docs, in this order:
 2. **memory/MEMORY.md** → then the linked memory files — the running project state.
 3. **ROADMAP.md** — what's outstanding, so we pick the next real task.
 4. **TECH_STACK.md** — only when the task touches architecture.
+
+The two August 2026 memory files (the platform plan and the views session) hold the decisions behind the current architecture. Point Claude at them before any roadmap phase so they don't get re-argued from scratch.
 
 When I ask for a change, I hand over:
 
@@ -38,8 +41,8 @@ For anything visual, a screenshot beats a paragraph.
 
 - **One theme per session.** Editor bugs OR sync work OR a new feature — not all three. Long mixed sessions bloat context and make commits messy.
 - **Commit after every change**, never batch unrelated fixes. This is already a hard rule (see CLAUDE.md) and it keeps history bisectable.
-- **Work on `main` for small, safe, self-contained changes** — the normal flow, since I want them live fast.
-- **Branch when** a change is (a) large or multi-commit, (b) risky enough that I don't want it auto-deployed half-finished, or (c) experimental and might get thrown away. Branch name pattern: `claude/<short-topic>`. Merge to `main` only when it's proven.
+- **Work on `main` for small, safe, self-contained changes** — quick fixes I want live straight away.
+- **Branch for anything else.** Large or multi-commit work, anything risky enough that I don't want it auto-deployed half-finished, and anything experimental. Branch name pattern: `claude/<short-topic>`; merge to `main` once it's proven. Sessions started from the web arrive on a branch already — that's the normal case now, not the exception.
 - **Cut a version deliberately.** Version bumps are mine to trigger. When a batch of work is stable, I say "save new version X.Y" and Claude rolls the pending changelog entries into a clean release, bumps `APP_VERSION`, and updates `CHANGELOG.md`.
 
 ---
@@ -51,7 +54,7 @@ Before I stop, I leave the next session a clean runway. A good handoff note has:
 - **State** — current version, whether there are pending (unreleased) changelog entries, what's deployed.
 - **What just shipped** — one line each, most recent first.
 - **What's next** — the specific task to pick up, with enough detail to start cold (this is what ROADMAP.md's "Done when…" is for).
-- **Any landmine** — the thing that'll bite the next session if they don't know it (e.g. "data is near the 1 MB Gist limit," "don't recreate the `main-ikuxoc` branch").
+- **Any landmine** — the thing that'll bite the next session if they don't know it. The standing ones are in `CLAUDE.md`; add anything new this session found.
 
 I keep these in `memory/` (see the session log for the format) so they're portable across machines and committed to GitHub — not trapped in a local `~/.claude` folder.
 
@@ -71,5 +74,5 @@ I keep these in `memory/` (see the session log for the format) so they're portab
 
 - [ ] Change committed (with the pending changelog entry, same commit)?
 - [ ] Pushed to `main` (or the branch)?
-- [ ] Pages deploy verified live if it was a user-facing fix?
+- [ ] Verified in a browser — and on the live Vercel URL if it was a user-facing fix?
 - [ ] Handoff note updated in `memory/` if the session did meaningful work?

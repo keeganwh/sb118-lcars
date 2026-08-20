@@ -161,10 +161,16 @@ body.light .tag-ac{color:#007777}
   font-weight:bold;flex-shrink:0;border-bottom:2px solid var(--amber)}
 #tmpl-banner.hidden{display:none!important}
 body.academy #academy-banner{display:block}
-body.academy .dh-r2 .tbb:not(.fmt-on):not(#tbb-cf):not(#tbb-va-btn):not(#tbb-af-btn){opacity:.3;pointer-events:none}
+/* Academy disables only the rich-text controls. Source view, pilcrows, links,
+   the Insert marker dropdown and the Visual Aids remain available. */
+body.academy #tbb-b,body.academy #tbb-i,body.academy #tbb-s,
+body.academy #tbb-ind,body.academy #tbb-outd,
 body.academy #tbb-bn,body.academy #tbb-it,body.academy #tbb-bl,body.academy #tbb-oi{opacity:.3!important;pointer-events:none!important}
 body.academy #editor em{font-style:normal}
+/* Auto-formatting never renders in an Academy sim, so it can never be copied out */
 body.academy #editor .tm{font-style:normal}
+body.academy #editor .lm{font-weight:normal}
+body.academy #editor .om{font-style:normal}
 
 /* ── DOC HEADER ── */
 #dh{background:var(--panel);border-bottom:2px solid var(--amber);padding:4px 12px 2px;display:flex;flex-direction:column;gap:0;flex-shrink:0}
@@ -236,6 +242,12 @@ body.academy #editor .tm{font-style:normal}
 #editor *{margin:0;padding:0}
 #editor p,#editor div{margin:0;padding:0;min-height:1.15em}
 #editor blockquote{margin:0 0 0 2em;padding:0;border:none;font-style:normal;display:block}
+/* #editor * zeroes every margin and padding, which leaves list bullets clipped
+   outside the text column — give lists their indent and marker back */
+#editor ul,#editor ol{margin:0;padding-left:2em;list-style-position:outside}
+#editor ul{list-style-type:disc}
+#editor ol{list-style-type:decimal}
+#editor li{margin:0;padding:0;min-height:1.15em}
 #editor a{color:var(--blue2);text-decoration:underline}
 
 /* ── PARAGRAPH MARKERS (¶ view) ── */

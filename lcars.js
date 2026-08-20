@@ -212,6 +212,12 @@ const VERSIONS = [
       'Changed: connecting a Google or Discord account is now offered as the last step of creating or signing into an account, in the same window, rather than as a message that appeared afterwards. Writers with an existing account are asked once, the next time they sign in. Both providers are offered and it can be declined',
       'Fixed: that offer no longer appears when you open Settings. It used to be raised on start-up, and start-up happens on every page load \u2014 including going straight to Settings, which is not a moment anyone wants interrupting',
       'Changed: whether the offer has been made is remembered against your account rather than the browser, so it follows you and is asked exactly once no matter which device you next sign in on',
+      'Fixed: Academy sims were still auto-formatting some markers \u2014 ((Location)) came out bold and ((OOC)) italic, both on screen and when copied out. Neither shows now, and neither is carried onto the clipboard. The coloured highlights on Actions, Comms and Thoughts stay, since those are only ever visual aids and were never copied out anyway',
+      'Fixed: pasting formatted text into an Academy sim kept its bold and italics until the sim was next reopened. Pasted text is now stripped as it goes in',
+      'Changed: Academy sims allow more of the toolbar than they used to \u2014 links, source view, paragraph markers and the whole Insert marker menu are all available again. Bold, italic, strikethrough, indenting and the Auto Format toggles stay switched off, which is what the plain-text rule actually asks for',
+      'Fixed: in an Academy sim the bold, italic and strikethrough buttons were only dimmed, not disabled, and editing the raw source could put formatting back. Both routes are now closed off',
+      'Added: bullet points. The new bullet button in the toolbar (or Ctrl+Shift+8) turns the line you are on into a bullet. Press Enter for the next one and Enter on an empty bullet to finish, so the same button covers a single standalone point and a full list. Pressing it again on a bullet turns it back into an ordinary paragraph. Bullets work in Academy sims too',
+      'Fixed: copying a whole bulleted list came out as unbulleted lines, because the list wrapper was left behind — and in plain text apps such as Discord the bullets ran together into one line. Lists now paste out as lists, and as \u2022 one per line where only plain text is accepted',
       'Added: moderators. A writer can now be given a moderator or super admin role, so the fleet can look after its own accounts \u2014 previously anyone who lost their PIN without a linked account had to find the maintainer',
       'Added: Request a PIN reset, on the Forgotten your PIN? screen. If you never linked a Google or Discord account, or they are not working, you can now ask a moderator directly. You give your Writer ID and a note saying how they can check the request really came from you \u2014 a Discord handle or an email address they can reach you at',
       'Added: an Admin panel for moderators, with a count in the header of requests waiting. Every moderator sees the same count, so a request cannot sit unnoticed because one person did not log in',
@@ -588,13 +594,18 @@ function isAcademyDoc(doc) {
   const m = S.missions[doc.missionId];
   return m ? m.simType === 'academy' : false;
 }
+// Is the sim currently open in the editor an Academy sim?
+function isAcademyActive() {
+  return !!(curId && isAcademyDoc(S.docs[curId]));
+}
 
 function stripFormattingHtml(html) {
   if (!html) return html;
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
-  // Unwrap rich formatting tags: bold, italic, strikethrough, links
-  tmp.querySelectorAll('strong, b, em, i, s, strike, u, a').forEach(el => {
+  // Unwrap rich formatting tags: bold, italic, strikethrough, underline.
+  // Links are allowed in Academy sims, so <a> is deliberately left intact.
+  tmp.querySelectorAll('strong, b, em, i, s, strike, u').forEach(el => {
     const p = el.parentNode; if (!p) return;
     while (el.firstChild) p.insertBefore(el.firstChild, el);
     p.removeChild(el);
@@ -2796,7 +2807,11 @@ function toggleSourceView() {
     // Exit source mode — apply edits back to editor
     _sourceMode = false;
     const ta = document.getElementById('src-mode-ta');
-    if (ta) { ed.innerHTML = ta.value; ta.remove(); schedSave(); setTimeout(transformNow, 0); }
+    if (ta) {
+      // Source editing can reintroduce formatting an Academy sim isn't allowed to keep
+      ed.innerHTML = isAcademyActive() ? stripFormattingHtml(ta.value) : ta.value;
+      ta.remove(); schedSave(); setTimeout(transformNow, 0);
+    }
     ed.style.display = '';
     if (btn) { btn.classList.remove('tbb-active'); btn.title = 'View / edit raw HTML source of this sim'; }
   }
@@ -3005,7 +3020,10 @@ function installPasteHandler() {
     e.preventDefault();
     const html = e.clipboardData.getData('text/html');
     const plain = e.clipboardData.getData('text/plain');
-    const cleaned = html ? cleanPasteHTML(html) : plainToHTML(plain);
+    let cleaned = html ? cleanPasteHTML(html) : plainToHTML(plain);
+    // Academy sims accept plain text only — strip formatting as it comes in,
+    // rather than leaving it to survive until the doc is next reopened
+    if (isAcademyActive()) cleaned = stripFormattingHtml(cleaned);
     const ed = document.getElementById('editor');
     document.execCommand('insertHTML', false, cleaned);
     normalizeEditorContent(ed);
@@ -3039,6 +3057,18 @@ function installCopyHandler() {
       });
     })(tmp);
 
+    // A selection that spans a whole list clones the <li>s without their <ul>,
+    // so the bullets would paste out as plain lines — put the wrapper back
+    let _liWrap = null;
+    [...tmp.childNodes].forEach(node => {
+      if (node.nodeType === 1 && node.tagName === 'LI') {
+        if (!_liWrap) { _liWrap = document.createElement('ul'); node.parentNode.insertBefore(_liWrap, node); }
+        _liWrap.appendChild(node);
+      } else if (node.nodeType !== 3 || node.textContent.trim()) {
+        _liWrap = null;
+      }
+    });
+
     // Convert ind-N classes to inline margin-left before stripping
     [1,2,3,4].forEach(n => {
       tmp.querySelectorAll('.ind-'+n).forEach(el => {
@@ -3057,8 +3087,9 @@ function installCopyHandler() {
       p.replaceChild(span, bq);
     });
 
-    // Preserve bold on location markers and italic on OOC markers before unwrapping
-    const prefs = getPrefs();
+    // Preserve bold on location markers and italic on OOC markers before unwrapping.
+    // Academy sims are plain text — no auto-formatting is rendered, so none is copied out.
+    const prefs = isAcademyActive() ? {} : getPrefs();
     if (prefs.boldLocations) {
       tmp.querySelectorAll('.lm').forEach(span => {
         const strong = document.createElement('strong');
@@ -3121,9 +3152,17 @@ function installCopyHandler() {
     // Capture plain text before modifying tmp for HTML-clipboard compatibility.
     // Walk top-level children manually — innerText on a detached node has no layout
     // context and silently falls back to textContent (no block-level newlines).
-    const plainText = [...tmp.childNodes]
-      .map(n => (n.textContent || '').replace(/ /g, ' '))
-      .join('\n');
+    const plainLine = n => (n.textContent || '').replace(/ /g, ' ');
+    const plainText = [...tmp.childNodes].flatMap(n => {
+      // Lists are one node holding many lines — expand them, or every bullet
+      // would run together into a single line of plain text
+      if (n.nodeType === 1 && (n.tagName === 'UL' || n.tagName === 'OL')) {
+        const ordered = n.tagName === 'OL';
+        return [...n.children].map((li, i) =>
+          (ordered ? `${i + 1}. ` : '\u2022 ') + plainLine(li));
+      }
+      return [plainLine(n)];
+    }).join('\n');
 
     // Empty-line blocks use <br> as a height placeholder — replace with NBSP so paste
     // targets (Word, Google Docs, forum editors) render a visible blank line instead of
@@ -3296,6 +3335,7 @@ function setIndentLevel(el, n) {
 let _indentUndo = [];   // [{el, fromLevel}]
 
 function doIndent() {
+  if (isAcademyActive()) return;   // indenting is unavailable in Academy sims
   const block = getCaretBlock();
   if (!block) return;
   const from = getIndentLevel(block);
@@ -3305,7 +3345,63 @@ function doIndent() {
   schedSave();
 }
 
+// One button covers both uses: on a single line it makes a standalone bullet,
+// and Enter from there continues the list (Enter on an empty bullet ends it).
+// Toggling again on an existing bullet turns it back into a plain paragraph.
+function toggleBullets() {
+  const ed = document.getElementById('editor');
+  if (!ed) return;
+  ed.focus();
+  // Without this the browser wraps the line in <span style="font-size:…"> as it
+  // rewrites the block, which then survives as junk markup
+  try { document.execCommand('styleWithCSS', false, false); } catch(e){}
+  document.execCommand('insertUnorderedList', false, null);
+  tidyListToggle(ed);
+  normalizeEditorContent(ed);
+  updateBulletBtn();
+  schedSave();
+}
+
+// Un-listing a line hands back a bare inline run plus a <br> rather than a block,
+// which breaks everything downstream that keys off direct-child blocks (pilcrows,
+// per-character colouring, indent). Put the paragraph structure back.
+function tidyListToggle(ed) {
+  const pos = saveCaret(ed);
+  // Drop the font-size spans execCommand leaves behind
+  ed.querySelectorAll('span[style*="font-size"]').forEach(sp => {
+    if (sp.className) return;
+    const p = sp.parentNode; if (!p) return;
+    while (sp.firstChild) p.insertBefore(sp.firstChild, sp);
+    p.removeChild(sp);
+  });
+  // Wrap runs of bare top-level inline/text nodes back into <div> blocks,
+  // treating a top-level <br> as the end of a line rather than content
+  const isBlock = n => n.nodeType === 1 &&
+    ['DIV','P','UL','OL','LI','BLOCKQUOTE','H1','H2','H3','H4','TABLE','PRE'].includes(n.tagName);
+  let wrap = null;
+  [...ed.childNodes].forEach(node => {
+    if (isBlock(node)) { wrap = null; return; }
+    if (node.nodeName === 'BR') {
+      if (wrap) { node.remove(); wrap = null; }
+      else { const d = document.createElement('div'); d.appendChild(document.createElement('br'));
+             ed.replaceChild(d, node); }
+      return;
+    }
+    if (!wrap) { wrap = document.createElement('div'); ed.insertBefore(wrap, node); }
+    wrap.appendChild(node);
+  });
+  restoreCaret(ed, pos);
+}
+function updateBulletBtn() {
+  const btn = document.getElementById('tbb-ul');
+  if (!btn) return;
+  let on = false;
+  try { on = document.queryCommandState('insertUnorderedList'); } catch(e){}
+  btn.classList.toggle('on', on);
+}
+
 function doOutdent() {
+  if (isAcademyActive()) return;   // indenting is unavailable in Academy sims
   const block = getCaretBlock();
   if (!block) return;
   const from = getIndentLevel(block);
@@ -4053,7 +4149,11 @@ function removeConfirmedPair(a, b) {
 // ================================================================
 // TOOLBAR ACTIONS
 // ================================================================
-function ec(cmd) { document.getElementById('editor').focus(); document.execCommand(cmd,false,null); }
+function ec(cmd) {
+  // Bold / italic / strikethrough are unavailable in Academy sims
+  if (isAcademyActive() && ['bold','italic','underline','strikeThrough'].includes(cmd)) return;
+  document.getElementById('editor').focus(); document.execCommand(cmd,false,null);
+}
 
 function doLink() {
   const sel = window.getSelection();
@@ -4789,6 +4889,7 @@ function updateTBState() {
   document.getElementById('tbb-b').classList.toggle('on',document.queryCommandState('bold'));
   document.getElementById('tbb-i').classList.toggle('on',document.queryCommandState('italic'));
   document.getElementById('tbb-s').classList.toggle('on',document.queryCommandState('strikeThrough'));
+  updateBulletBtn();
   pushCaretOutOfMarkerSpans();
 }
 
@@ -6585,10 +6686,13 @@ document.addEventListener('keydown',e=>{
     if(!acad){ if(e.shiftKey) doOutdent(); else doIndent(); }
     return;
   }
+  if((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==='8'||e.key==='*')){
+    e.preventDefault(); toggleBullets(); return;
+  }
   if(e.ctrlKey&&!e.shiftKey){
     if(e.key==='b'){e.preventDefault();if(!acad)ec('bold');}
     if(e.key==='i'){e.preventDefault();if(!acad)ec('italic');}
-    if(e.key==='k'){e.preventDefault();if(!acad)doLink();}
+    if(e.key==='k'){e.preventDefault();doLink();}
     // Intercept Ctrl+Z when there are pending indent undo entries
     if(e.key==='z'&&_indentUndo.length){
       const entry = _indentUndo.pop();

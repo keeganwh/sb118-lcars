@@ -1,6 +1,6 @@
 # LCARS SB118 Writing Tool — Roadmap
 
-_Outstanding work only, in the user's priority order. Current version: **4.23**, released 2026-08-15 — no pending changes._
+_Outstanding work only, in the user's priority order. Current version: **4.23**, released 2026-08-15. There are unreleased pending changelog entries in `VERSIONS` awaiting the next bump._
 
 Each item has a **Done when…** so any session can pick it up and run without asking. Check items off (`- [x]`) as they ship, and delete them once they're rolled into a released version's changelog.
 
@@ -109,7 +109,10 @@ and a one-time recovery code (the user found it sloppy, and retention is poor).
       waiting request without going looking. Actioning issues a temporary PIN,
       shown once, which `must_change_pin` turns into exactly one sign-in.
       Rejecting takes a confirmation. Every decided request is kept in an
-      Archive with who decided it and when.
+      Archive with who decided it and when. Super admins also get the writer
+      roster -- Writer ID, display name, join date, role -- with the role set
+      from its own row; `admin_list_writers()` rather than a widened policy on
+      `writers`, so the table every writer reads on boot is untouched.
       _Bootstrap: the schema carries the one hand-run statement, against
       V239806K11._
       _The temporary PIN writes `auth.users.encrypted_password` via `crypt()`.
@@ -119,8 +122,11 @@ and a one-time recovery code (the user found it sloppy, and retention is poor).
 - [ ] **Apply the schema, then verify the panel live.** Nothing in the admin
       work has run against the real project -- the sandbox blocks every
       outbound host, so it was all proved against an intercepted Supabase.
-      Order: apply `supabase/schema.sql`, run the bootstrap line for
-      V239806K11, then file a request against a spare Writer ID and action it.
+      _Applied 2026-08-20: schema run, bootstrap done, the roster is live and
+      working. What is still unproven is the `crypt()` call --_
+      **file a request against a spare Writer ID, action it, and check the
+      temporary PIN actually signs that account in.** That is the one part of
+      the design that could turn out not to work at all.
       _Done when: a real temporary PIN signs a real account in and is replaced._
 
 - [ ] **Two edge cases never exercised against the live project.**
