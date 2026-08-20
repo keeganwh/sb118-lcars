@@ -9,7 +9,7 @@
   ],
   "headers": [
     {
-      "source": "/(LCARS.html|lcars.css|lcars.js)",
+      "source": "/(LCARS.html|lcars.css|lcars-render.js|lcars.js)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]

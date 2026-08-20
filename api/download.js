@@ -1,16 +1,17 @@
 // Serves a single self-contained LCARS.html.
 //
-// The app ships as three files so its views can share code, but the offline
+// The app ships as several files so its pages can share code, but the offline
 // promise is "download one file and run it with no network at all". This route
-// puts the three back together on demand: the stylesheet link becomes an inline
-// <style>, the script tag becomes an inline <script>, and the result is byte-for
-// byte the app that used to be committed as one file.
+// puts them back together on demand: the stylesheet link becomes an inline
+// <style>, each script tag becomes an inline <script>, and the result is
+// byte-for-byte the app that used to be committed as one file.
 //
-// The three sources are fetched from this same deployment rather than read off
-// disk, so no bundling configuration is needed and the download always matches
-// what is actually live.
+// The sources are fetched from this same deployment rather than read off disk,
+// so no bundling configuration is needed and the download always matches what
+// is actually live. Adding a new shared file means adding it here too.
 
 const LINK_TAG = '<link rel="stylesheet" href="lcars.css">';
+const RENDER_TAG = '<script src="lcars-render.js"></script>';
 const SCRIPT_TAG = '<script src="lcars.js"></script>';
 
 module.exports = async (req, res) => {
@@ -21,20 +22,20 @@ module.exports = async (req, res) => {
   const origin = `${proto}://${host}`;
 
   try {
-    const [html, css, js] = await Promise.all(
-      ['/LCARS.html', '/lcars.css', '/lcars.js'].map(async p => {
+    const [html, css, render, js] = await Promise.all(
+      ['/LCARS.html', '/lcars.css', '/lcars-render.js', '/lcars.js'].map(async p => {
         const r = await fetch(origin + p);
         if (!r.ok) throw new Error(`${p} responded ${r.status}`);
         return r.text();
       })
     );
 
-    if (!html.includes(LINK_TAG) || !html.includes(SCRIPT_TAG)) {
+    if (!html.includes(LINK_TAG) || !html.includes(RENDER_TAG) || !html.includes(SCRIPT_TAG)) {
       throw new Error('LCARS.html no longer has the expected link/script tags to inline');
     }
     // A literal </script> or </style> in the payload would close the tag early.
     // Neither file contains one today; refuse rather than emit a broken app.
-    if (/<\/script/i.test(js) || /<\/style/i.test(css)) {
+    if (/<\/script/i.test(js) || /<\/script/i.test(render) || /<\/style/i.test(css)) {
       throw new Error('source contains a closing tag that cannot be inlined safely');
     }
 
@@ -43,6 +44,7 @@ module.exports = async (req, res) => {
     // the matched tag and corrupt the inlined script.
     const out = html
       .replace(LINK_TAG, () => `<style>\n${css}</style>`)
+      .replace(RENDER_TAG, () => `<script>\n${render}</script>`)
       .replace(SCRIPT_TAG, () => `<script>\n${js}</script>`);
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');

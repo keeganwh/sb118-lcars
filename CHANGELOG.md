@@ -53,6 +53,7 @@ _On `main` and live, not yet cut as a version._
 - Fixed: an indent applied in an Academy sim was silently undone the next time the sim was opened, pasted into, or edited through source view
 - Added: select across several lines and the indent button now indents all of them at once, rather than only the line you started on. Works on bullets and ordinary lines together, and Ctrl+Z takes the whole lot back in one press
 - Fixed: Tab and Shift+Tab did not indent in Academy sims even though the buttons did
+- Changed: the code that renders sims for reading — markers, thoughts, comms, character colours — now lives in one shared file rather than only inside the editor. Nothing looks or behaves differently; it is groundwork for read-only share links, so a shared sim renders exactly as it does here instead of slowly drifting out of step
 
 ## v4.23 — 2026-08-15
 

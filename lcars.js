@@ -239,6 +239,7 @@ const VERSIONS = [
       'Fixed: an indent applied in an Academy sim was silently undone the next time the sim was opened, pasted into, or edited through source view',
       'Added: select across several lines and the indent button now indents all of them at once, rather than only the line you started on. Works on bullets and ordinary lines together, and Ctrl+Z takes the whole lot back in one press',
       'Fixed: Tab and Shift+Tab did not indent in Academy sims even though the buttons did',
+      'Changed: the code that renders sims for reading — markers, thoughts, comms, character colours — now lives in one shared file rather than only inside the editor. Nothing looks or behaves differently; it is groundwork for read-only share links, so a shared sim renders exactly as it does here instead of slowly drifting out of step',
     ],
   },
 ];
@@ -3223,35 +3224,14 @@ function installCopyHandler() {
 // ================================================================
 // MARKER TRANSFORM
 // ================================================================
+// Marker rendering lives in lcars-render.js so share.html renders sims
+// identically. This wrapper supplies the editor's current state.
 function applyMarkers(html) {
-  html = html.split(ZWS).join(''); // strip any ZWS caret-anchor nodes left by pushCaretOutOfMarkerSpans
-  html = html.replace(/<span class="am">([\s\S]*?)<\/span>/g, '$1');
-  html = html.replace(/<span class="cm">([\s\S]*?)<\/span>/g, '$1');
-  html = html.replace(/<span class="bk">([\s\S]*?)<\/span>/g, '$1');
-  html = html.replace(/<span class="lm">([\s\S]*?)<\/span>/g, '$1');
-  html = html.replace(/<span class="om">([\s\S]*?)<\/span>/g, '$1');
-  html = html.replace(/<span class="tm"><em>(oO\s[\s\S]*?\sOo)<\/em><\/span>/g, '$1');
-  html = html.replace(/<span class="tm">(oO\s[\s\S]*?\sOo)<\/span>/g, '$1');
-  html = html.replace(/<em>(oO\s[\s\S]*?\sOo)<\/em>/g, '$1');
-  if (fmts.action)
-    html = html.replace(/::((?:(?!::)[\s\S])*?)::/g, (_,i) => `<span class="am">::${i}::</span>`);
-  if (fmts.comms)
-    html = html.replace(/=\/\\=((?:(?!=\/\\=)[\s\S])*?)=\/\\=/g, (_,i) => `<span class="cm">=/\\= ${i.trim()} =/\\=</span>`);
-  const tItalic = getPrefs().thoughtItalic;
-  // Prevent matching across paragraph (div) boundaries in innerHTML
-  const thoughtRe = /\boO\s((?:(?!<div|<\/div>)[\s\S])*?)\sOo\b/g;
-  // Italic is applied via CSS on .tm, not via <em>, so typing after a thought doesn't inherit italic
-  if (fmts.thought)
-    html = html.replace(thoughtRe, (_,i) => `<span class="tm">oO ${i} Oo</span>`);
-  else if (tItalic)
-    html = html.replace(thoughtRe, (_,i) => `<em>oO ${i} Oo</em>`);
-  // OOC: any ((OOC...)) — must start with OOC (case-sensitive); runs first so Location doesn't catch it
-  html = html.replace(/\(\((OOC[^)<>]*)\)\)/g, (_,i) => `<span class="om">((${i}))</span>`);
-  // Location: any ((text)) that does NOT start with OOC
-  html = html.replace(/\(\((?!OOC)([^)<>]+)\)\)/g, (_,i) => `<span class="lm">((${i}))</span>`);
-  if (curId && isAcademyDoc(S.docs[curId]))
-    html = html.replace(/\[([^\]\n<]+)\]/g, (_,i) => `<span class="bk">[${i}]</span>`);
-  return html;
+  return lrApplyMarkers(html, {
+    fmts,
+    thoughtItalic: getPrefs().thoughtItalic,
+    academy: isAcademyActive(),
+  });
 }
 function stripMarkers(html) {
   return html
@@ -4767,68 +4747,11 @@ const CC_PRESETS = [
   {name:'Green',  hex:'#27ae60'},
 ];
 
+// Character colouring lives in lcars-render.js; see applyMarkers above.
 function applyCharColors(html) {
   if (!curId) return html;
   const doc = S.docs[curId];
-  const colors = (doc && doc.charColors) || {};
-  // Fast path: nothing to apply AND nothing previously applied to strip.
-  // (When the last colour is removed, colors is empty but old markup still
-  //  needs clearing — so we must still run the strip pass in that case.)
-  if (!Object.keys(colors).length && !/data-char-clr|cc-nm/.test(html)) return html;
-
-  // Pre-compute lowercased color map for fast lookup
-  const lcolorMap = {};
-  Object.entries(colors).forEach(([k,v]) => { lcolorMap[k.toLowerCase()] = {name:k, hex:v}; });
-
-  const tmp = document.createElement('div');
-  tmp.innerHTML = html;
-
-  const blocks = tmp.querySelectorAll('div,p,li');
-  blocks.forEach(bl => {
-    // Strip any previously applied color coding first
-    if (bl.hasAttribute('data-char-clr')) {
-      bl.removeAttribute('data-char-clr');
-      bl.style.removeProperty('color');
-      bl.querySelectorAll('span.cc-nm').forEach(s => {
-        while (s.firstChild) s.parentNode.insertBefore(s.firstChild, s);
-        s.parentNode.removeChild(s);
-      });
-    }
-
-    // Manual paragraph override takes priority
-    const overrideChar = bl.getAttribute('data-char-override');
-    if (overrideChar) {
-      const entry = lcolorMap[overrideChar.toLowerCase()];
-      if (entry) {
-        bl.setAttribute('data-char-clr','1');
-        bl.style.color = entry.hex;
-      }
-      return;
-    }
-
-    // Get the text content of just this block (not nested blocks)
-    const text = bl.childNodes.length
-      ? [...bl.childNodes].filter(n=>n.nodeType===3||n.nodeType===1)
-          .map(n=>n.nodeType===3?n.textContent:(n.innerText||n.textContent)).join('')
-      : '';
-    const trimText = text.trimStart();
-
-    // Colour single-speaker lines only ("Name:" / "Name: …"). Multi-name lines
-    // (e.g. "Name1/Name2:") are left at the default colour — colouring just one
-    // name there required fragile <span> wrapping that broke removal and the
-    // [Names] bolding pass, so it is deliberately not attempted.
-    for (const [lname, entry] of Object.entries(lcolorMap)) {
-      const {name, hex} = entry;
-      const safeN = name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-      if (new RegExp(`^${safeN}\\s*:`, 'i').test(trimText)) {
-        bl.setAttribute('data-char-clr','1');
-        bl.style.color = hex;
-        break;
-      }
-    }
-  });
-
-  return tmp.innerHTML;
+  return lrApplyCharColors(html, (doc && doc.charColors) || {});
 }
 
 function getCharColor(name) {
