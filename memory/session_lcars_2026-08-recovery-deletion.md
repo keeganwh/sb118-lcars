@@ -260,8 +260,46 @@ not match `STYLE_VERSION` raises the intro over everything; and the belt-and-
 braces `closeModal()` after boot will tear down the very prompt a test is
 about — `temppin` has to skip it.
 
+## Added after the first round, at the user's request
+
+The roster. They asked for a writer list rather than the typed lookup I
+recommended, having seen the panel: Writer ID, display name, join date, role,
+scrollable, filterable, with the role set from its own row.
+
+- **`admin_list_writers()`, not a widened policy on `writers`.** Loosening
+  `writers_own` would put a role test on the table every writer reads on every
+  boot, and a mistake there would be a mistake in everyone's boot path. The
+  function is the same permission narrowed to one role and six columns. Nothing
+  about anyone's sims, no auth identities.
+- **Setting the role from the row removed the retyping step**, which was the
+  real risk in the first version — looking someone up and then typing their
+  Writer ID into a separate box is two chances to promote the wrong person.
+- **`openModal` has no cancel callback.** Cancel just hides it. A dropdown left
+  showing a role that was never set reads as though it had been, so
+  `setRoleFromRow()` watches `#mo` and snaps the select back.
+- Own row disabled (the function refuses self-demotion anyway); accounts inside
+  their deletion window are marked and dimmed.
+
+## Live status, 2026-08-20
+
+Schema applied, bootstrap run, **the panel and the roster are confirmed working
+against the real project by the user.** So `my_role()`, the RLS on
+`pin_reset_requests`, and `admin_list_writers()` are all proven live.
+
+**Still unproven: the `crypt()` call.** Nobody has yet issued a temporary PIN
+and signed in with it. That is the one part of the design that could turn out
+not to work at all, and the fallback is in `admin_action_reset()`'s comment.
+
+## Merging with main, 2026-08-20
+
+Main gained bullets and an Academy rework while this branch was open. One
+conflict, in the pending changelog entry, both sides appending — kept both.
+Main's six entries had reached the `VERSIONS` array but never `CHANGELOG.md`;
+mirrored across during the merge. **Worth checking that mirror on any merge** —
+the rule is easy to half-keep.
+
 ## Next
 
-1. **Apply the schema and verify live.** Bootstrap line, then file a request
-   against a spare Writer ID and action it end to end.
+1. **Prove the temporary PIN end to end.** File a request against a spare Writer
+   ID, action it, sign in with what comes out.
 2. Session 4 of the roadmap — read-only share links — is next in priority order.
