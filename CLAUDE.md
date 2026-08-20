@@ -31,6 +31,7 @@ For more depth: `TECH_STACK.md` (stack), `ROADMAP.md` (what's next), `USER_PROTO
 4. **Never bump the version unasked.** `APP_VERSION` / `CHANGELOG.md` only change when the user says "save new version X.Y".
 5. **Don't batch unrelated changes.** Commit and push after each change.
 6. **Verify in a browser.** There is no test suite, and a syntax check cannot see a valid block going missing — see the landmines below.
+7. **Ask questions in plain text, never in a modal.** The user has asked for this explicitly. Put decisions to them as prose in your reply — do not use `AskUserQuestion` or any other pop-up chooser on this project.
 
 ### Pending changelog entry format
 
