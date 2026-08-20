@@ -59,6 +59,13 @@ _On `main` and live, not yet cut as a version._
 - Added: share links can be set to expire — after 24 hours, 7 days, 30 days, or never. Stop sharing kills the link immediately for everyone who has it, and sharing again afterwards makes a new address rather than reviving the old one
 - Added: shared sims open on a page of their own rather than loading the whole of LCARS, so a link is quick on a phone. It is built for a narrow screen from the start, since that is where these get read
 - Changed: expired share links are now tidied away automatically, so a link that has run out does not sit around after it has stopped working
+- Fixed: shared sims were double spaced. The page added a gap under every paragraph on top of the blank lines the sim already contains — it now spaces them exactly as the editor does
+- Fixed: shared sims showed the coloured marker highlights from the editor. Those are a writing aid for spotting your own markers mid-sim, and have no place in a finished sim someone has been sent a link to — a shared sim now reads the way it does when you copy it out
+- Fixed: formatting was missing from shared sims. Locations are bold again, and thoughts and OOC notes are italic, following the same preferences the app uses when you copy a sim to the clipboard
+- Fixed: locations and OOC notes were tinted grey on the share page, which is a colour the app has never given them
+- Added: a Light / Dark switch on the share page. It follows the reader’s own device setting to begin with and remembers their choice — it used to be dark for everyone, whatever they preferred
+- Changed: the share page header takes up far less room. The title is smaller and the writer, Writer ID, status and date now sit on one line under it instead of four stacked rows above the sim
+- Changed: the share page now uses the app’s own colours and header, so a shared sim looks like LCARS instead of a plain web page
 
 ## v4.23 — 2026-08-15
 

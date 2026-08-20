@@ -552,9 +552,15 @@ grant execute on function public.admin_list_writers() to authenticated;
 -- nothing adjacent to it.
 --
 -- Content is stored as the editor stores it, with markers stripped, alongside
--- the settings the render pass needs (fmts, academy, thought_italic,
--- char_colors). share.html runs the same lcars-render.js the app runs, so a
--- shared sim renders identically rather than approximately.
+-- what the render pass needs: char_colors, the academy flag, and `format` --
+-- the writer's bold-locations / italic-OOC / italic-thoughts / line-spacing
+-- preferences. share.html runs the same lcars-render.js the app runs.
+--
+-- `format` deliberately does NOT carry the Visual Aids toggles. Those tint
+-- markers in the editor so a writer can see them while writing; a reader is
+-- looking at a finished sim, and the highlight blocks are noise there. What
+-- the viewer renders is what the app puts on the clipboard: locations bold,
+-- OOC and thoughts italic, and the marker punctuation left as plain text.
 --
 -- authors is a list from the outset even though a sim has one writer today.
 -- Joint Posts will have several, and migrating a text column to an array after
@@ -574,9 +580,8 @@ create table if not exists public.shared_docs (
   doc_updated_at timestamptz,
   content        text not null default '',
   char_colors    jsonb not null default '{}'::jsonb,
-  fmts           jsonb not null default '{}'::jsonb,
+  format         jsonb not null default '{}'::jsonb,
   academy        boolean not null default false,
-  thought_italic boolean not null default false,
   expires_at     timestamptz,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now()
@@ -609,6 +614,21 @@ revoke all on table public.shared_docs from anon, authenticated;
 grant select, insert, update, delete on table public.shared_docs to authenticated;
 
 -- ---------------------------------------------------------------------------
+-- shared_docs : fmts/thought_italic -> format
+-- ---------------------------------------------------------------------------
+-- The first cut of this table stored the editor's Visual Aids toggles and
+-- rendered shared sims with the marker highlights switched on. That was the
+-- wrong pass: the highlights are a writing aid, and a reader wants the sim as
+-- it goes out -- locations bold, OOC and thoughts italic, markers plain. The
+-- replacement column carries those preferences instead.
+--
+-- create table if not exists leaves an existing table alone, so a project that
+-- ran the first version needs these. They are no-ops everywhere else.
+alter table public.shared_docs add column if not exists format jsonb not null default '{}'::jsonb;
+alter table public.shared_docs drop column if exists fmts;
+alter table public.shared_docs drop column if exists thought_italic;
+
+-- ---------------------------------------------------------------------------
 -- get_shared_doc() : the anonymous read path
 -- ---------------------------------------------------------------------------
 -- The only thing on this table anon can call. Takes a token, returns one row,
@@ -620,6 +640,9 @@ grant select, insert, update, delete on table public.shared_docs to authenticate
 -- working the moment it lapses even if its row is still sitting in the table.
 -- owner_uid is never returned; the byline comes from the published authors
 -- list, which holds only what the writer chose to publish.
+-- Dropped first, not just replaced: the return type changed when `fmts` and
+-- `thought_italic` became `format`, and create or replace cannot change that.
+drop function if exists public.get_shared_doc(text);
 create or replace function public.get_shared_doc(p_token text)
 returns table (
   title          text,
@@ -628,9 +651,8 @@ returns table (
   doc_updated_at timestamptz,
   content        text,
   char_colors    jsonb,
-  fmts           jsonb,
+  format         jsonb,
   academy        boolean,
-  thought_italic boolean,
   expires_at     timestamptz
 )
 language sql
@@ -639,7 +661,7 @@ security definer
 set search_path = public
 as $$
   select s.title, s.authors, s.status, s.doc_updated_at, s.content,
-         s.char_colors, s.fmts, s.academy, s.thought_italic, s.expires_at
+         s.char_colors, s.format, s.academy, s.expires_at
     from public.shared_docs s
    where s.token = p_token
      and (s.expires_at is null or s.expires_at > now());

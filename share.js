@@ -105,61 +105,96 @@ function sanitise(html) {
 }
 
 // ----------------------------------------------------------------
+// THEME
+// ----------------------------------------------------------------
+// Follows the reader's own system setting to begin with, and remembers an
+// explicit choice per browser. It is their setting, not the writer's -- the
+// sim is the shared thing, not the skin it is read in.
+const THEME_KEY = 'lcars_share_theme';
+
+function systemTheme() {
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  const btn = document.getElementById('theme-btn');
+  if (btn) { btn.textContent = t === 'light' ? 'Dark' : 'Light'; btn.hidden = false; }
+}
+
+function initTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem(THEME_KEY); } catch (e) {}
+  applyTheme(saved || systemTheme());
+  const btn = document.getElementById('theme-btn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+  });
+  // Track the system setting until the reader overrides it.
+  if (!saved && window.matchMedia) {
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    const onChange = () => { try { if (!localStorage.getItem(THEME_KEY)) applyTheme(systemTheme()); } catch (e) {} };
+    mq.addEventListener ? mq.addEventListener('change', onChange) : mq.addListener(onChange);
+  }
+}
+
+// ----------------------------------------------------------------
 // PRESENTATION
 // ----------------------------------------------------------------
 const STATUS_LABEL = { active: 'Active', complete: 'Completed', archived: 'Archived' };
 
-// Display name leads, Writer ID sits under it as a subtitle. With no display
-// name set the Writer ID is promoted to the byline rather than leaving the
-// page looking like it forgot who wrote it.
-function renderByline(authors) {
-  const list = Array.isArray(authors) ? authors : [];
+// Display name leads and everything else follows on the same line -- Writer ID,
+// status, date. Four stacked rows of chrome above a sim is more furniture than
+// the sim itself. With no display name set the Writer ID is promoted rather
+// than leaving the page looking like it forgot who wrote it.
+function metaParts(doc) {
+  const parts = [];
+  const list = Array.isArray(doc.authors) ? doc.authors : [];
   const named = list.filter(a => a && (a.display_name || a.writer_id));
-  if (!named.length) return;
 
-  const withNames = named.map(a => a.display_name).filter(Boolean);
-  const ids = named.map(a => a.writer_id).filter(Boolean);
-
-  if (withNames.length === named.length) {
-    $('by').textContent = 'by ' + withNames.join(' · ');
-    $('by-sub').textContent = ids.join(' · ');
-  } else {
-    $('by').textContent = 'by ' + named.map(a => a.display_name || a.writer_id).join(' · ');
-    $('by-sub').textContent = withNames.length ? ids.join(' · ') : '';
+  if (named.length) {
+    const lead = named.map(a => a.display_name || a.writer_id).join(' & ');
+    parts.push(`<span class="who">${escHtml(lead)}</span>`);
+    // Only worth repeating the IDs when they are not already the lead text.
+    const ids = named.filter(a => a.display_name).map(a => a.writer_id).filter(Boolean);
+    if (ids.length) parts.push(escHtml(ids.join(' · ')));
   }
+
+  const status = doc.status || 'active';
+  if (STATUS_LABEL[status])
+    parts.push(`<span class="st-${escHtml(status)}">${STATUS_LABEL[status]}</span>`);
+
+  const d = doc.doc_updated_at ? new Date(doc.doc_updated_at) : null;
+  if (d && !isNaN(d))
+    parts.push(escHtml(d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })));
+
+  return parts;
 }
 
-function renderDate(iso) {
-  if (!iso) return;
-  const d = new Date(iso);
-  if (isNaN(d)) return;
-  $('updated').textContent = 'Updated ' + d.toLocaleDateString(undefined,
-    { year: 'numeric', month: 'long', day: 'numeric' });
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function render(doc) {
   document.title = (doc.title || 'Shared sim') + ' — LCARS';
-  $('title').textContent = doc.title || 'Untitled sim';
-  renderByline(doc.authors);
-  renderDate(doc.doc_updated_at);
+  const t = document.getElementById('title');
+  t.textContent = doc.title || 'Untitled sim';
+  if ((doc.status || '') === 'complete') t.classList.add('complete');
 
-  const status = doc.status || 'active';
-  const pill = $('status');
-  if (STATUS_LABEL[status]) {
-    pill.textContent = STATUS_LABEL[status];
-    pill.classList.add(status);
-  } else pill.remove();
+  document.getElementById('meta').innerHTML =
+    metaParts(doc).join('<span class="sep">·</span>');
 
-  // Sanitise first, then run the shared render pass. In that order: the render
-  // pass introduces markup of its own, and re-sanitising afterwards would strip
-  // the marker spans it just added.
-  const clean = sanitise(doc.content || '');
-  const marked = lrApplyMarkers(clean, {
-    fmts: doc.fmts || {},
-    thoughtItalic: !!doc.thought_italic,
-    academy: !!doc.academy,
+  // Sanitise first, then render. In that order: the render pass introduces
+  // markup of its own, and re-sanitising afterwards would strip it again.
+  document.getElementById('body').innerHTML = lrToReadingHtml(sanitise(doc.content || ''), {
+    format:     doc.format || {},
+    charColors: doc.char_colors || {},
+    academy:    !!doc.academy,
   });
-  $('body').innerHTML = lrApplyCharColors(marked, doc.char_colors || {});
 
   hide('loading');
   show('sheet');
@@ -200,4 +235,5 @@ async function load() {
   render(rows[0]);
 }
 
+initTheme();
 load();

@@ -114,3 +114,54 @@ function lrApplyCharColors(html, colors) {
 
   return tmp.innerHTML;
 }
+
+// Turn a stored sim into what a READER sees, as opposed to what a writer sees
+// while writing it.
+//
+// The difference matters and it is easy to get backwards. In the editor the
+// markers are tinted -- action pink, comms green, thoughts blue -- so a writer
+// can pick them out at a glance. None of that belongs in a finished sim: the
+// highlights are scaffolding, and a reader wants the sim as it goes out to the
+// group. So this produces exactly what the app's copy handler puts on the
+// clipboard: locations bold, OOC and thoughts italic, the marker punctuation
+// itself left as plain text, and no coloured blocks anywhere.
+//
+// Names are already bold in the stored content -- boldNames() writes real
+// <strong> into the document -- so there is nothing to reapply here.
+//
+// Academy sims are plain text by rule. They get the markers found and unwrapped
+// like everything else, and none of the formatting.
+function lrToReadingHtml(html, opts) {
+  opts = opts || {};
+  const fmt = opts.academy ? {} : (opts.format || {});
+
+  // Run the editor's own pass first, purely to FIND the markers. Everything it
+  // wraps is unwrapped again below -- going through it rather than
+  // re-implementing the patterns is what stops the two drifting apart.
+  let out = lrApplyMarkers(html, {
+    fmts: { action: true, comms: true, thought: true },
+    thoughtItalic: false,   // handled below, as a real <em>
+    academy: false,         // [brackets] are an editing aid, never formatting
+  });
+  out = lrApplyCharColors(out, opts.charColors || {});
+
+  const tmp = document.createElement('div');
+  tmp.innerHTML = out;
+
+  const swap = (sel, tag) => tmp.querySelectorAll(sel).forEach(sp => {
+    const el = document.createElement(tag);
+    while (sp.firstChild) el.appendChild(sp.firstChild);
+    sp.parentNode.replaceChild(el, sp);
+  });
+  if (fmt.boldLocations) swap('span.lm', 'strong');
+  if (fmt.italicOOC)     swap('span.om', 'em');
+  if (fmt.thoughtItalic) swap('span.tm', 'em');
+
+  // Whatever is left of a marker span goes, text intact.
+  tmp.querySelectorAll('span.am,span.cm,span.tm,span.lm,span.om,span.bk').forEach(sp => {
+    while (sp.firstChild) sp.parentNode.insertBefore(sp.firstChild, sp);
+    sp.parentNode.removeChild(sp);
+  });
+
+  return tmp.innerHTML;
+}
