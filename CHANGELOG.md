@@ -48,6 +48,9 @@ _On `main` and live, not yet cut as a version._
 - Fixed: sims pasted in from Google Docs or Word copied out double spaced. Those apps hand LCARS paragraph blocks, which look right in the editor but carry spacing of their own everywhere else — so every line, and every blank line, arrived with a gap around it. Copying out now produces the same plain blocks a sim typed in LCARS does. Sims you have already pasted in are fixed too, and nothing about what is stored changes
 - Fixed: blank lines pasted in from Google Docs could vanish entirely when copied into some apps, while showing as a full blank line in others
 - Fixed: lines separated by a soft line break ran together into one line when copied as plain text — in Discord in particular, where only plain text is accepted
+- Added: indenting now works in Academy sims, on ordinary lines and on bullets alike. Indenting is structure rather than formatting — the same reason bullets were already allowed — so the indent and outdent buttons are no longer greyed out there
+- Fixed: indenting a bullet moved the whole list instead of that one bullet. Each bullet now indents on its own, so a list can have levels within it
+- Fixed: an indent applied in an Academy sim was silently undone the next time the sim was opened, pasted into, or edited through source view
 
 ## v4.23 — 2026-08-15
 

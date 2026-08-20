@@ -234,6 +234,9 @@ const VERSIONS = [
       'Fixed: sims pasted in from Google Docs or Word copied out double spaced. Those apps hand LCARS paragraph blocks, which look right in the editor but carry spacing of their own everywhere else \u2014 so every line, and every blank line, arrived with a gap around it. Copying out now produces the same plain blocks a sim typed in LCARS does. Sims you have already pasted in are fixed too, and nothing about what is stored changes',
       'Fixed: blank lines pasted in from Google Docs could vanish entirely when copied into some apps, while showing as a full blank line in others',
       'Fixed: lines separated by a soft line break ran together into one line when copied as plain text \u2014 in Discord in particular, where only plain text is accepted',
+      'Added: indenting now works in Academy sims, on ordinary lines and on bullets alike. Indenting is structure rather than formatting \u2014 the same reason bullets were already allowed \u2014 so the indent and outdent buttons are no longer greyed out there',
+      'Fixed: indenting a bullet moved the whole list instead of that one bullet. Each bullet now indents on its own, so a list can have levels within it',
+      'Fixed: an indent applied in an Academy sim was silently undone the next time the sim was opened, pasted into, or edited through source view',
     ],
   },
 ];
@@ -613,10 +616,10 @@ function stripFormattingHtml(html) {
     while (el.firstChild) p.insertBefore(el.firstChild, el);
     p.removeChild(el);
   });
-  // Remove indent classes
-  [1,2,3,4].forEach(n => {
-    tmp.querySelectorAll('.ind-'+n).forEach(el => el.classList.remove('ind-'+n));
-  });
+  // Indent classes are deliberately NOT stripped. Indenting is structure, not
+  // character formatting -- the same reason bullets are allowed in Academy sims.
+  // This ran on open, on paste and on applying source view, so leaving it in
+  // would have silently undone an indent the moment the sim was reopened.
   // Unwrap blockquotes
   tmp.querySelectorAll('blockquote').forEach(bq => {
     const p = bq.parentNode; if (!p) return;
@@ -3370,9 +3373,25 @@ function setIndentLevel(el, n) {
 // Lightweight undo queue for indent/outdent (bypasses native undo stack)
 let _indentUndo = [];   // [{el, fromLevel}]
 
+// Indent normally applies to the block the caret sits in, which is a direct
+// child of the editor. Inside a list that block is the whole <ul>, so indenting
+// one bullet moved the entire list. When the caret is in an <li>, that li is the
+// thing to move -- the ind-N rules are descendant selectors and already reach it.
+function getIndentTarget() {
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount) {
+    const ed = document.getElementById('editor');
+    let node = sel.getRangeAt(0).startContainer;
+    while (node && node !== ed) {
+      if (node.nodeType === 1 && node.tagName === 'LI') return node;
+      node = node.parentNode;
+    }
+  }
+  return getCaretBlock();
+}
+
 function doIndent() {
-  if (isAcademyActive()) return;   // indenting is unavailable in Academy sims
-  const block = getCaretBlock();
+  const block = getIndentTarget();
   if (!block) return;
   const from = getIndentLevel(block);
   _indentUndo.push({el:block, fromLevel:from});
@@ -3437,8 +3456,7 @@ function updateBulletBtn() {
 }
 
 function doOutdent() {
-  if (isAcademyActive()) return;   // indenting is unavailable in Academy sims
-  const block = getCaretBlock();
+  const block = getIndentTarget();
   if (!block) return;
   const from = getIndentLevel(block);
   _indentUndo.push({el:block, fromLevel:from});

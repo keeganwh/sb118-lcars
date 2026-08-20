@@ -163,8 +163,9 @@ body.light .tag-ac{color:#007777}
 body.academy #academy-banner{display:block}
 /* Academy disables only the rich-text controls. Source view, pilcrows, links,
    the Insert marker dropdown and the Visual Aids remain available. */
+/* Indent and outdent are NOT in this list: indenting is structure rather than
+   character formatting, which is the same reason bullets are allowed here. */
 body.academy #tbb-b,body.academy #tbb-i,body.academy #tbb-s,
-body.academy #tbb-ind,body.academy #tbb-outd,
 body.academy #tbb-bn,body.academy #tbb-it,body.academy #tbb-bl,body.academy #tbb-oi{opacity:.3!important;pointer-events:none!important}
 body.academy #editor em{font-style:normal}
 /* Auto-formatting never renders in an Academy sim, so it can never be copied out */
