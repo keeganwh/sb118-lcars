@@ -141,10 +141,29 @@ and a one-time recovery code (the user found it sloppy, and retention is poor).
 
 ## Session 4 — Read-only share links
 
-- [ ] **Shareable sim links — sims only.**
+- [x] **Shareable sim links — sims only.** _Built 2026-08-20 on `claude/charming-ptolemy-4phvvv`; needs the schema run and a live pass before it is done._
       `share_token` on a doc plus a `/s/<token>` route served by `share.html` — a minimal page with no auth and no editor, so a share link does not drag the whole app down with it. Scenes explicitly out of scope. Responsive from the start — these will be opened on phones constantly.
       _Done when: a share URL opens in a logged-out private window, renders the sim, and nothing is editable._
       _`writers.display_name` now exists and is set from Settings, but nothing displays it to anyone yet. This is the first surface that could — a share link showing "by <display name>" rather than a Writer ID._
+
+      **Decisions settled 2026-08-20, do not re-litigate.** A share is a
+      **snapshot**, not a live window: publishing copies the sim into
+      `public.shared_docs` and later edits stay private until it is published
+      again. That is what makes the read path safe — docs live inside one
+      `state.payload` blob, so no policy can grant a stranger a single sim
+      without granting every sim, character and setting the writer owns.
+      The table is keyed by `doc_id` and stores `authors` as a **list** from day
+      one, so it survives docs moving into rows of their own when Joint Posts
+      forces that restructure. There is deliberately **no anon select policy** —
+      `using (true)` would expose every token — so anonymous reads go through
+      `get_shared_doc(token)`. Expiry (never / 24h / 7d / 30d) is enforced in
+      that function rather than by a cleanup job. The page shows display name,
+      Writer ID, title, status and updated date; mission, scene and word count
+      were considered and left out.
+
+      **Still to do:** run the `shared_docs` block in `supabase/schema.sql`
+      against the live project, then verify a real link in a logged-out private
+      window on Vercel.
 
 ---
 

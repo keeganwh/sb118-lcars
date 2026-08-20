@@ -244,6 +244,7 @@ const VERSIONS = [
       'Added: a share link is a snapshot, not a window. It shows the sim as it was when you shared it, so you can carry on writing without strangers watching the draft change. The dialog tells you when the shared copy has fallen behind, and Update shared copy publishes the current version to the same link',
       'Added: share links can be set to expire — after 24 hours, 7 days, 30 days, or never. Stop sharing kills the link immediately for everyone who has it, and sharing again afterwards makes a new address rather than reviving the old one',
       'Added: shared sims open on a page of their own rather than loading the whole of LCARS, so a link is quick on a phone. It is built for a narrow screen from the start, since that is where these get read',
+      'Changed: expired share links are now tidied away automatically, so a link that has run out does not sit around after it has stopped working',
     ],
   },
 ];
@@ -1863,6 +1864,7 @@ function hasLocalData() {
 async function cloudBoot() {
   if (!isCloud()) return;
   purgeExpiredDeletions();          // clears out anyone whose grace period lapsed
+  purgeExpiredShares();             // and any share link that has run out
   setSyncStatus('syncing', 'Loading…');
   let row;
   try { row = await loadFromCloud(); }
@@ -8177,6 +8179,15 @@ function bootRoute() {
 // Sims only. Scenes are out of scope.
 
 let _shareCache = {};   // docId -> share row, or null for "not shared"
+
+// Housekeeping, not a security control -- get_shared_doc() already refuses an
+// expired row, so this only stops dead rows accumulating. Which is exactly why
+// it can ride along on any signed-in boot instead of needing a scheduler, the
+// same arrangement purgeExpiredDeletions() uses.
+function purgeExpiredShares() {
+  if (!isCloud()) return;
+  supaFetch('/rest/v1/rpc/purge_expired_shares', { method: 'POST', body: '{}' }).catch(() => {});
+}
 
 const SHARE_EXPIRY = [
   { label: 'No expiry',  hours: null },

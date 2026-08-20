@@ -58,6 +58,7 @@ _On `main` and live, not yet cut as a version._
 - Added: a share link is a snapshot, not a window. It shows the sim as it was when you shared it, so you can carry on writing without strangers watching the draft change. The dialog tells you when the shared copy has fallen behind, and Update shared copy publishes the current version to the same link
 - Added: share links can be set to expire — after 24 hours, 7 days, 30 days, or never. Stop sharing kills the link immediately for everyone who has it, and sharing again afterwards makes a new address rather than reviving the old one
 - Added: shared sims open on a page of their own rather than loading the whole of LCARS, so a link is quick on a phone. It is built for a narrow screen from the start, since that is where these get read
+- Changed: expired share links are now tidied away automatically, so a link that has run out does not sit around after it has stopped working
 
 ## v4.23 — 2026-08-15
 
