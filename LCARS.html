@@ -311,6 +311,10 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
           <button class="btn btn-s btn-sm" onclick="showHistory()" title="Revision snapshots"><svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg> Snapshots</button>
         </div>
         <div class="sd-row">
+          <span class="sd-lbl">Share</span>
+          <button class="btn btn-s btn-sm hidden" id="btn-share" onclick="openShareDialog()" title="Create a read-only link to this sim"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg> Share Link</button>
+        </div>
+        <div class="sd-row">
           <span class="sd-lbl">Template</span>
           <button class="btn btn-s btn-sm" onclick="saveCurrentAsTemplate()" title="Save this sim's text as a reusable template"><svg class="ic" aria-hidden="true"><use href="#i-hexagon"/></svg> Save as Template</button>
         </div>

@@ -240,6 +240,10 @@ const VERSIONS = [
       'Added: select across several lines and the indent button now indents all of them at once, rather than only the line you started on. Works on bullets and ordinary lines together, and Ctrl+Z takes the whole lot back in one press',
       'Fixed: Tab and Shift+Tab did not indent in Academy sims even though the buttons did',
       'Changed: the code that renders sims for reading — markers, thoughts, comms, character colours — now lives in one shared file rather than only inside the editor. Nothing looks or behaves differently; it is groundwork for read-only share links, so a shared sim renders exactly as it does here instead of slowly drifting out of step',
+      'Added: share links. Sim Details now has a Share Link button that gives you a web address anyone can open — no account needed, nothing they can change. It shows your display name (or your Writer ID if you have not set one), the title, whether the sim is active or complete, and when you last shared it',
+      'Added: a share link is a snapshot, not a window. It shows the sim as it was when you shared it, so you can carry on writing without strangers watching the draft change. The dialog tells you when the shared copy has fallen behind, and Update shared copy publishes the current version to the same link',
+      'Added: share links can be set to expire — after 24 hours, 7 days, 30 days, or never. Stop sharing kills the link immediately for everyone who has it, and sharing again afterwards makes a new address rather than reviving the old one',
+      'Added: shared sims open on a page of their own rather than loading the whole of LCARS, so a link is quick on a phone. It is built for a narrow screen from the start, since that is where these get read',
     ],
   },
 ];
@@ -3692,6 +3696,7 @@ function openDoc(id) {
   updatePostedMeta(doc);
   updateTitleColor(doc);
   updateStatusStyle(doc);
+  updateShareButton();   // reads the cache only; opening the dialog is what fetches
   // Academy mode is per-mission — strip and apply when opening
   const isAcad = isAcademyDoc(doc);
   document.body.classList.toggle('academy', isAcad);
@@ -8158,6 +8163,236 @@ function bootRoute() {
     applyRoute((e.state && e.state.view) || (c && c.view) || 'dash');
   });
   if (ctx.view !== 'dash') applyRoute(ctx.view);
+}
+
+
+// ================================================================
+// SHARE LINKS
+// ================================================================
+// A share is a SNAPSHOT. Pressing Share copies the sim into public.shared_docs
+// and hands back a link; later edits stay private until it is published again.
+// That is deliberate -- see the schema comment for why -- and it is also what
+// makes the panel below honest about "Update shared copy".
+//
+// Sims only. Scenes are out of scope.
+
+let _shareCache = {};   // docId -> share row, or null for "not shared"
+
+const SHARE_EXPIRY = [
+  { label: 'No expiry',  hours: null },
+  { label: '24 hours',   hours: 24 },
+  { label: '7 days',     hours: 24 * 7 },
+  { label: '30 days',    hours: 24 * 30 },
+];
+
+// Share links are served by a vercel.json rewrite of /s/<token>. GitHub Pages
+// has no rewrites and a file:// copy has no server at all, so a link built
+// anywhere but the real deployment is a link that 404s. Better to say so than
+// to hand someone a URL that quietly does not work.
+function canShare() {
+  if (!isCloud()) return false;
+  return location.protocol === 'https:' && !/\.github\.io$/i.test(location.hostname);
+}
+
+function shareUrl(token) { return location.origin + '/s/' + token; }
+
+function shareWhyNot() {
+  if (!isCloud()) return 'Share links need an account — this browser is in offline-only mode.';
+  if (location.protocol !== 'https:') return 'Share links only work from the LCARS website, not from a downloaded copy.';
+  return 'Share links only work at sb118-lcars.vercel.app. This copy is served from GitHub Pages, which cannot handle the link address.';
+}
+
+// What gets published. Everything the viewer needs to render the sim the way
+// the writer sees it, and deliberately nothing else -- no mission, no scene, no
+// word count, no snapshot history.
+function sharePayload(doc) {
+  return {
+    doc_id:         doc.id,
+    owner_uid:      getAuth().uid,
+    title:          doc.title || 'Untitled sim',
+    authors:        [{ writer_id: getAuth().writerId || '',
+                       display_name: _writerProfile.display_name || null }],
+    status:         doc.status || 'active',
+    doc_updated_at: new Date().toISOString(),
+    content:        doc.content || '',
+    char_colors:    doc.charColors || {},
+    fmts:           { action: !!fmts.action, comms: !!fmts.comms, thought: !!fmts.thought },
+    academy:        isAcademyDoc(doc),
+    thought_italic: !!getPrefs().thoughtItalic,
+  };
+}
+
+// _writerProfile is filled in when the Settings view renders, which means a
+// writer who has never opened Settings would publish a share with no display
+// name on it -- and the byline would fall back to their Writer ID even though
+// they had set a name. So the dialog makes sure of the profile before it
+// publishes anything. It refetches when the name is empty, which is cheap and
+// is the only case that could be wrong.
+async function ensureWriterProfile() {
+  if (!isCloud() || _writerProfile.display_name) return;
+  try { _writerProfile = await fetchWriterProfile(); } catch (e) {}
+}
+
+async function fetchShare(docId) {
+  if (!canShare()) return null;
+  const r = await supaFetch('/rest/v1/shared_docs?select=*&doc_id=eq.' + encodeURIComponent(docId));
+  if (!r.ok) throw new Error('Could not check whether this sim is shared.');
+  const rows = await r.json();
+  const row = (rows && rows[0]) || null;
+  _shareCache[docId] = row;
+  return row;
+}
+
+// Upsert rather than insert-or-update by hand, so re-publishing keeps the SAME
+// token and any link already sent out stays valid. token is absent from the
+// payload, which is what stops the merge overwriting it.
+async function publishShare(doc, hours) {
+  const body = sharePayload(doc);
+  body.expires_at = hours == null ? null : new Date(Date.now() + hours * 3600 * 1000).toISOString();
+  const r = await supaFetch('/rest/v1/shared_docs?on_conflict=doc_id', {
+    method: 'POST',
+    headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(supaErr(j, 'Could not share this sim.'));
+  const row = (j && j[0]) || null;
+  _shareCache[doc.id] = row;
+  return row;
+}
+
+async function revokeShare(docId) {
+  const r = await supaFetch('/rest/v1/shared_docs?doc_id=eq.' + encodeURIComponent(docId), { method: 'DELETE' });
+  if (!r.ok) throw new Error('Could not stop sharing this sim.');
+  _shareCache[docId] = null;
+}
+
+function shareExpiryText(row) {
+  if (!row.expires_at) return 'This link does not expire.';
+  const ms = new Date(row.expires_at) - Date.now();
+  if (ms <= 0) return 'This link has expired. Share again to make a new one.';
+  const hrs = Math.round(ms / 3600000);
+  if (hrs < 48) return `Expires in about ${hrs} hour${hrs === 1 ? '' : 's'}.`;
+  return `Expires in about ${Math.round(hrs / 24)} days.`;
+}
+
+function shareStaleNote(doc, row) {
+  const same = (row.content || '') === (doc.content || '') &&
+               (row.title || '') === (doc.title || '') &&
+               (row.status || '') === (doc.status || 'active');
+  return same
+    ? '<p class="sh-note">The shared copy matches this sim.</p>'
+    : '<p class="sh-note sh-stale">You have edited this sim since you shared it. Readers still see the older copy until you update it.</p>';
+}
+
+// ---------------------------------------------------------------
+// The dialog
+// ---------------------------------------------------------------
+async function openShareDialog() {
+  if (!curId) { showToast('Open a sim first.'); return; }
+  if (!canShare()) { openModal('SHARE THIS SIM', `<p>${esc(shareWhyNot())}</p>`, null, { ok:'OK' }); return; }
+
+  openModal('SHARE THIS SIM', '<p class="sh-note">Checking…</p>', null);
+  try { await Promise.all([fetchShare(curId), ensureWriterProfile()]); }
+  catch (e) { document.getElementById('mo-body').innerHTML = `<p class="sh-note">${esc(e.message)}</p>`; return; }
+  if (document.getElementById('mo').classList.contains('hidden')) return;  // closed while we waited
+  drawShareDialog();
+}
+
+function drawShareDialog() {
+  const doc = S.docs[curId]; if (!doc) return;
+  const row = _shareCache[curId];
+  const body = document.getElementById('mo-body');
+  const acts = document.getElementById('mo-actions');
+  if (!body || !acts) return;
+
+  if (!row) {
+    body.innerHTML = `
+      <p class="sh-note">Anyone with the link can read this sim. They will not need an account,
+      and they will not be able to change anything.</p>
+      <p class="sh-note">A link shows the sim <strong>as it is now</strong>. Keep writing and readers
+      keep seeing this version until you share again.</p>
+      <div class="mf"><label class="ml">LINK LASTS FOR</label>
+        <select class="ms" id="sh-exp">
+          ${SHARE_EXPIRY.map((o,i)=>`<option value="${i}">${o.label}</option>`).join('')}
+        </select>
+      </div>
+      <p class="sh-note sh-dim">Shared as ${esc(_writerProfile.display_name || getAuth().writerId || 'you')}.</p>`;
+    acts.innerHTML = `<button class="btn btn-s" onclick="closeModal()">Cancel</button>
+                      <button class="btn btn-p" onclick="onShareCreate()">Create link</button>`;
+    return;
+  }
+
+  const url = shareUrl(row.token);
+  body.innerHTML = `
+    <div class="mf"><label class="ml">SHARE LINK</label>
+      <input class="mi" id="sh-url" readonly value="${esc(url)}" onclick="this.select()"></div>
+    <p class="sh-note">${esc(shareExpiryText(row))}</p>
+    ${shareStaleNote(doc, row)}`;
+  acts.innerHTML = `
+    <button class="btn btn-s" onclick="closeModal()">Close</button>
+    <button class="btn btn-s sh-stop" onclick="onShareStop()">Stop sharing</button>
+    <button class="btn btn-s" onclick="onShareUpdate()">Update shared copy</button>
+    <button class="btn btn-p" onclick="onShareCopy()">Copy link</button>`;
+}
+
+async function onShareCreate() {
+  const sel = document.getElementById('sh-exp');
+  const hours = SHARE_EXPIRY[Number(sel ? sel.value : 0)].hours;
+  const doc = S.docs[curId]; if (!doc) return;
+  try {
+    await publishShare(doc, hours);
+    drawShareDialog();
+    updateShareButton();
+    onShareCopy();
+  } catch (e) { showToast(e.message); }
+}
+
+async function onShareUpdate() {
+  const doc = S.docs[curId], row = _shareCache[curId];
+  if (!doc || !row) return;
+  // Keep whatever expiry is already running rather than silently restarting it.
+  const hours = row.expires_at
+    ? Math.max(1, Math.round((new Date(row.expires_at) - Date.now()) / 3600000))
+    : null;
+  try {
+    await publishShare(doc, hours);
+    drawShareDialog();
+    showToast('Shared copy updated.');
+  } catch (e) { showToast(e.message); }
+}
+
+// Stop sharing is the only protection anyone has if a link escapes, so it
+// confirms first and says plainly that the link dies rather than pausing.
+function onShareStop() {
+  const id = curId;
+  openModal('STOP SHARING', `
+    <p>The link stops working immediately, for everyone who has it.</p>
+    <p class="sh-note">Sharing again later makes a <strong>new</strong> link — the old one will not come back.</p>`,
+    async () => {
+      try { await revokeShare(id); showToast('Sharing stopped.'); updateShareButton(); }
+      catch (e) { showToast(e.message); }
+    }, { ok: 'Stop sharing' });
+}
+
+function onShareCopy() {
+  const url = _shareCache[curId] ? shareUrl(_shareCache[curId].token) : '';
+  if (!url) return;
+  navigator.clipboard.writeText(url)
+    .then(() => showToast('Link copied.'))
+    .catch(() => showToast('Copy the link from the box above.'));
+}
+
+// The button says whether the open sim is shared, so nobody has to open the
+// dialog to find out. It reads the cache only -- boot must not fire a request
+// per sim -- and fetchShare fills the cache when the dialog is opened.
+function updateShareButton() {
+  const btn = document.getElementById('btn-share');
+  if (!btn) return;
+  btn.classList.toggle('hidden', !canShare());
+  const row = curId ? _shareCache[curId] : null;
+  btn.classList.toggle('sh-on', !!row);
+  btn.title = row ? 'This sim is shared — open to copy or stop the link' : 'Create a read-only link to this sim';
 }
 
 // ================================================================

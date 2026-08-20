@@ -54,6 +54,10 @@ _On `main` and live, not yet cut as a version._
 - Added: select across several lines and the indent button now indents all of them at once, rather than only the line you started on. Works on bullets and ordinary lines together, and Ctrl+Z takes the whole lot back in one press
 - Fixed: Tab and Shift+Tab did not indent in Academy sims even though the buttons did
 - Changed: the code that renders sims for reading — markers, thoughts, comms, character colours — now lives in one shared file rather than only inside the editor. Nothing looks or behaves differently; it is groundwork for read-only share links, so a shared sim renders exactly as it does here instead of slowly drifting out of step
+- Added: share links. Sim Details now has a Share Link button that gives you a web address anyone can open — no account needed, nothing they can change. It shows your display name (or your Writer ID if you have not set one), the title, whether the sim is active or complete, and when you last shared it
+- Added: a share link is a snapshot, not a window. It shows the sim as it was when you shared it, so you can carry on writing without strangers watching the draft change. The dialog tells you when the shared copy has fallen behind, and Update shared copy publishes the current version to the same link
+- Added: share links can be set to expire — after 24 hours, 7 days, 30 days, or never. Stop sharing kills the link immediately for everyone who has it, and sharing again afterwards makes a new address rather than reviving the old one
+- Added: shared sims open on a page of their own rather than loading the whole of LCARS, so a link is quick on a phone. It is built for a narrow screen from the start, since that is where these get read
 
 ## v4.23 — 2026-08-15
 
