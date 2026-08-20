@@ -286,9 +286,12 @@ Schema applied, bootstrap run, **the panel and the roster are confirmed working
 against the real project by the user.** So `my_role()`, the RLS on
 `pin_reset_requests`, and `admin_list_writers()` are all proven live.
 
-**Still unproven: the `crypt()` call.** Nobody has yet issued a temporary PIN
-and signed in with it. That is the one part of the design that could turn out
-not to work at all, and the fallback is in `admin_action_reset()`'s comment.
+**The `crypt()` call is proven too.** The user ran a reset end to end on
+2026-08-20: request filed, actioned, the temporary PIN signed the account in and
+the forced change followed. So the whole of session 4 is verified live, and the
+one-time-token fallback in `admin_action_reset()`'s comment stays a contingency
+rather than a pending task. It only matters if Supabase changes password
+hashing under us, and the symptom would be a temporary PIN that does not work.
 
 ## Merging with main, 2026-08-20
 
@@ -300,6 +303,4 @@ the rule is easy to half-keep.
 
 ## Next
 
-1. **Prove the temporary PIN end to end.** File a request against a spare Writer
-   ID, action it, sign in with what comes out.
-2. Session 4 of the roadmap — read-only share links — is next in priority order.
+Read-only share links. Brief in `session_lcars_2026-08-share-links-brief.md`.

@@ -119,15 +119,10 @@ and a one-time recovery code (the user found it sloppy, and retention is poor).
       Chosen deliberately over a one-time token; the fallback if Supabase ever
       changes password hashing is written into the function's own comment._
 
-- [ ] **Apply the schema, then verify the panel live.** Nothing in the admin
-      work has run against the real project -- the sandbox blocks every
-      outbound host, so it was all proved against an intercepted Supabase.
-      _Applied 2026-08-20: schema run, bootstrap done, the roster is live and
-      working. What is still unproven is the `crypt()` call --_
-      **file a request against a spare Writer ID, action it, and check the
-      temporary PIN actually signs that account in.** That is the one part of
-      the design that could turn out not to work at all.
-      _Done when: a real temporary PIN signs a real account in and is replaced._
+- [x] **Applied and verified live, 2026-08-20.** Schema run, first super admin
+      bootstrapped, roster working, and a PIN reset taken end to end -- request
+      filed, actioned, temporary PIN accepted, forced change followed. The
+      `crypt()` call works against the real project.
 
 - [ ] **Two edge cases never exercised against the live project.**
       1. Linking a provider account already linked to a *different* Writer ID.
