@@ -237,6 +237,8 @@ const VERSIONS = [
       'Added: indenting now works in Academy sims, on ordinary lines and on bullets alike. Indenting is structure rather than formatting \u2014 the same reason bullets were already allowed \u2014 so the indent and outdent buttons are no longer greyed out there',
       'Fixed: indenting a bullet moved the whole list instead of that one bullet. Each bullet now indents on its own, so a list can have levels within it',
       'Fixed: an indent applied in an Academy sim was silently undone the next time the sim was opened, pasted into, or edited through source view',
+      'Added: select across several lines and the indent button now indents all of them at once, rather than only the line you started on. Works on bullets and ordinary lines together, and Ctrl+Z takes the whole lot back in one press',
+      'Fixed: Tab and Shift+Tab did not indent in Academy sims even though the buttons did',
     ],
   },
 ];
@@ -3377,6 +3379,39 @@ let _indentUndo = [];   // [{el, fromLevel}]
 // child of the editor. Inside a list that block is the whole <ul>, so indenting
 // one bullet moved the entire list. When the caret is in an <li>, that li is the
 // thing to move -- the ind-N rules are descendant selectors and already reach it.
+// Every block the selection touches, in document order. A selection that ends
+// exactly at the start of a block has not really reached into it -- browsers
+// report that boundary as a hit, and indenting a line the writer only brushed
+// past is worse than missing one -- so that trailing block is dropped.
+function getIndentTargets() {
+  const ed = document.getElementById('editor');
+  const sel = window.getSelection();
+  if (!ed || !sel || !sel.rangeCount) return [];
+  const range = sel.getRangeAt(0);
+  if (range.collapsed) { const one = getIndentTarget(); return one ? [one] : []; }
+
+  const hits = [];
+  [...ed.children].forEach(child => {
+    if (!range.intersectsNode(child)) return;
+    // A list is a single child of the editor, but its bullets indent one by one.
+    if (child.tagName === 'UL' || child.tagName === 'OL') {
+      const lis = [...child.children].filter(li => range.intersectsNode(li));
+      hits.push(...(lis.length ? lis : [child]));
+    } else {
+      hits.push(child);
+    }
+  });
+
+  if (hits.length > 1) {
+    const last = hits[hits.length - 1];
+    let n = range.endContainer, off = range.endOffset;
+    // Walk out to the block, checking we are at the very start of each level.
+    while (n && n !== last && off === 0) { off = [...n.parentNode.childNodes].indexOf(n); n = n.parentNode; }
+    if (n === last && off === 0) hits.pop();
+  }
+  return hits;
+}
+
 function getIndentTarget() {
   const sel = window.getSelection();
   if (sel && sel.rangeCount) {
@@ -3391,12 +3426,13 @@ function getIndentTarget() {
 }
 
 function doIndent() {
-  const block = getIndentTarget();
-  if (!block) return;
-  const from = getIndentLevel(block);
-  _indentUndo.push({el:block, fromLevel:from});
+  const blocks = getIndentTargets();
+  if (!blocks.length) return;
+  // One undo entry for the whole action, so Ctrl+Z takes back what one press
+  // did rather than unpicking it a block at a time.
+  _indentUndo.push({ items: blocks.map(el => ({ el, fromLevel: getIndentLevel(el) })) });
   if (_indentUndo.length > 50) _indentUndo.shift();
-  setIndentLevel(block, from + 1);
+  blocks.forEach(el => { const from = getIndentLevel(el); setIndentLevel(el, from + 1); });
   schedSave();
 }
 
@@ -3456,12 +3492,13 @@ function updateBulletBtn() {
 }
 
 function doOutdent() {
-  const block = getIndentTarget();
-  if (!block) return;
-  const from = getIndentLevel(block);
-  _indentUndo.push({el:block, fromLevel:from});
+  const blocks = getIndentTargets();
+  if (!blocks.length) return;
+  // One undo entry for the whole action, so Ctrl+Z takes back what one press
+  // did rather than unpicking it a block at a time.
+  _indentUndo.push({ items: blocks.map(el => ({ el, fromLevel: getIndentLevel(el) })) });
   if (_indentUndo.length > 50) _indentUndo.shift();
-  setIndentLevel(block, from - 1);
+  blocks.forEach(el => { const from = getIndentLevel(el); setIndentLevel(el, from - 1); });
   schedSave();
 }
 
@@ -6733,11 +6770,12 @@ document.addEventListener('keydown',e=>{
     return;
   }
   if(!inEditor) return;
-  // Tab = indent / Shift+Tab = outdent (blocked in Academy sims)
+  // Tab = indent / Shift+Tab = outdent. Allowed in Academy sims like the buttons
+  // are -- indenting is structure, not formatting.
   const acad = curId && isAcademyDoc(S.docs[curId]);
   if(e.key==='Tab'){
     e.preventDefault();
-    if(!acad){ if(e.shiftKey) doOutdent(); else doIndent(); }
+    if(e.shiftKey) doOutdent(); else doIndent();
     return;
   }
   if((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==='8'||e.key==='*')){
@@ -6750,10 +6788,12 @@ document.addEventListener('keydown',e=>{
     // Intercept Ctrl+Z when there are pending indent undo entries
     if(e.key==='z'&&_indentUndo.length){
       const entry = _indentUndo.pop();
-      // Verify el is still in the editor before applying
-      if(entry.el && document.getElementById('editor').contains(entry.el)){
+      // Verify each block is still in the editor before applying
+      const ed = document.getElementById('editor');
+      const live = (entry.items || []).filter(it => it.el && ed.contains(it.el));
+      if(live.length){
         e.preventDefault();
-        setIndentLevel(entry.el, entry.fromLevel);
+        live.forEach(it => setIndentLevel(it.el, it.fromLevel));
         schedSave();
       }
     }

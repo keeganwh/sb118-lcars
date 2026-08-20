@@ -51,6 +51,8 @@ _On `main` and live, not yet cut as a version._
 - Added: indenting now works in Academy sims, on ordinary lines and on bullets alike. Indenting is structure rather than formatting — the same reason bullets were already allowed — so the indent and outdent buttons are no longer greyed out there
 - Fixed: indenting a bullet moved the whole list instead of that one bullet. Each bullet now indents on its own, so a list can have levels within it
 - Fixed: an indent applied in an Academy sim was silently undone the next time the sim was opened, pasted into, or edited through source view
+- Added: select across several lines and the indent button now indents all of them at once, rather than only the line you started on. Works on bullets and ordinary lines together, and Ctrl+Z takes the whole lot back in one press
+- Fixed: Tab and Shift+Tab did not indent in Academy sims even though the buttons did
 
 ## v4.23 — 2026-08-15
 
