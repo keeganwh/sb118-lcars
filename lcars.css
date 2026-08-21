@@ -1213,10 +1213,12 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   border-radius:8px;background:var(--gold,#c9a227);color:#000;
   font-size:0.66rem;font-weight:bold;line-height:16px;text-align:center}
 
-/* A joint sim in the nav tree, so it is obvious which ones are shared. */
-.jp-tag{display:inline-block;margin-left:6px;padding:0 5px;border-radius:6px;
-  border:1px solid var(--amber);color:var(--amber);
-  font-size:0.62rem;line-height:14px;letter-spacing:0.06em}
+/* A joint sim takes the sim-type slot rather than adding a second badge beside
+   it -- "JP" and "JOINT" side by side said the same thing twice. JOINT is the
+   stronger claim (actually shared with someone here, not just a JP by kind), so
+   it replaces the type tag and is tinted to stand apart from it. */
+.tag.jp-shared{border-color:var(--amber);color:var(--amber);
+  background:color-mix(in srgb,var(--amber) 14%,transparent)}
 
 
 /* The header mark is a way home, but it must not LOOK like a new control --

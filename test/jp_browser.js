@@ -366,6 +366,51 @@ async function ctxFor(browser, who, errors) {
      }),
      'the header mark is clickable but keeps the look it always had');
 
+  // --- third round ---------------------------------------------------------
+  // FILING MUST TAKE EFFECT AT ONCE. jpApplyRow used to replace the doc object
+  // in S.docs, so a dialog holding a reference across a poll wrote into an
+  // orphan: Sim Details showed the new filing, the sim list did not, and it
+  // only appeared once a later refresh restored it.
+  await a.p.evaluate(id => {
+    S.missions['m2'] = { id:'m2', name:'Shore Leave', year:2026, status:'active' };
+    S.scenes['s2']   = { id:'s2', name:'Robin & Wil Visit Earth', missionId:'m2', status:'active' };
+    S.docs[id].missionId = null; S.docs[id].sceneId = null;
+    delete S.jpFiling[id]; persist(); renderNav(); openDoc(id);
+  }, docId);
+  await a.p.waitForTimeout(400);
+
+  // Force the exact race: refresh the row from the server (which is what a poll
+  // does) while the filing dialog is open, then commit it.
+  await a.p.evaluate(id => fileSimDialog(id), docId);
+  await a.p.waitForTimeout(250);
+  await a.p.evaluate(id => jpReload(id), docId);          // the poll landing mid-dialog
+  await a.p.waitForTimeout(400);
+  await a.p.evaluate(() => {
+    document.getElementById('fs-m').value = 'm2'; fsMissionChange();
+    document.getElementById('fs-s').value = 's2'; fsSceneChange();
+    doModal();
+  });
+  await a.p.waitForTimeout(500);
+  ok(await a.p.evaluate(id => S.docs[id].missionId === 'm2' && S.docs[id].sceneId === 's2', docId),
+     'filing a joint sim lands on the doc the app actually renders, even if a refresh interrupts');
+  ok(await a.p.evaluate(() => {
+       const t = document.getElementById('nav-tree');
+       return !!t && t.textContent.includes('Robin & Wil Visit Earth');
+     }),
+     'and it appears in the sim list immediately, without having to take the sim first');
+
+  // One badge, not two.
+  await a.p.evaluate(id => { S.docs[id].postType = 'jp'; persist(); renderNav(); }, docId);
+  await a.p.waitForTimeout(250);
+  const badges = await a.p.evaluate(id => {
+    const row = [...document.querySelectorAll('#nav-tree .nd')]
+      .find(n => n.getAttribute('onclick') || ''.includes(id));
+    const all = [...document.querySelectorAll('#nav-tree .nd .tag')].map(t => t.textContent.trim());
+    return { joint: all.filter(t => t === 'JOINT').length, jp: all.filter(t => t === 'JP').length };
+  }, docId);
+  ok(badges.joint === 1 && badges.jp === 0,
+     'a joint sim tagged JP shows one badge, not JOINT and JP side by side');
+
   console.log('\n--- browser checks ---');
   pass.forEach(l => console.log('PASS: ' + l));
   fail.forEach(l => console.log('FAIL: ' + l));

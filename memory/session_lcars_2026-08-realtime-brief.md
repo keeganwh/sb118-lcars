@@ -52,20 +52,28 @@ merge algorithm is the easy half.
 **Recommendation: route 1, staged, with route 2 as the fallback if the editor
 rework proves too deep.**
 
-### The bundler question, which is now unavoidable
+### The one decision to put to the user first, in plain terms
 
-`api/download.js` inlines three files into one offline `LCARS.html`, and the
-no-npm rule is what keeps that working. Yjs cannot be used without a build step.
+Yjs is a library. Libraries in JavaScript normally arrive through npm and get
+compiled into the app by a build step. **This project has neither, deliberately**
+— that is exactly what lets `api/download.js` glue three files into one
+`LCARS.html` that runs offline with no network.
 
-Two ways out, and the user should pick:
-- **Vendor a pre-built bundle** into the repo as a plain `.js` file, built once
-  out-of-band. Keeps `download.js` working (it is just another file to inline),
-  keeps no-npm-at-runtime. Ugly but honest, and reversible.
-- **Accept a build step** for the app, and give the offline copy a turn-based or
-  read-only fallback.
+So the question to ask is simply: **do we want to keep the one-file offline
+download working?**
 
-The first preserves what the offline download is for. Prefer it unless the user
-says otherwise.
+- **Yes (recommended).** Someone builds the Yjs bundle once, outside the
+  project, and commits the resulting plain `.js` file into the repo like any
+  other file. `api/download.js` then inlines it exactly as it inlines the rest.
+  Nothing about how the project is run changes — no npm, no build step for the
+  user, offline download intact. The cost is that updating Yjs is a manual
+  errand rather than a version bump.
+- **No.** Add a normal build step. Cleaner to maintain, but the offline
+  download either has to drop real-time editing or stop being one file.
+
+Phrase it to the user as that first question, not as "vendored bundle versus
+bundler" — the trade is about the offline download, and that is the part they
+actually have an opinion about.
 
 ### Answer to the user's scaling question
 

@@ -98,6 +98,8 @@ _On `main` and live, not yet cut as a version._
 - Added: you can now create a mission or a scene while filing a sim, instead of being sent away to make one first and then having to find the sim again
 - Added: joining a joint sim now asks where you want to file it in your own missions and scenes. Your scene partner’s filing is offered as a suggestion, since their missions are not yours
 - Changed: the LCARS badge in the top left is still a link to the dashboard, but looks exactly as it did before — no box, no highlight on hover
+- Fixed: filing a joint sim updated the sim details panel but did not put it in the sim list until you took the sim. LCARS was refreshing the sim from the server behind the dialog and quietly leaving your choice on a discarded copy
+- Changed: a joint sim now shows a single JOINT tag in the sim list rather than JOINT and JP side by side, which said the same thing twice. A sim tagged JP that is not shared in LCARS still shows JP
 
 ## v4.23 — 2026-08-15
 

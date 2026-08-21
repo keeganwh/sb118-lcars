@@ -284,6 +284,8 @@ const VERSIONS = [
       'Added: you can now create a mission or a scene while filing a sim, instead of being sent away to make one first and then having to find the sim again',
       'Added: joining a joint sim now asks where you want to file it in your own missions and scenes. Your scene partner\u2019s filing is offered as a suggestion, since their missions are not yours',
       'Changed: the LCARS badge in the top left is still a link to the dashboard, but looks exactly as it did before \u2014 no box, no highlight on hover',
+      'Fixed: filing a joint sim updated the sim details panel but did not put it in the sim list until you took the sim. LCARS was refreshing the sim from the server behind the dialog and quietly leaving your choice on a discarded copy',
+      'Changed: a joint sim now shows a single JOINT tag in the sim list rather than JOINT and JP side by side, which said the same thing twice. A sim tagged JP that is not shared in LCARS still shows JP',
     ],
   },
 ];
@@ -5495,10 +5497,12 @@ function renderNav() {
     return `<div class="nd nd-s-${st}${active}" onclick="openDoc('${d.id}')" oncontextmenu="ctxDoc(event,'${d.id}')" title="${esc(d.title||'Untitled')}">
       <span class="sdot ${st}"></span>
       <div class="nd-inner">
-        <div class="nd-title">${esc(dispTitle)}${isJointDoc(d) ? '<span class="jp-tag" title="A joint sim — you take turns on this one">JOINT</span>' : ''}</div>
+        <div class="nd-title">${esc(dispTitle)}</div>
         ${metaHtml}
       </div>
-      ${postTypeTag(d.postType)}
+      ${isJointDoc(d)
+        ? '<span class="tag tag-jp jp-shared" title="A shared joint sim — you take turns on this one in LCARS">JOINT</span>'
+        : postTypeTag(d.postType)}
     </div>`;
   }
 
@@ -8753,8 +8757,17 @@ function jpApplyRow(row, keepContent) {
   // and offer the owner's as a starting point the first time they see it.
   if (row.mission_name) doc._jpHint = { mission: row.mission_name, scene: row.scene_name || null };
   jpRestoreFiling(doc);
-  S.docs[row.doc_id] = doc;
-  return doc;
+  // IN PLACE, never a replacement. jpApplyRow used to build a new object and
+  // put it in S.docs, which orphaned every reference anything else was holding
+  // -- an open dialog, a function part-way through an await. That is what made
+  // filing a joint sim look as though it half worked: Sim Details showed the
+  // new filing, because it reads the reference it was handed, while the sim
+  // list showed nothing, because it reads S.docs. The filing only appeared once
+  // some later refresh restored it from jpFiling, which is why taking the sim
+  // seemed to be what fixed it.
+  if (S.docs[row.doc_id]) Object.assign(S.docs[row.doc_id], doc);
+  else S.docs[row.doc_id] = doc;
+  return S.docs[row.doc_id];
 }
 
 // Refresh the list of joint sims. Cached locally like everything else, so the
@@ -9547,10 +9560,12 @@ function fileSimDialog(id, opts) {
       sceneId = uid();
       S.scenes[sceneId] = { id: sceneId, name, missionId, status: 'active', startedAt: null, createdAt: Date.now() };
     }
-    doc.missionId = missionId || null;
-    doc.sceneId = (missionId && sceneId) ? sceneId : null;
-    jpRememberFiling(doc);
-    persist(); renderNav(); updateFiledUnder(doc);
+    // Re-read: a poll may have refreshed this sim while the dialog was open.
+    const live = S.docs[id] || doc;
+    live.missionId = missionId || null;
+    live.sceneId = (missionId && sceneId) ? sceneId : null;
+    jpRememberFiling(live);
+    persist(); renderNav(); updateFiledUnder(live);
     if (opts.onDone) opts.onDone();
   }, { ok: opts.ok || 'File it', cancel: opts.cancel });
 
