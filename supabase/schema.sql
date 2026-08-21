@@ -552,15 +552,18 @@ grant execute on function public.admin_list_writers() to authenticated;
 -- nothing adjacent to it.
 --
 -- Content is stored as the editor stores it, with markers stripped, alongside
--- what the render pass needs: char_colors, the academy flag, and `format` --
--- the writer's bold-locations / italic-OOC / italic-thoughts / line-spacing
--- preferences. share.html runs the same lcars-render.js the app runs.
+-- what the render pass needs: the academy flag, and `format` -- the writer's
+-- bold-locations / italic-OOC / italic-thoughts preferences. share.html runs
+-- the same lcars-render.js the app runs.
 --
--- `format` deliberately does NOT carry the Visual Aids toggles. Those tint
--- markers in the editor so a writer can see them while writing; a reader is
--- looking at a finished sim, and the highlight blocks are noise there. What
--- the viewer renders is what the app puts on the clipboard: locations bold,
--- OOC and thoughts italic, and the marker punctuation left as plain text.
+-- The rule for what a reader sees is exactly what the app puts on the
+-- CLIPBOARD: locations bold, OOC and thoughts italic, marker punctuation left
+-- as plain text, and no colour of any kind. So the Visual Aids toggles are not
+-- carried (they tint markers for a writer mid-sim, and are noise in a finished
+-- sim), and neither are character colours -- copy-out drops those too, keeping
+-- only margin-left. There is no char_colors column for the same reason there is
+-- no mission or word count: a share carries what was deliberately published and
+-- nothing more.
 --
 -- authors is a list from the outset even though a sim has one writer today.
 -- Joint Posts will have several, and migrating a text column to an array after
@@ -579,7 +582,6 @@ create table if not exists public.shared_docs (
   status         text,
   doc_updated_at timestamptz,
   content        text not null default '',
-  char_colors    jsonb not null default '{}'::jsonb,
   format         jsonb not null default '{}'::jsonb,
   academy        boolean not null default false,
   expires_at     timestamptz,
@@ -627,6 +629,9 @@ grant select, insert, update, delete on table public.shared_docs to authenticate
 alter table public.shared_docs add column if not exists format jsonb not null default '{}'::jsonb;
 alter table public.shared_docs drop column if exists fmts;
 alter table public.shared_docs drop column if exists thought_italic;
+-- Character colours went the same way, and for the same reason: copy-out drops
+-- them, so a shared sim carrying them did not match what the app produces.
+alter table public.shared_docs drop column if exists char_colors;
 
 -- ---------------------------------------------------------------------------
 -- get_shared_doc() : the anonymous read path
@@ -641,7 +646,8 @@ alter table public.shared_docs drop column if exists thought_italic;
 -- owner_uid is never returned; the byline comes from the published authors
 -- list, which holds only what the writer chose to publish.
 -- Dropped first, not just replaced: the return type changed when `fmts` and
--- `thought_italic` became `format`, and create or replace cannot change that.
+-- `thought_italic` became `format` and `char_colors` went, and create or
+-- replace cannot change a return type.
 drop function if exists public.get_shared_doc(text);
 create or replace function public.get_shared_doc(p_token text)
 returns table (
@@ -650,7 +656,6 @@ returns table (
   status         text,
   doc_updated_at timestamptz,
   content        text,
-  char_colors    jsonb,
   format         jsonb,
   academy        boolean,
   expires_at     timestamptz
@@ -661,7 +666,7 @@ security definer
 set search_path = public
 as $$
   select s.title, s.authors, s.status, s.doc_updated_at, s.content,
-         s.char_colors, s.format, s.academy, s.expires_at
+         s.format, s.academy, s.expires_at
     from public.shared_docs s
    where s.token = p_token
      and (s.expires_at is null or s.expires_at > now());

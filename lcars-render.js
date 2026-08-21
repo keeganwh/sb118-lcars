@@ -126,6 +126,12 @@ function lrApplyCharColors(html, colors) {
 // clipboard: locations bold, OOC and thoughts italic, the marker punctuation
 // itself left as plain text, and no coloured blocks anywhere.
 //
+// Colour of every kind is left out, character colouring included. That is not
+// an omission: copy-out strips colour and keeps only margin-left, so a shared
+// sim carrying it would not match what the app actually produces. Per-character
+// colours are a way of telling your own speakers apart while writing, and mean
+// nothing to a reader who does not know the scheme.
+//
 // Names are already bold in the stored content -- boldNames() writes real
 // <strong> into the document -- so there is nothing to reapply here.
 //
@@ -143,7 +149,6 @@ function lrToReadingHtml(html, opts) {
     thoughtItalic: false,   // handled below, as a real <em>
     academy: false,         // [brackets] are an editing aid, never formatting
   });
-  out = lrApplyCharColors(out, opts.charColors || {});
 
   const tmp = document.createElement('div');
   tmp.innerHTML = out;

@@ -252,6 +252,9 @@ const VERSIONS = [
       'Added: a Light / Dark switch on the share page. It follows the reader’s own device setting to begin with and remembers their choice — it used to be dark for everyone, whatever they preferred',
       'Changed: the share page header takes up far less room. The title is smaller and the writer, Writer ID, status and date now sit on one line under it instead of four stacked rows above the sim',
       'Changed: the share page now uses the app’s own colours and header, so a shared sim looks like LCARS instead of a plain web page',
+      'Changed: shared sims now open in light mode by default, with the Light / Dark switch still there and still remembered. A sim someone has been sent to read is a document, and a page of prose reads like one — the dark chrome is for the person writing it',
+      'Changed: character colours no longer carry over to a shared sim. They are a way of telling your own speakers apart while writing, and mean nothing to a reader who does not know the scheme — copying a sim out has always dropped them, and a share link now matches that exactly',
+      'Added: if a share link expires, the page says so at the top — “Shared sim · Read only · Link expires Aug 24, 2:30 PM” — so a reader knows before the link dies rather than after',
     ],
   },
 ];
@@ -8234,12 +8237,13 @@ function sharePayload(doc) {
     status:         doc.status || 'active',
     doc_updated_at: new Date().toISOString(),
     content:        doc.content || '',
-    char_colors:    doc.charColors || {},
     academy:        isAcademyDoc(doc),
     // The formatting a READER should see -- the same set the copy handler puts
     // on the clipboard. Deliberately not the Visual Aids toggles: those tint
     // markers so a writer can spot them mid-sim, and have no business in a
-    // finished sim someone has been sent a link to.
+    // finished sim someone has been sent a link to. Character colours are left
+    // out for the same reason copy-out drops them: they are a way of telling
+    // your own speakers apart while writing, and mean nothing to a reader.
     format:         { boldLocations: !!p.boldLocations,
                       italicOOC:     !!p.italicOOC,
                       thoughtItalic: !!p.thoughtItalic },

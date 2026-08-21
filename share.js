@@ -25,14 +25,15 @@ const hide = id => $(id).classList.add('hidden');
 // read side, where it cannot be skipped.
 //
 // Allow-list, not block-list -- an unknown tag is unwrapped rather than
-// trusted. Style survives only as colour and margin-left, which is what
-// character colouring and indentation need and nothing else.
+// trusted. Style survives only as margin-left: that is exactly what the app's
+// copy handler keeps, and a shared sim should match what copy-out produces.
+// Colour is dropped with everything else.
 const ALLOWED_TAGS = new Set([
   'DIV','P','SPAN','BR','B','STRONG','I','EM','U','S','STRIKE','A','UL','OL',
   'LI','BLOCKQUOTE','H1','H2','H3','H4','H5','H6','HR','SUB','SUP','IMG',
 ]);
-const ALLOWED_ATTRS = new Set(['class','data-char-clr','data-char-override','data-block-id']);
-const SAFE_STYLE = /(?:^|;)\s*(color|margin-left)\s*:\s*([^;]+)/gi;
+const ALLOWED_ATTRS = new Set(['class','data-block-id']);
+const SAFE_STYLE = /(?:^|;)\s*(margin-left)\s*:\s*([^;]+)/gi;
 
 function sanitiseStyle(value) {
   const keep = [];
@@ -107,14 +108,11 @@ function sanitise(html) {
 // ----------------------------------------------------------------
 // THEME
 // ----------------------------------------------------------------
-// Follows the reader's own system setting to begin with, and remembers an
-// explicit choice per browser. It is their setting, not the writer's -- the
-// sim is the shared thing, not the skin it is read in.
+// Light by default. A shared sim is a document someone has been sent to read,
+// and a page of prose reads like a page of prose -- the dark editor chrome is
+// for the person writing it. An explicit choice is remembered per browser.
 const THEME_KEY = 'lcars_share_theme';
-
-function systemTheme() {
-  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-}
+const DEFAULT_THEME = 'light';
 
 function applyTheme(t) {
   document.documentElement.setAttribute('data-theme', t);
@@ -125,7 +123,7 @@ function applyTheme(t) {
 function initTheme() {
   let saved = null;
   try { saved = localStorage.getItem(THEME_KEY); } catch (e) {}
-  applyTheme(saved || systemTheme());
+  applyTheme(saved || DEFAULT_THEME);
   const btn = document.getElementById('theme-btn');
   if (!btn) return;
   btn.addEventListener('click', () => {
@@ -133,12 +131,6 @@ function initTheme() {
     applyTheme(next);
     try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
   });
-  // Track the system setting until the reader overrides it.
-  if (!saved && window.matchMedia) {
-    const mq = window.matchMedia('(prefers-color-scheme: light)');
-    const onChange = () => { try { if (!localStorage.getItem(THEME_KEY)) applyTheme(systemTheme()); } catch (e) {} };
-    mq.addEventListener ? mq.addEventListener('change', onChange) : mq.addListener(onChange);
-  }
 }
 
 // ----------------------------------------------------------------
@@ -179,8 +171,23 @@ function escHtml(s) {
                   .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// Anyone reading a link that dies on Friday should be told before Friday, not
+// after -- so the expiry sits in the header rather than at the foot of the sim.
+// Date and time both, because "expires today" is not much use at 23:00.
+function renderHeaderNote(doc) {
+  const el = document.getElementById('hdr-note');
+  if (!el || !doc.expires_at) return;
+  const d = new Date(doc.expires_at);
+  if (isNaN(d)) return;
+  const when = d.toLocaleString(undefined, {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+  el.textContent = 'Shared sim · Read only · Link expires ' + when;
+}
+
 function render(doc) {
   document.title = (doc.title || 'Shared sim') + ' — LCARS';
+  renderHeaderNote(doc);
   const t = document.getElementById('title');
   t.textContent = doc.title || 'Untitled sim';
   if ((doc.status || '') === 'complete') t.classList.add('complete');
@@ -191,9 +198,8 @@ function render(doc) {
   // Sanitise first, then render. In that order: the render pass introduces
   // markup of its own, and re-sanitising afterwards would strip it again.
   document.getElementById('body').innerHTML = lrToReadingHtml(sanitise(doc.content || ''), {
-    format:     doc.format || {},
-    charColors: doc.char_colors || {},
-    academy:    !!doc.academy,
+    format:  doc.format || {},
+    academy: !!doc.academy,
   });
 
   hide('loading');
