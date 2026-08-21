@@ -101,6 +101,9 @@ _On `main` and live, not yet cut as a version._
 - Fixed: filing a joint sim updated the sim details panel but did not put it in the sim list until you took the sim. LCARS was refreshing the sim from the server behind the dialog and quietly leaving your choice on a discarded copy
 - Changed: a joint sim now shows a single JOINT tag in the sim list rather than JOINT and JP side by side, which said the same thing twice. A sim tagged JP that is not shared in LCARS still shows JP
 - Added: New Template, in Settings → Your Account & Data. You can now make a template directly instead of starting a sim you did not want, filing it under a mission and scene, saving it as a template and then deleting the sim. Name it and it opens in the editor ready to write
+- Fixed: a joint sim could not be deleted. Deleting it removed it from this browser only, so it stayed on the Command Dashboard and came back on the next refresh — a joint sim is stored separately from your other sims and the shared copy was never touched
+- Changed: deleting a joint sim you started now warns that it removes the sim for everyone on it, and says how many other writers that is. If you are not the one who started it, LCARS offers to take you off the sim instead, and the others keep it
+- Fixed: deleting an ordinary sim did not push the deletion to your account straight away, so it could reappear from the server later
 
 ## v4.23 — 2026-08-15
 

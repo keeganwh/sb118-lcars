@@ -110,11 +110,19 @@ async function ctxFor(browser, who, errors) {
         out = rpc(fn, body ? JSON.parse(body) : {}, who.uid);
       } else if (url.includes('/rest/v1/state')) {
         out = route.request().method() === 'GET' ? [] : {};
-      } else if (url.includes('/rest/v1/jp_docs')) {
+      } else if (url.includes('/rest/v1/jp_docs') && route.request().method() === 'POST') {
         const p = JSON.parse(body);
         DB.docs[p.doc_id] = { ...p, version: 1, locked_by: null, locked_at: null, updated_at: Date.now() };
         DB.members[p.doc_id] = [p.owner_uid];
         out = [DB.docs[p.doc_id]];
+      } else if (url.includes('/rest/v1/jp_docs') && route.request().method() === 'DELETE') {
+        const id = decodeURIComponent(url.split('doc_id=eq.')[1].split('&')[0]);
+        if (DB.docs[id] && DB.docs[id].owner_uid === who.uid) { delete DB.docs[id]; delete DB.members[id]; }
+        out = [];
+      } else if (url.includes('/rest/v1/jp_members') && route.request().method() === 'DELETE') {
+        const id = decodeURIComponent(url.split('doc_id=eq.')[1].split('&')[0]);
+        if (DB.members[id]) DB.members[id] = DB.members[id].filter(u => u !== who.uid);
+        out = [];
       } else if (url.includes('/rest/v1/jp_invitations')) {
         out = DB.invites.filter(i => i.status === 'open' && url.includes(encodeURIComponent(i.doc_id)));
       } else if (url.includes('/rest/v1/snapshots')) {
@@ -410,6 +418,49 @@ async function ctxFor(browser, who, errors) {
   }, docId);
   ok(badges.joint === 1 && badges.jp === 0,
      'a joint sim tagged JP shows one badge, not JOINT and JP side by side');
+
+  // --- deleting a joint sim ------------------------------------------------
+  // The reported bug: deleting from the sim list removed the local copy only,
+  // so the next refresh pulled the sim straight back and it stayed on the
+  // dashboard throughout. A joint sim does not live in S.docs alone.
+  const delId = 'doc-del';
+  await a.p.evaluate(id => {
+    S.docs[id] = { id, title:'Doomed JP', content:'<div>x</div>', chars:[], myChars:[], charColors:{},
+                   status:'active', createdAt:Date.now(), updatedAt:Date.now() };
+    persist(); jpMakeJoint(id);
+  }, delId);
+  await a.p.waitForTimeout(700);
+  ok(!!DB.docs[delId], 'a second joint sim exists to delete');
+
+  // A member sees "leave", not "delete for everyone".
+  await a.p.evaluate(id => jpInvite(id, 'B222'), delId);
+  await a.p.waitForTimeout(300);
+  await b.p.evaluate(() => jpLoadInvites());
+  await b.p.waitForTimeout(400);
+  await b.p.evaluate(() => jpAccept(_jpInvites[0].id));
+  await b.p.waitForTimeout(900);
+  await b.p.evaluate(() => { const m = document.getElementById('mo'); if (m) m.classList.add('hidden'); });
+  await b.p.evaluate(id => delDoc(id), delId);
+  await b.p.waitForTimeout(300);
+  ok(await b.p.evaluate(() => /Leave this joint sim/i.test(document.getElementById('mo-title').textContent)),
+     'a member deleting a joint sim is offered leaving it, not deleting everyone else’s copy');
+  await b.p.evaluate(() => doModal());
+  await b.p.waitForTimeout(800);
+  ok(!!DB.docs[delId], 'and leaving does not destroy the sim for the others');
+  ok(await b.p.evaluate(id => !S.docs[id], delId), 'while it does leave their own list');
+
+  // The owner deletes it properly, and it stays deleted.
+  await a.p.evaluate(id => delDoc(id), delId);
+  await a.p.waitForTimeout(300);
+  ok(await a.p.evaluate(() => /Delete this joint sim/i.test(document.getElementById('mo-title').textContent)),
+     'the owner is warned it removes the sim for everyone');
+  await a.p.evaluate(() => doModal());
+  await a.p.waitForTimeout(900);
+  ok(!DB.docs[delId], 'the shared row is actually deleted, not just the local copy');
+  await a.p.evaluate(() => jpRefreshList());
+  await a.p.waitForTimeout(700);
+  ok(await a.p.evaluate(id => !S.docs[id], delId),
+     'and it does not come back on the next refresh');
 
   console.log('\n--- browser checks ---');
   pass.forEach(l => console.log('PASS: ' + l));

@@ -287,6 +287,9 @@ const VERSIONS = [
       'Fixed: filing a joint sim updated the sim details panel but did not put it in the sim list until you took the sim. LCARS was refreshing the sim from the server behind the dialog and quietly leaving your choice on a discarded copy',
       'Changed: a joint sim now shows a single JOINT tag in the sim list rather than JOINT and JP side by side, which said the same thing twice. A sim tagged JP that is not shared in LCARS still shows JP',
       'Added: New Template, in Settings \u2192 Your Account & Data. You can now make a template directly instead of starting a sim you did not want, filing it under a mission and scene, saving it as a template and then deleting the sim. Name it and it opens in the editor ready to write',
+      'Fixed: a joint sim could not be deleted. Deleting it removed it from this browser only, so it stayed on the Command Dashboard and came back on the next refresh \u2014 a joint sim is stored separately from your other sims and the shared copy was never touched',
+      'Changed: deleting a joint sim you started now warns that it removes the sim for everyone on it, and says how many other writers that is. If you are not the one who started it, LCARS offers to take you off the sim instead, and the others keep it',
+      'Fixed: deleting an ordinary sim did not push the deletion to your account straight away, so it could reappear from the server later',
     ],
   },
 ];
@@ -5912,9 +5915,50 @@ function delScene(id){
 }
 
 function delDoc(id){
+  // A joint sim does not live in S.docs alone -- deleting the local copy left
+  // the shared row untouched, so the next refresh pulled it straight back and
+  // the sim was, in practice, undeletable.
+  if (isJointDoc(S.docs[id])) return jpDeleteOrLeave(id);
   if(!confirm('Delete this sim? This cannot be undone.')) return;
   if(curId===id){ curId=null; curView=null; curViewId=null; showDashboard(); }
-  delete S.docs[id]; persist(); renderNav();
+  delete S.docs[id]; persist();
+  schedSync();     // or the server copy comes back on the next device that syncs
+  renderNav();
+}
+
+// Deleting a joint sim means two different things depending on who is asking,
+// and neither is "remove it from my browser". The owner destroys it for
+// everybody; anybody else is leaving a sim that carries on without them. Saying
+// which, plainly, matters more here than anywhere else in the app -- the owner
+// is about to delete writing that is not all theirs.
+function jpDeleteOrLeave(id) {
+  const doc = S.docs[id]; if (!doc) return;
+  if (doc.jpOwner !== getAuth().uid) return jpLeave(id);
+
+  if (!isCloud() || !navigator.onLine) {
+    showToast('Deleting a joint sim needs a connection — the other writers have a copy too.');
+    return;
+  }
+  const others = Math.max(0, (doc.jpMembers || 1) - 1);
+  openModal('Delete this joint sim?',
+    '<div style="font-size:0.9rem;line-height:1.6">' +
+    '<p><strong>' + esc(doc.title || 'This sim') + '</strong> is a joint sim' +
+    (others ? ' with ' + others + ' other writer' + (others === 1 ? '' : 's') + ' on it' : '') +
+    '. Deleting it removes it for <strong>everyone</strong>, along with anything they have written in it.</p>' +
+    (others ? '<p style="color:var(--dim)">If you only want it out of your own list, remove yourself from ' +
+              'Writers on this sim instead — the others keep the sim.</p>' : '') +
+    '</div>',
+    async () => {
+      const r = await supaFetch('/rest/v1/jp_docs?doc_id=eq.' + encodeURIComponent(id),
+                                { method: 'DELETE' });
+      if (!r.ok) { showToast('Could not delete that joint sim.'); return; }
+      if (curId === id) { curId = null; curView = null; curViewId = null; jpStopPoll(); showDashboard(); }
+      delete S.docs[id];
+      delete jpFiling()[id];
+      persist(); renderNav(); jpPaint();
+      showToast('Joint sim deleted.');
+    },
+    { ok: 'Delete for everyone' });
 }
 
 // ================================================================
