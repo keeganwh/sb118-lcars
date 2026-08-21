@@ -79,6 +79,8 @@ _On `main` and live, not yet cut as a version._
 - Added: Writers on this sim, in the sim details panel — see everyone on a joint sim, invite more, withdraw an invitation that has not been taken up, or leave a sim you no longer write
 - Changed: joint sims are read-only when you are offline. Taking turns depends on the server knowing whose turn it is, so writing without it would mean two people editing the same sim with no way to reconcile the result. You can still read and copy the sim, and LCARS says why rather than just refusing
 - Changed: deleting your account no longer takes joint sims with it. A joint sim you started passes to whoever has been on it longest, so other people’s writing is not destroyed. A joint sim with nobody else on it is still removed with your account
+- Added: joint sims are marked JOINT in the sim list, so it is obvious at a glance which ones you share with someone
+- Note: starting a new joint sim is limited to admins while the feature is being tested. Anyone invited to one can join it and take turns as normal
 
 ## v4.23 — 2026-08-15
 

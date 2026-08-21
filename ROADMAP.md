@@ -208,21 +208,82 @@ granting every sim, character and setting that writer owns.
          details panel and the two resizable sidebars were never touched.
       _Done when: a sim can be read, written and copied out on a phone without pinch-zooming._
 
-- [ ] **Joint Posts.**
-      **Read `memory/session_lcars_2026-08-joint-posts-brief.md` first.** It
-      carries the architecture, the questions to settle with the user, and two
-      findings that change this entry: a joint doc genuinely cannot live in the
-      `state.payload` blob (the *whole* payload is rewritten on every save, so
-      two writers would clobber each other's entire document set), but you should
-      *not* migrate every doc to fix that — joint docs get their own table while
-      solo docs stay put. Note also that "via Supabase Realtime" below is not
-      free: Realtime is a WebSocket protocol normally reached through
-      `supabase-js`, and this project has no SDK by design. Polling is the
-      recommendation.
+- [x] **Joint Posts — built, not yet proven against real Supabase.**
+      Shipped on `claude/joint-posts-gu3h9b`. A joint sim lives in its own
+      `jp_docs` row with `jp_members` and `jp_invitations` beside it; solo sims
+      stay in the payload blob, untouched. Invite by Writer ID, accept, one soft
+      turn at a time, "X is writing…" by polling. Read-only offline, and it says
+      so. Account deletion transfers a joint sim to its longest-standing member
+      rather than destroying other people's writing.
 
-      Turn-based with live presence: invite by Writer ID, accept, one soft edit lock at a time, others see "X is writing…" via Supabase Realtime. Tables `jp_members`, `jp_lock`, `invitations`; docs gain `docType`; RLS widens to "own rows OR rows you're a member of."
-      _Done when: two browsers with two Writer IDs can invite, accept and hand the lock back and forth without clobbering each other, and a non-member cannot load the doc._
-      _Explicitly NOT building: simultaneous typing. CRDT/OT on a hand-rolled `contenteditable` is the largest and riskiest work available, for something PBEM does not need._
+      Presence is polling, not Realtime — that would need `supabase-js`, and the
+      SDK costs the bundler-free offline download for latency PBEM does not need.
+
+      **Tested:** `supabase/test/run.sh` (38 checks against a throwaway local
+      Postgres — the lock, the version check, the RLS policies, the ownership
+      transfer) and `test/jp_browser.js` (23 checks across two browser contexts
+      with two Writer IDs, including a lapsed writer failing to clobber the next
+      holder). Neither touches real Supabase; the sandbox cannot reach it.
+
+      **Still to do, in order:**
+      1. Apply the schema. **Deploy the app first, then run the migration** —
+         new code tolerates columns it does not use, old code does not tolerate
+         columns that have appeared or vanished.
+      2. Exercise it end to end with two real accounts.
+      3. **Drop the rollout gate.** `jpCanCreate()` in `lcars.js` limits
+         *starting* a joint sim to super admins while this is unproven; anyone
+         invited can already join and write. Opening it up is making that
+         function return true.
+
+      _Explicitly NOT built: simultaneous typing. CRDT/OT on a hand-rolled
+      `contenteditable` is the largest and riskiest work available, for something
+      PBEM does not need. Settled; do not reopen._
+
+- [ ] **Joint Posts — the follow-ups it deliberately left.**
+      None of these block using the feature; all were noticed while building it.
+      - **A joint sim cannot be filed under a mission or scene by anyone but its
+        owner.** Missions and scenes still live in each writer's own payload, so
+        the owner's `mission_id` means nothing to a member — they see the sim in
+        the tree but not under a mission of theirs. Needs a per-member filing
+        row, or the docs restructure below.
+      - **Nobody is told when a sim is handed to them** by the deletion
+        transfer, or when they are removed from one. There is no notification
+        surface in the app, and building one inside Joint Posts would have been
+        the tail wagging the dog.
+      - **A joint sim cannot be turned back into a solo one.** The dialog says
+        so rather than pretending otherwise.
+      - **Snapshots on a joint sim are per writer**, since `snapshots` is keyed
+        by `writer_uid` — each member keeps their own history of the shared sim.
+        Defensible as "my revisions", but it is not what a shared history would
+        look like, and it should be a deliberate choice rather than a leftover.
+      - **Share links on a joint sim are untested.** `shared_docs` is keyed by
+        `doc_id` and stores `authors` as a list precisely so this works, but
+        publishing a joint sim has not been exercised.
+
+- [ ] **Move every doc out of the payload blob.**
+      The long-term shape, and now a step closer: `jp_docs`, the membership
+      helpers and the two-accessor discipline are what this needs.
+
+      **Why it is worth doing.** `saveToCloud()` POSTs the *entire* payload
+      every few seconds while you type, so the cost of saving one sentence
+      scales with how much you have ever written — and it gets worse every
+      month. It also means two tabs of your *own* account clobber each other,
+      and it is the reason a share link has to be a snapshot copy rather than a
+      live view (a policy on the blob row is all-or-nothing).
+
+      **Do it staged, never as a cutover.** Each step is independently
+      reversible, which is the whole point:
+      1. Add the `docs` table. Change nothing else; the blob stays authoritative.
+      2. Dual-write — the app writes both. Still reads the blob. If the per-doc
+         writes fail, nothing is lost. Leave it running as long as it takes.
+      3. Flip reads behind a setting, one account first, then everyone.
+      4. Stop writing the blob.
+
+      _The hard part is offline: per-doc means a real outbox — dirty flags, a
+      replay queue, and a decision about a queued edit that conflicts with a
+      newer server version. That is the piece most likely to go wrong and the
+      one that matters most, since the offline download is a headline feature._
+      _Done when: saving a sentence uploads one sim, not the archive._
 
 ---
 

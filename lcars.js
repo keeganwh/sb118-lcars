@@ -265,6 +265,8 @@ const VERSIONS = [
       'Added: Writers on this sim, in the sim details panel \u2014 see everyone on a joint sim, invite more, withdraw an invitation that has not been taken up, or leave a sim you no longer write',
       'Changed: joint sims are read-only when you are offline. Taking turns depends on the server knowing whose turn it is, so writing without it would mean two people editing the same sim with no way to reconcile the result. You can still read and copy the sim, and LCARS says why rather than just refusing',
       'Changed: deleting your account no longer takes joint sims with it. A joint sim you started passes to whoever has been on it longest, so other people\u2019s writing is not destroyed. A joint sim with nobody else on it is still removed with your account',
+      'Added: joint sims are marked JOINT in the sim list, so it is obvious at a glance which ones you share with someone',
+      'Note: starting a new joint sim is limited to admins while the feature is being tested. Anyone invited to one can join it and take turns as normal',
     ],
   },
 ];
@@ -5413,7 +5415,7 @@ function renderNav() {
     return `<div class="nd nd-s-${st}${active}" onclick="openDoc('${d.id}')" oncontextmenu="ctxDoc(event,'${d.id}')" title="${esc(d.title||'Untitled')}">
       <span class="sdot ${st}"></span>
       <div class="nd-inner">
-        <div class="nd-title">${esc(dispTitle)}</div>
+        <div class="nd-title">${esc(dispTitle)}${isJointDoc(d) ? '<span class="jp-tag" title="A joint sim — you take turns on this one">JOINT</span>' : ''}</div>
         ${metaHtml}
       </div>
       ${postTypeTag(d.postType)}
@@ -9089,7 +9091,7 @@ function jpPaint() {
   // "Make this joint" is offered on a solo sim with an account behind it, and
   // nowhere else -- there is nothing to share to when signed out.
   const solo = curId && S.docs[curId] && !isJointDoc(S.docs[curId]);
-  if (mk) mk.classList.toggle('hidden', !(solo && isCloud()));
+  if (mk) mk.classList.toggle('hidden', !(solo && jpCanCreate()));
 
   if (!doc) {
     bar.classList.add('hidden');
@@ -9218,7 +9220,7 @@ function jpNudge() {
 function jpConfirmMakeJoint(id) {
   const doc = S.docs[id];
   if (!doc || isJointDoc(doc)) return;
-  if (!isCloud()) { showToast('Joint sims need an account — sign in first.'); return; }
+  if (!jpCanCreate()) { showToast('Joint sims are still being tested.'); return; }
   openModal('Make this a joint sim?',
     '<div style="font-size:0.9rem;line-height:1.6">' +
     '<p><strong>' + esc(doc.title || 'This sim') + '</strong> moves out of your own storage and into ' +
@@ -9229,3 +9231,14 @@ function jpConfirmMakeJoint(id) {
     () => { jpMakeJoint(id); },
     { ok: 'Make it joint' });
 }
+
+// ── Rollout gate ──────────────────────────────────────────────────────────
+// TEMPORARY, and meant to be deleted. Joint Posts goes to production before it
+// has been exercised against the real Supabase by real people, so STARTING a
+// joint sim is held back to super admins for now. Everything else is open:
+// anybody invited to a joint sim can accept it, take turns and write, which is
+// what makes it testable with a second account at all.
+//
+// To open it to everyone: make this return true, and drop the paragraph in the
+// roadmap that describes the gate. Nothing else keys off it.
+function jpCanCreate() { return isCloud() && isSuperAdmin(); }
