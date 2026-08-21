@@ -81,6 +81,15 @@ _On `main` and live, not yet cut as a version._
 - Changed: deleting your account no longer takes joint sims with it. A joint sim you started passes to whoever has been on it longest, so other people’s writing is not destroyed. A joint sim with nobody else on it is still removed with your account
 - Added: joint sims are marked JOINT in the sim list, so it is obvious at a glance which ones you share with someone
 - Note: starting a new joint sim is limited to admins while the feature is being tested. Anyone invited to one can join it and take turns as normal
+- Fixed: handing a joint sim back straight after typing could wipe what you had just written. If you handed off before LCARS had saved — which is most likely on a short first line — the hand-off sent the older, empty version. Handing back now saves what is on screen first, keeps a snapshot of it, and refuses to hand over at all if the save did not go through
+- Fixed: a joint sim vanished from the mission and scene list and could only be found on the Command Dashboard. Joint sims are now filed by each writer separately, in their own missions and scenes — so you and your scene partner can each file the same sim wherever it makes sense to you, and it stays there
+- Fixed: text you had typed could be replaced by your scene partner’s version while you were still looking at it, if your turn had run out mid-sentence. LCARS now leaves anything unsaved alone and tells you at save time instead
+- Fixed: Auto Format now follows your own settings on a joint sim. Bold names used to be baked in by whoever wrote last, so the sim changed appearance every turn — each writer now sees it their own way
+- Changed: the bar showing whose turn it is now stays at the top of the sim as you scroll, instead of disappearing once the sim gets long
+- Changed: joint sims now show people by their display name rather than their Writer ID. Writers on this sim shows both, since the Writer ID is what you invite by
+- Changed: handing a joint sim back and forth is quicker to show up — LCARS checks more often while a joint sim is open, and more often still for a few seconds after a hand-off
+- Added: tagging a sim as a JP now offers to set it up as a shared sim and invite the other writers, rather than leaving you to find the button
+- Added: the LCARS badge and title in the top left are now a link back to the Command Dashboard, and there is a Dashboard button beside Character Manifest
 
 ## v4.23 — 2026-08-15
 

@@ -117,9 +117,14 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
        disc is a separate element because the ring is drawn on the disc, not on
        the image. src is set from the icon link at boot, so the base64 is
        carried once. -->
-  <div class="hdr-badge"><span id="hdr-mark-plate"><img id="hdr-mark" alt=""></span>LCARS</div>
-  <div class="hdr-title">STARBASE 118 WRITING TOOL</div>
+  <!-- The mark and the wordmark are a way home. A logo that goes to the front
+       page is what everybody already expects of one. -->
+  <button class="hdr-home" onclick="goHome()" title="Back to the Command Dashboard" aria-label="Back to the Command Dashboard">
+    <span class="hdr-badge"><span id="hdr-mark-plate"><img id="hdr-mark" alt=""></span>LCARS</span>
+    <span class="hdr-title">STARBASE 118 WRITING TOOL</span>
+  </button>
   <div class="hdr-right">
+    <button class="btn btn-s btn-sm" id="btn-dash" onclick="goHome()" title="Command Dashboard"><svg class="ic" aria-hidden="true"><use href="#i-hexagon"/></svg> Dashboard</button>
     <button class="btn btn-s btn-sm" id="btn-manifest-toggle" onclick="openManifest()"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg> Character Manifest</button>
     <div class="tsep"></div>
     <div id="style-picker">

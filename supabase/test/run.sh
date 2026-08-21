@@ -42,10 +42,20 @@ psql() { command psql -h "$WORK/sock" -p "$PORT" -U postgres -v ON_ERROR_STOP=1 
 
 echo "· standing in for the Supabase-only bits"
 psql -q -f "$HERE/harness.sql" >/dev/null
+# Errors here are shown, not swallowed. An earlier version piped this to
+# /dev/null and a schema that would not apply looked exactly like a schema that
+# applied cleanly.
+apply() {
+  local out
+  if ! out=$(psql -q -f "$HERE/../schema.sql" 2>&1); then
+    echo "$out" | grep -v NOTICE | tail -20
+    return 1
+  fi
+}
 echo "· applying schema.sql"
-psql -q -f "$HERE/../schema.sql" >/dev/null 2>&1
+apply || { echo "schema.sql failed to apply"; exit 1; }
 echo "· applying it a second time (it must be re-runnable)"
-psql -q -f "$HERE/../schema.sql" >/dev/null 2>&1
+apply || { echo "schema.sql is not re-runnable"; exit 1; }
 echo "· running the joint-post checks"
 echo
 
