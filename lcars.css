@@ -1163,13 +1163,21 @@ body.hc .contact-card-bar{color:#000}
    turn it is, so it has to read at a glance without being shouty. Colour
    carries the state; the words carry the meaning, because colour alone is not
    an answer on a high-contrast theme. */
-.jp-bar{display:flex;align-items:center;gap:12px;justify-content:space-between;
+/* Sticky, because whose turn it is stops being useful the moment it scrolls
+   away -- and a long joint sim is exactly when you most want to check. It
+   sticks to the top of the editor's own scroller rather than the viewport, so
+   it cannot drift over the toolbar. The background must be opaque: text
+   scrolling underneath a translucent bar is worse than no bar. */
+.jp-bar{position:sticky;top:0;z-index:6;
+  display:flex;align-items:center;gap:12px;justify-content:space-between;
   flex-wrap:wrap;padding:8px 14px;margin:0 0 8px;border-radius:8px;
   border:1px solid var(--border);background:var(--panel);
+  box-shadow:0 2px 8px rgba(0,0,0,.18);
   font-size:0.82rem;line-height:1.4}
 .jp-bar .jp-msg{flex:1 1 auto;min-width:0}
 .jp-bar .jp-acts{display:flex;gap:8px;flex:0 0 auto}
 .jp-bar.jp-mine{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 12%,var(--panel))}
+.jp-bar.jp-mine,.jp-bar.jp-busy,.jp-bar.jp-free,.jp-bar.jp-off{backdrop-filter:none}
 .jp-bar.jp-busy{border-color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--panel))}
 .jp-bar.jp-free{border-color:var(--border)}
 .jp-bar.jp-off {border-color:var(--dim);color:var(--dim)}
@@ -1187,7 +1195,8 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
 .jp-row{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;
   padding:7px 0;border-bottom:1px solid var(--border)}
 .jp-row:last-child{border-bottom:none}
-.jp-wid{font-weight:bold;letter-spacing:0.02em}
+.jp-wid{font-weight:bold;letter-spacing:0.02em;display:flex;flex-direction:column;gap:1px}
+.jp-sub{font-weight:normal;font-size:0.7rem;color:var(--dim);letter-spacing:0.04em}
 .jp-role{font-size:0.74rem;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em}
 .jp-empty{padding:10px 0;color:var(--dim)}
 .jp-add{display:flex;gap:8px;align-items:center;margin-top:8px}
@@ -1204,10 +1213,36 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   border-radius:8px;background:var(--gold,#c9a227);color:#000;
   font-size:0.66rem;font-weight:bold;line-height:16px;text-align:center}
 
-/* A joint sim in the nav tree, so it is obvious which ones are shared. */
-.jp-tag{display:inline-block;margin-left:6px;padding:0 5px;border-radius:6px;
-  border:1px solid var(--amber);color:var(--amber);
-  font-size:0.62rem;line-height:14px;letter-spacing:0.06em}
+/* A joint sim takes the sim-type slot rather than adding a second badge beside
+   it -- "JP" and "JOINT" side by side said the same thing twice. JOINT is the
+   stronger claim (actually shared with someone here, not just a JP by kind), so
+   it replaces the type tag and is tinted to stand apart from it. */
+.tag.jp-shared{border-color:var(--amber);color:var(--amber);
+  background:color-mix(in srgb,var(--amber) 14%,transparent)}
+
+
+/* The header mark is a way home, but it must not LOOK like a new control --
+   it looked exactly as it did before this was true, and that is the point. No
+   box, no padding, no hover fill; just the cursor and a focus ring for anyone
+   navigating by keyboard. */
+.hdr-home{display:flex;align-items:center;min-width:0;
+  background:none;border:0;padding:0;margin:0;
+  color:inherit;font:inherit;text-align:left;cursor:pointer;
+  height:100%}
+.hdr-home:focus-visible{outline:2px solid var(--amber);outline-offset:-2px}
+
+
+/* The reconcile prompt lists what is actually different now, so it needs room
+   to do it without the dialog growing past the screen. */
+.rec-list{margin:4px 0 2px;padding:0 0 0 18px;max-height:150px;overflow-y:auto;
+  font-size:0.82rem;line-height:1.5}
+.rec-list li{margin:2px 0}
+.rec-when{margin-left:8px;font-size:0.72rem;color:var(--dim)}
+.rec-none{margin:4px 0;font-size:0.82rem;color:var(--dim)}
+
+/* A sim filed nowhere is invisible in the tree, so the Sim Details button that
+   fixes it says so rather than sitting there looking ordinary. */
+.sd-warn{border-color:var(--amber)!important;color:var(--amber)!important}
 
 /* ── RESPONSIVE ──
    Kept last so it outranks the skin overrides above. Covers the header and the
@@ -1296,4 +1331,11 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   .jp-row .btn{grid-column:1 / -1}
   .jp-add{flex-wrap:wrap}
   .jp-add .mi{flex:1 1 100%;font-size:16px}
+}
+
+/* The header mark already goes home, so the Dashboard button is redundant on a
+   phone -- and the header has no room for it there. */
+@media (max-width:820px){
+  #btn-dash{display:none}
+  .hdr-home{gap:8px}
 }

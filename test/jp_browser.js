@@ -15,8 +15,8 @@
 //
 const { chromium } = require('playwright');
 
-const A = { uid: 'uid-aaa', wid: 'A111' };
-const B = { uid: 'uid-bbb', wid: 'B222' };
+const A = { uid: 'uid-aaa', wid: 'A111', name: null };          // no display name: falls back to the ID
+const B = { uid: 'uid-bbb', wid: 'B222', name: 'Ensign Rivera' };
 
 // The shared server state both contexts talk to. Mirrors the real functions'
 // semantics -- in particular the version check, which is what we are testing.
@@ -26,7 +26,8 @@ const DB = {
   invites: [],
   LOCK_MS: 5 * 60 * 1000,   // must match jp_lock_minutes() in schema.sql
 };
-const widOf = u => (u === A.uid ? A.wid : B.wid);
+const widOf  = u => (u === A.uid ? A.wid : B.wid);
+const nameOf = u => (u === A.uid ? A.name : B.name);
 const lockActive = d => !!(d.locked_by && Date.now() - d.locked_at < DB.LOCK_MS);
 
 function rpc(fn, args, me) {
@@ -39,15 +40,20 @@ function rpc(fn, args, me) {
         .map(x => ({ doc_id: x.doc_id, owner_uid: x.owner_uid, owner_wid: widOf(x.owner_uid),
           title: x.title, status: x.status, post_type: x.post_type, posted_at: x.posted_at,
           academy: x.academy, version: x.version, locked_by: x.locked_by,
-          lock_wid: x.locked_by ? widOf(x.locked_by) : null, lock_active: lockActive(x),
+          lock_wid: x.locked_by ? widOf(x.locked_by) : null,
+          lock_name: x.locked_by ? nameOf(x.locked_by) : null,
+          owner_wid: widOf(x.owner_uid), owner_name: nameOf(x.owner_uid),
+          mission_name: x.mission_name, scene_name: x.scene_name,
+          lock_active: lockActive(x),
           member_count: DB.members[x.doc_id].length, updated_at: new Date(x.updated_at).toISOString() }));
     case 'jp_doc':
       if (!isMember) return [];
-      return [{ ...d, lock_wid: d.locked_by ? widOf(d.locked_by) : null, lock_active: lockActive(d),
+      return [{ ...d, lock_wid: d.locked_by ? widOf(d.locked_by) : null,
+                lock_name: d.locked_by ? nameOf(d.locked_by) : null, lock_active: lockActive(d),
                 updated_at: new Date(d.updated_at).toISOString() }];
     case 'jp_roster':
       if (!isMember) return [];
-      return DB.members[d.doc_id].map(u => ({ member_uid: u, writer_id: widOf(u),
+      return DB.members[d.doc_id].map(u => ({ member_uid: u, writer_id: widOf(u), display_name: nameOf(u),
         role: u === d.owner_uid ? 'owner' : 'writer', joined_at: new Date().toISOString() }));
     case 'jp_my_invites':
       return DB.invites.filter(i => i.writer_id === widOf(me) && i.status === 'open')
@@ -189,7 +195,7 @@ async function ctxFor(browser, who, errors) {
   ok(await b.p.evaluate(() => document.body.classList.contains('jp-readonly')),
      'and stays read-only');
   ok(await b.p.evaluate(() => /A111 is writing/.test(document.getElementById('jp-bar').textContent)),
-     'and is told who has it, by Writer ID');
+     'and is told who has it — by Writer ID when they have set no display name');
 
   // A writes and saves.
   await a.p.evaluate(() => {
@@ -234,6 +240,176 @@ async function ctxFor(browser, who, errors) {
      'and says so rather than silently refusing');
   ok(await a.p.evaluate(id => S.docs[id].content.length > 0, docId),
      'and the sim is still readable offline, not vanished');
+
+  // --- the bugs reported from the first real use -------------------------
+  // The offline check above left A offline on purpose; put it back, or every
+  // check below is really just testing the offline banner again.
+  await a.p.evaluate(() => { Object.defineProperty(navigator, 'onLine', { get: () => true, configurable: true }); jpPaint(); });
+  await a.p.waitForTimeout(200);
+
+  // A display name, when there is one, is what a person is called.
+  await a.p.evaluate(id => jpTakeLock(id), docId);   // A holds it again
+  await a.p.waitForTimeout(300);
+  await a.p.evaluate(id => jpReleaseLock(id, true), docId);
+  await a.p.waitForTimeout(500);
+  await b.p.evaluate(id => jpTakeLock(id), docId);
+  await b.p.waitForTimeout(400);
+  await a.p.evaluate(() => jpPollOnce());
+  await a.p.waitForTimeout(600);
+  ok(await a.p.evaluate(() => /Ensign Rivera is writing/.test(document.getElementById('jp-bar').textContent)),
+     'a writer with a display name is named by it, not by their Writer ID');
+
+  // HAND-OFF MUST NOT EAT A SHORT TURN. The reported bug: type a little, press
+  // Hand back before the save debounce, and the sim came back empty, because
+  // the hand-off sent doc.content -- which flushSave had not refreshed yet.
+  await b.p.evaluate(() => {
+    document.getElementById('editor').innerHTML = '<div>Just one short line.</div>';
+  });
+  await b.p.evaluate(id => jpReleaseLock(id, true), docId);   // immediately, no debounce
+  await b.p.waitForTimeout(1500);
+  ok(DB.docs[docId].content.includes('Just one short line'),
+     'handing back immediately after typing saves the turn rather than wiping it');
+  ok(await b.p.evaluate(id => (S.docs[id].snapshots || []).length > 0, docId),
+     'and a hand-off leaves a snapshot to come back to');
+
+  // FILING MUST SURVIVE A SERVER REFRESH. The reported bug: a joint sim
+  // disappeared from the mission/scene tree and was reachable only from the
+  // dashboard, because the row carries no filing and renderNav drops a doc
+  // whose mission it cannot find.
+  await a.p.evaluate(id => {
+    S.missions['m1'] = { id:'m1', name:'The Artemis Initiative', year:2026, status:'active' };
+    S.scenes['s1']   = { id:'s1', name:'Deck Twelve', missionId:'m1', status:'active' };
+    S.docs[id].missionId = 'm1'; S.docs[id].sceneId = 's1';
+    jpRememberFiling(S.docs[id]); persist();
+  }, docId);
+  await a.p.evaluate(id => jpReload(id), docId);
+  await a.p.waitForTimeout(800);
+  ok(await a.p.evaluate(id => S.docs[id].missionId === 'm1' && S.docs[id].sceneId === 's1', docId),
+     'a joint sim stays filed where the writer put it after a refresh from the server');
+  ok(await a.p.evaluate(id => {
+        const tree = document.getElementById('nav-tree');
+        return !!tree && tree.textContent.includes('The Artemis Initiative');
+     }, docId),
+     'and appears in the mission tree, not only on the dashboard');
+
+  // Two writers may file the same sim differently.
+  await b.p.evaluate(id => {
+    S.missions['m9'] = { id:'m9', name:'Something Else Entirely', year:2026, status:'active' };
+    S.docs[id].missionId = 'm9'; S.docs[id].sceneId = null;
+    jpRememberFiling(S.docs[id]); persist();
+  }, docId);
+  await b.p.evaluate(id => jpReload(id), docId);
+  await b.p.waitForTimeout(700);
+  const aFiling = await a.p.evaluate(id => S.docs[id].missionId, docId);
+  const bFiling = await b.p.evaluate(id => S.docs[id].missionId, docId);
+  ok(aFiling === 'm1' && bFiling === 'm9',
+     'and two writers can file the same joint sim in different places');
+
+  // The turn bar has to stay put when the sim is long enough to scroll.
+  ok(await a.p.evaluate(() => getComputedStyle(document.getElementById('jp-bar')).position === 'sticky'),
+     'the turn bar sticks rather than scrolling away');
+
+  // --- second round of reported bugs -------------------------------------
+  // THE PROMPT THAT WOULD NOT GO AWAY. Joint sims are stripped from the payload
+  // blob, so counting them on the local side made this browser look permanently
+  // ahead of its own account -- "62 sims here, 60 in your account" on every
+  // single load, for a difference that was not one.
+  const counts = await a.p.evaluate(() => {
+    const local = Object.keys(S.docs).length;
+    const localSolo = Object.keys(S.docs).filter(id => !isJointDoc(S.docs[id])).length;
+    return { local, localSolo, payload: Object.keys(cloudPayload().docs).length };
+  });
+  ok(counts.local > counts.localSolo, 'the browser really does hold a joint sim');
+  ok(counts.localSolo === counts.payload,
+     'the count compared against the account excludes joint sims, so the reconcile prompt stops firing');
+
+  // THE HAND-BACK THAT UNDID ITSELF. Releasing flushed the editor, which
+  // re-armed the debounced save, which fired seconds later -- and jp_save takes
+  // the lock for whoever saves, so the turn came straight back.
+  await a.p.evaluate(id => jpTakeLock(id), docId);
+  await a.p.waitForTimeout(400);
+  await a.p.evaluate(() => {
+    document.getElementById('editor').innerHTML = '<div>A short turn, then hand back.</div>';
+    schedSave();
+  });
+  await a.p.evaluate(id => jpReleaseLock(id, true), docId);
+  await a.p.waitForTimeout(4500);          // longer than the 2.5s save debounce
+  ok(DB.docs[docId].locked_by === null,
+     'a hand-off stays handed off — the pending save does not take the turn back');
+  ok(DB.docs[docId].content.includes('A short turn'),
+     'and the turn that was handed back is the one that was saved');
+
+  // Filing a sim that is in no mission at all -- the case with no right-click
+  // to reach, because it is not in the tree to right-click on.
+  await a.p.evaluate(id => { S.docs[id].missionId = null; S.docs[id].sceneId = null;
+                             delete S.jpFiling[id]; persist(); renderNav(); openDoc(id); }, docId);
+  await a.p.waitForTimeout(400);
+  ok(await a.p.evaluate(() => {
+       const b = document.getElementById('btn-file-sim');
+       return !!b && !!b.offsetParent && /Not filed/.test(document.getElementById('btn-file-lbl').textContent);
+     }),
+     'a sim filed nowhere offers a way to file it from Sim Details, and says it is unfiled');
+
+  await a.p.evaluate(id => fileSimDialog(id), docId);
+  await a.p.waitForTimeout(300);
+  ok(await a.p.evaluate(() => {
+       const m = document.getElementById('fs-m');
+       return !!m && [...m.options].some(o => o.value === '__new');
+     }),
+     'and the filing dialog can create a new mission rather than sending you away to make one');
+
+  // The header mark is a way home without becoming a new-looking control.
+  ok(await a.p.evaluate(() => {
+       const h = document.querySelector('.hdr-home');
+       const cs = getComputedStyle(h);
+       return cs.padding === '0px' && (cs.backgroundColor === 'rgba(0, 0, 0, 0)' || cs.backgroundColor === 'transparent');
+     }),
+     'the header mark is clickable but keeps the look it always had');
+
+  // --- third round ---------------------------------------------------------
+  // FILING MUST TAKE EFFECT AT ONCE. jpApplyRow used to replace the doc object
+  // in S.docs, so a dialog holding a reference across a poll wrote into an
+  // orphan: Sim Details showed the new filing, the sim list did not, and it
+  // only appeared once a later refresh restored it.
+  await a.p.evaluate(id => {
+    S.missions['m2'] = { id:'m2', name:'Shore Leave', year:2026, status:'active' };
+    S.scenes['s2']   = { id:'s2', name:'Robin & Wil Visit Earth', missionId:'m2', status:'active' };
+    S.docs[id].missionId = null; S.docs[id].sceneId = null;
+    delete S.jpFiling[id]; persist(); renderNav(); openDoc(id);
+  }, docId);
+  await a.p.waitForTimeout(400);
+
+  // Force the exact race: refresh the row from the server (which is what a poll
+  // does) while the filing dialog is open, then commit it.
+  await a.p.evaluate(id => fileSimDialog(id), docId);
+  await a.p.waitForTimeout(250);
+  await a.p.evaluate(id => jpReload(id), docId);          // the poll landing mid-dialog
+  await a.p.waitForTimeout(400);
+  await a.p.evaluate(() => {
+    document.getElementById('fs-m').value = 'm2'; fsMissionChange();
+    document.getElementById('fs-s').value = 's2'; fsSceneChange();
+    doModal();
+  });
+  await a.p.waitForTimeout(500);
+  ok(await a.p.evaluate(id => S.docs[id].missionId === 'm2' && S.docs[id].sceneId === 's2', docId),
+     'filing a joint sim lands on the doc the app actually renders, even if a refresh interrupts');
+  ok(await a.p.evaluate(() => {
+       const t = document.getElementById('nav-tree');
+       return !!t && t.textContent.includes('Robin & Wil Visit Earth');
+     }),
+     'and it appears in the sim list immediately, without having to take the sim first');
+
+  // One badge, not two.
+  await a.p.evaluate(id => { S.docs[id].postType = 'jp'; persist(); renderNav(); }, docId);
+  await a.p.waitForTimeout(250);
+  const badges = await a.p.evaluate(id => {
+    const row = [...document.querySelectorAll('#nav-tree .nd')]
+      .find(n => n.getAttribute('onclick') || ''.includes(id));
+    const all = [...document.querySelectorAll('#nav-tree .nd .tag')].map(t => t.textContent.trim());
+    return { joint: all.filter(t => t === 'JOINT').length, jp: all.filter(t => t === 'JP').length };
+  }, docId);
+  ok(badges.joint === 1 && badges.jp === 0,
+     'a joint sim tagged JP shows one badge, not JOINT and JP side by side');
 
   console.log('\n--- browser checks ---');
   pass.forEach(l => console.log('PASS: ' + l));

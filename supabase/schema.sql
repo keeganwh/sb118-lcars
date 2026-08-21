@@ -1218,99 +1218,8 @@ revoke all on function public.jp_save(text, integer, text, text, text, jsonb) fr
 grant execute on function public.jp_save(text, integer, text, text, text, jsonb) to authenticated;
 
 -- ---------------------------------------------------------------------------
--- jp_list() : every joint sim the caller is on, with presence
+-- jp_my_invites() : open invitations addressed to the caller
 -- ---------------------------------------------------------------------------
--- One call feeds the dashboard AND the "X is writing..." line, which is why
--- presence needs no WebSocket. The roadmap suggested Supabase Realtime; that is
--- a Phoenix-channel protocol normally reached through supabase-js, and this
--- project has no SDK, no bundler and no npm -- deliberately, because that is
--- what keeps the one-file offline download working. Polling this every few
--- seconds is twenty lines and no new failure mode, and PBEM is measured in
--- hours. Do not add supabase-js to shave latency nobody is waiting on.
---
--- lock_holder is a Writer ID, resolved here: members cannot read each other's
--- rows in public.writers, so the client could not turn the uid into a name.
-create or replace function public.jp_list()
-returns table (
-  doc_id      text,
-  owner_uid   uuid,
-  owner_wid   text,
-  title       text,
-  status      text,
-  post_type   text,
-  posted_at   timestamptz,
-  academy     boolean,
-  version     integer,
-  locked_by   uuid,
-  lock_wid    text,
-  lock_active boolean,
-  member_count integer,
-  updated_at  timestamptz
-)
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select d.doc_id, d.owner_uid, ow.writer_id, d.title, d.status, d.post_type,
-         d.posted_at, d.academy, d.version, d.locked_by, lw.writer_id,
-         (d.locked_by is not null
-           and d.locked_at > now() - make_interval(mins => public.jp_lock_minutes())),
-         (select count(*)::integer from public.jp_members m2 where m2.doc_id = d.doc_id),
-         d.updated_at
-    from public.jp_docs d
-    join public.jp_members m on m.doc_id = d.doc_id and m.member_uid = auth.uid()
-    left join public.writers ow on ow.id = d.owner_uid
-    left join public.writers lw on lw.id = d.locked_by
-   order by d.updated_at desc;
-$$;
-
-revoke all on function public.jp_list() from public, anon;
-grant execute on function public.jp_list() to authenticated;
-
--- ---------------------------------------------------------------------------
--- jp_doc() : one joint sim in full, for opening it
--- ---------------------------------------------------------------------------
-create or replace function public.jp_doc(p_doc_id text)
-returns table (
-  doc_id text, owner_uid uuid, title text, content text, status text,
-  post_type text, posted_at timestamptz, academy boolean, format jsonb,
-  meta jsonb, version integer, locked_by uuid, lock_wid text,
-  lock_active boolean, updated_at timestamptz
-)
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select d.doc_id, d.owner_uid, d.title, d.content, d.status, d.post_type,
-         d.posted_at, d.academy, d.format, d.meta, d.version, d.locked_by,
-         lw.writer_id,
-         (d.locked_by is not null
-           and d.locked_at > now() - make_interval(mins => public.jp_lock_minutes())),
-         d.updated_at
-    from public.jp_docs d
-    left join public.writers lw on lw.id = d.locked_by
-   where d.doc_id = p_doc_id and public.is_jp_member(p_doc_id);
-$$;
-
--- jp_roster() : who is on a sim, and who has been asked. Writer IDs again,
--- because members cannot read each other's rows directly.
-create or replace function public.jp_roster(p_doc_id text)
-returns table (member_uid uuid, writer_id text, role text, joined_at timestamptz)
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select m.member_uid, w.writer_id, m.role, m.joined_at
-    from public.jp_members m
-    left join public.writers w on w.id = m.member_uid
-   where m.doc_id = p_doc_id and public.is_jp_member(p_doc_id)
-   order by m.role desc, m.joined_at;
-$$;
-
--- jp_my_invites() : open invitations addressed to the caller.
 create or replace function public.jp_my_invites()
 returns table (id uuid, doc_id text, title text, from_wid text, created_at timestamptz)
 language sql
@@ -1327,11 +1236,7 @@ as $$
    order by i.created_at;
 $$;
 
-revoke all on function public.jp_doc(text)    from public, anon;
-revoke all on function public.jp_roster(text) from public, anon;
 revoke all on function public.jp_my_invites() from public, anon;
-grant execute on function public.jp_doc(text)    to authenticated;
-grant execute on function public.jp_roster(text) to authenticated;
 grant execute on function public.jp_my_invites() to authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -1422,3 +1327,113 @@ end $$;
 
 revoke all on function public.purge_expired_deletions() from public, anon;
 grant execute on function public.purge_expired_deletions() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Joint Posts, second pass: display names, and the owner's filing by name
+-- ---------------------------------------------------------------------------
+-- WHY NAMES AND NOT IDS. Missions and scenes live in each writer's own payload
+-- blob, so the owner's mission_id means nothing to anybody else -- a member
+-- cannot resolve it, and should not be filed by it either, since two writers
+-- may organise the same sim quite differently. Filing is therefore per writer
+-- and lives in their own blob. These two columns carry only the owner's NAMES,
+-- as a hint: a member who happens to have a mission of the same name gets the
+-- sim filed there automatically, and otherwise files it themselves.
+alter table public.jp_docs add column if not exists mission_name text;
+alter table public.jp_docs add column if not exists scene_name   text;
+
+-- Writer IDs are an identifier, not a name. "A239809JP3 is writing" tells you
+-- nothing at a glance; the display name is what people actually know each other
+-- by. Both are returned -- the ID stays as the unambiguous handle for invites
+-- and for the roster, where two people could share a display name.
+drop function if exists public.jp_list();
+create or replace function public.jp_list()
+returns table (
+  doc_id      text,
+  owner_uid   uuid,
+  owner_wid   text,
+  owner_name  text,
+  title       text,
+  status      text,
+  post_type   text,
+  posted_at   timestamptz,
+  academy     boolean,
+  version     integer,
+  locked_by   uuid,
+  lock_wid    text,
+  lock_name   text,
+  lock_active boolean,
+  member_count integer,
+  mission_name text,
+  scene_name   text,
+  updated_at  timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select d.doc_id, d.owner_uid, ow.writer_id, nullif(btrim(coalesce(ow.display_name, '')), ''),
+         d.title, d.status, d.post_type, d.posted_at, d.academy, d.version,
+         d.locked_by, lw.writer_id, nullif(btrim(coalesce(lw.display_name, '')), ''),
+         (d.locked_by is not null
+           and d.locked_at > now() - make_interval(mins => public.jp_lock_minutes())),
+         (select count(*)::integer from public.jp_members m2 where m2.doc_id = d.doc_id),
+         d.mission_name, d.scene_name,
+         d.updated_at
+    from public.jp_docs d
+    join public.jp_members m on m.doc_id = d.doc_id and m.member_uid = auth.uid()
+    left join public.writers ow on ow.id = d.owner_uid
+    left join public.writers lw on lw.id = d.locked_by
+   order by d.updated_at desc;
+$$;
+
+drop function if exists public.jp_doc(text);
+create or replace function public.jp_doc(p_doc_id text)
+returns table (
+  doc_id text, owner_uid uuid, title text, content text, status text,
+  post_type text, posted_at timestamptz, academy boolean, format jsonb,
+  meta jsonb, version integer, locked_by uuid, lock_wid text, lock_name text,
+  lock_active boolean, mission_name text, scene_name text, updated_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select d.doc_id, d.owner_uid, d.title, d.content, d.status, d.post_type,
+         d.posted_at, d.academy, d.format, d.meta, d.version, d.locked_by,
+         lw.writer_id, nullif(btrim(coalesce(lw.display_name, '')), ''),
+         (d.locked_by is not null
+           and d.locked_at > now() - make_interval(mins => public.jp_lock_minutes())),
+         d.mission_name, d.scene_name,
+         d.updated_at
+    from public.jp_docs d
+    left join public.writers lw on lw.id = d.locked_by
+   where d.doc_id = p_doc_id and public.is_jp_member(p_doc_id);
+$$;
+
+drop function if exists public.jp_roster(text);
+create or replace function public.jp_roster(p_doc_id text)
+returns table (member_uid uuid, writer_id text, display_name text, role text, joined_at timestamptz)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select m.member_uid, w.writer_id,
+         nullif(btrim(coalesce(w.display_name, '')), ''),
+         m.role, m.joined_at
+    from public.jp_members m
+    left join public.writers w on w.id = m.member_uid
+   where m.doc_id = p_doc_id and public.is_jp_member(p_doc_id)
+   -- Owner first, then by when they joined. NOT `order by role desc`: that
+   -- sorts the text, and 'writer' comes after 'owner', so it did the reverse.
+   order by (m.role = 'owner') desc, m.joined_at;
+$$;
+
+revoke all on function public.jp_list()       from public, anon;
+revoke all on function public.jp_doc(text)    from public, anon;
+revoke all on function public.jp_roster(text) from public, anon;
+grant execute on function public.jp_list()       to authenticated;
+grant execute on function public.jp_doc(text)    to authenticated;
+grant execute on function public.jp_roster(text) to authenticated;

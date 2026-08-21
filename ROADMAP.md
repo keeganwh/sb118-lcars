@@ -239,6 +239,25 @@ granting every sim, character and setting that writer owns.
       `contenteditable` is the largest and riskiest work available, for something
       PBEM does not need. Settled; do not reopen._
 
+- [ ] **Real-time simultaneous writing. NEXT PRIORITY.**
+      **Read `memory/session_lcars_2026-08-realtime-brief.md` first.** This
+      reverses the earlier "explicitly NOT building simultaneous typing" line,
+      deliberately and at the user's request, after turn-based Joint Posts was
+      built and used. The reason is competitive, in their words: _"otherwise
+      people will just choose Google Docs over LCARS."_
+
+      The CRDT is the easy half — Yjs is solved and must not be hand-rolled. The
+      project is that this editor is a hand-rolled `contenteditable` whose
+      marker, name-bolding and character-colour passes rewrite its HTML in bulk,
+      which a character-level CRDT binding cannot survive.
+
+      Two things to settle with the user before any code: whether to vendor a
+      pre-built Yjs bundle (keeps `api/download.js` working) or accept a build
+      step, and confirmation that the editor rework is understood as the cost.
+      Keep the turn-based system as the offline and fallback path.
+      _Done when: two writers can type into the same sim at once without losing
+      each other's words, and the offline copy still works._
+
 - [ ] **Joint Posts — the follow-ups it deliberately left.**
       None of these block using the feature; all were noticed while building it.
       - **A joint sim cannot be filed under a mission or scene by anyone but its
