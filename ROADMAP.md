@@ -139,31 +139,39 @@ and a one-time recovery code (the user found it sloppy, and retention is poor).
 
 ---
 
-## Session 4 — Read-only share links
+## Session 4 — Read-only share links ✅ _shipped 2026-08-21_
 
-- [x] **Shareable sim links — sims only.** _Built 2026-08-20 on `claude/charming-ptolemy-4phvvv`; needs the schema run and a live pass before it is done._
-      `share_token` on a doc plus a `/s/<token>` route served by `share.html` — a minimal page with no auth and no editor, so a share link does not drag the whole app down with it. Scenes explicitly out of scope. Responsive from the start — these will be opened on phones constantly.
-      _Done when: a share URL opens in a logged-out private window, renders the sim, and nothing is editable._
-      _`writers.display_name` now exists and is set from Settings, but nothing displays it to anyone yet. This is the first surface that could — a share link showing "by <display name>" rather than a Writer ID._
+- [x] **Shareable sim links — sims only.**
+      A `/s/<token>` route served by `share.html` — no auth, no editor, no sync,
+      so a share link does not drag the application down with it. Verified live
+      in a logged-out window, on desktop and phone.
 
-      **Decisions settled 2026-08-20, do not re-litigate.** A share is a
-      **snapshot**, not a live window: publishing copies the sim into
-      `public.shared_docs` and later edits stay private until it is published
-      again. That is what makes the read path safe — docs live inside one
-      `state.payload` blob, so no policy can grant a stranger a single sim
-      without granting every sim, character and setting the writer owns.
-      The table is keyed by `doc_id` and stores `authors` as a **list** from day
-      one, so it survives docs moving into rows of their own when Joint Posts
-      forces that restructure. There is deliberately **no anon select policy** —
-      `using (true)` would expose every token — so anonymous reads go through
-      `get_shared_doc(token)`. Expiry (never / 24h / 7d / 30d) is enforced in
-      that function rather than by a cleanup job. The page shows display name,
-      Writer ID, title, status and updated date; mission, scene and word count
-      were considered and left out.
+**Decisions settled, do not re-litigate.** A share is a **snapshot**, not a live
+window: publishing copies the sim into `public.shared_docs`, and later edits stay
+private until it is published again. It has to be a copy — docs live inside one
+`state.payload` blob, so no policy can grant a stranger a single sim without
+granting every sim, character and setting that writer owns.
 
-      **Still to do:** run the `shared_docs` block in `supabase/schema.sql`
-      against the live project, then verify a real link in a logged-out private
-      window on Vercel.
+- The table is keyed by **`doc_id`**, and `authors` is a **list** from day one,
+  so it survives docs moving into rows of their own. Joint Posts inherits it.
+- **No anon select policy.** `using (true)` would expose every token along with
+  every row, so anonymous reads go through `get_shared_doc(token)`, one at a
+  time. Unknown, revoked and expired tokens are indistinguishable from outside.
+- Expiry (never / 24h / 7d / 30d) is enforced **in the read path**, not by a
+  cleanup job, so a lapsed link dies the moment it lapses.
+- What a reader sees is **exactly what copy-out produces**: locations bold, OOC
+  and thoughts italic, marker punctuation plain, no colour of any kind. The
+  editor's Visual Aids toggles and character colours are deliberately not
+  carried — they are writing aids. `lcars-render.js` holds that pass so the app
+  and the viewer cannot drift.
+- The page shows display name, Writer ID, title, status and a relative expiry
+  countdown. **Light by default**, with a remembered Light/Dark toggle. Mission,
+  scene, word count and absolute clock times were all considered and left out —
+  a clock time reads in the viewer's timezone and so means different things to
+  the writer and the reader.
+- Content is **sanitised on the read side**, allow-list not block-list, because
+  a row could be written straight to PostgREST with a crafted payload. The page
+  also carries a CSP, which is why its script is a file rather than inline.
 
 ---
 
@@ -201,6 +209,17 @@ and a one-time recovery code (the user found it sloppy, and retention is poor).
       _Done when: a sim can be read, written and copied out on a phone without pinch-zooming._
 
 - [ ] **Joint Posts.**
+      **Read `memory/session_lcars_2026-08-joint-posts-brief.md` first.** It
+      carries the architecture, the questions to settle with the user, and two
+      findings that change this entry: a joint doc genuinely cannot live in the
+      `state.payload` blob (the *whole* payload is rewritten on every save, so
+      two writers would clobber each other's entire document set), but you should
+      *not* migrate every doc to fix that — joint docs get their own table while
+      solo docs stay put. Note also that "via Supabase Realtime" below is not
+      free: Realtime is a WebSocket protocol normally reached through
+      `supabase-js`, and this project has no SDK by design. Polling is the
+      recommendation.
+
       Turn-based with live presence: invite by Writer ID, accept, one soft edit lock at a time, others see "X is writing…" via Supabase Realtime. Tables `jp_members`, `jp_lock`, `invitations`; docs gain `docType`; RLS widens to "own rows OR rows you're a member of."
       _Done when: two browsers with two Writer IDs can invite, accept and hand the lock back and forth without clobbering each other, and a non-member cannot load the doc._
       _Explicitly NOT building: simultaneous typing. CRDT/OT on a hand-rolled `contenteditable` is the largest and riskiest work available, for something PBEM does not need._

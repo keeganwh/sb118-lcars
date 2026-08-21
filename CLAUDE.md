@@ -7,7 +7,7 @@ For more depth: `TECH_STACK.md` (stack), `ROADMAP.md` (what's next), `USER_PROTO
 
 ## Stack & versions (see TECH_STACK.md for detail)
 
-- **Vanilla web app, no build step, no npm, no framework.** Three files share one codebase: `LCARS.html` (~400 lines of markup), `lcars.css` (~1,100) and `lcars.js` (~7,200).
+- **Vanilla web app, no build step, no npm, no framework.** The app is `LCARS.html` (~415 lines of markup), `lcars.css` (~1,240) and `lcars.js` (~8,500). `lcars-render.js` holds the sim render pass and is loaded by the app *and* by `share.html`, the standalone read-only viewer (with its own `share.js`) served at `/s/<token>`.
 - **Vercel** hosts it; **Supabase** holds accounts and synced data. Both are reached over plain `fetch` — no SDK, no CDN script.
 - Current app version: **4.23**. `APP_VERSION` and the `VERSIONS` array are at the top of `lcars.js`, right after `const SKEY` (line ~5).
 
@@ -75,6 +75,9 @@ Entries are read by writers, not developers. Write them in plain language, sayin
 - **`stripFormattingHtml()` runs on open, on paste and on applying source view.** Anything it strips is removed repeatedly, not once, so a structural feature it touches will appear to work and then quietly revert the next time the sim is opened.
 - **Boot raises prompts on a timer, and they fight.** The reconcile question, a pending deletion, a temporary PIN that must be changed and the Delta Prime intro have now collided three times, twice invisibly. Any new boot-time prompt must check `#mo` is hidden before it paints.
 - **`admin_action_reset()` writes `auth.users.encrypted_password` via `crypt()`** — the one thing in the schema Supabase does not support. If temporary PINs ever stop working, that is why; the fallback is written into the function's own comment.
+- **Deploy before running a schema migration, never after.** New app code tolerates columns it no longer uses; old app code does not tolerate columns that have vanished. Applying a migration while a browser still holds the previous build gives a raw PostgREST error about a missing column. There is a friendly `PGRST204` message in `publishShare`, but the ordering is the real fix.
+- **The editor's render pass is not the reader's.** `applyMarkers` tints markers so a *writer* can spot them mid-sim. Anything showing a finished sim to someone else wants what the editor's **`copy` handler** produces: locations bold, OOC and thoughts italic, markers plain, and no colour at all — character colours included. `lrToReadingHtml()` in `lcars-render.js` is that pass; use it rather than writing a third answer.
+- **A new shared file means updating `api/download.js` AND the `vercel.json` cache-header list.** Miss the first and the offline download breaks; miss the second and a fix never reaches anyone's browser.
 - Don't recreate the `main-ikuxoc` branch.
 
 ## Git workflow
@@ -94,6 +97,8 @@ Entries are read by writers, not developers. Write them in plain language, sayin
 ## Key files
 
 - `LCARS.html` · `lcars.css` · `lcars.js` — the app.
+- `lcars-render.js` — the sim render pass, shared by the app and the share viewer. Loaded **before** `lcars.js`.
+- `share.html` · `share.js` — the standalone read-only viewer at `/s/<token>`.
 - `api/download.js` — serverless route that rebuilds the three into one offline file.
 - `supabase/schema.sql` · `supabase/README.md` — database schema and setup steps.
 - `vercel.json` — route rewrites and cache headers.
