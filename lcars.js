@@ -286,6 +286,7 @@ const VERSIONS = [
       'Changed: the LCARS badge in the top left is still a link to the dashboard, but looks exactly as it did before \u2014 no box, no highlight on hover',
       'Fixed: filing a joint sim updated the sim details panel but did not put it in the sim list until you took the sim. LCARS was refreshing the sim from the server behind the dialog and quietly leaving your choice on a discarded copy',
       'Changed: a joint sim now shows a single JOINT tag in the sim list rather than JOINT and JP side by side, which said the same thing twice. A sim tagged JP that is not shared in LCARS still shows JP',
+      'Added: New Template, in Settings \u2192 Your Account & Data. You can now make a template directly instead of starting a sim you did not want, filing it under a mission and scene, saving it as a template and then deleting the sim. Name it and it opens in the editor ready to write',
     ],
   },
 ];
@@ -3932,7 +3933,17 @@ function openTemplateInEditor(id) {
   updateWC();
   updateSB();
   renderNav();
+  // Opening a template leaves whatever sim was open, so the joint-sim bar has
+  // to go with it -- curId is null by now, so jpPaint() clears it. Without
+  // this, a template opened from a joint sim inherited its turn bar.
+  jpStopPoll(); jpPaint();
   ed.focus();
+  // A brand-new template is empty, so put the caret in it the way opening an
+  // empty sim does -- otherwise focus lands with nothing to show for it.
+  if (!t.content) {
+    const r = document.createRange(); r.selectNodeContents(ed); r.collapse(true);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }
 }
 
 // Leaves template mode, saving first. Every path out of the editor calls this;
@@ -6528,10 +6539,41 @@ function settingsTemplatesInner() {
   const list = S.templates || [];
   return `
     <div class="set-note" style="margin-top:0">Saved sim bodies to start a new sim from, offered in the
-      New Sim window. Open one to edit it in the sim editor. To make a new one, use Save as Template in
-      Sim Details while a sim is open.</div>
+      New Sim window. Open one to edit it in the sim editor, or start a blank one here. You can also save
+      a sim you are already writing with Save as Template, in Sim Details.</div>
+    <div class="set-tmpl-actions">
+      <button class="btn btn-s btn-sm sb-add-btn" onclick="newTemplate()">+ New Template</button>
+    </div>
     ${list.length ? `<div class="set-tmpl-list">${list.map(t => settingsTemplateRow(t)).join('')}</div>`
       : `<div class="set-note" style="margin-top:8px">No templates saved yet.</div>`}`;
+}
+
+// Making a template used to mean starting a sim you did not want -- picking a
+// mission and a scene for it -- writing the body, then converting it and
+// deleting the sim. The template is the thing being made, so it can be made
+// directly: name it, and it opens in the sim editor exactly as an existing one
+// does, blank and ready.
+function newTemplate() {
+  openModal('NEW TEMPLATE', `
+    <div class="mf"><label class="ml">TEMPLATE NAME</label>
+      <input class="mi" id="t-new-name" placeholder="e.g. JP Opening Scene"></div>
+    <div class="mf"><label class="ml">DEFAULT SIM TITLE <span style="opacity:.6">(optional)</span></label>
+      <input class="mi" id="t-new-title" placeholder="Filled in when you start a sim from this template"></div>
+    <div class="set-note">Opens in the sim editor so you can write the body. It saves as you type,
+      like a sim does.</div>
+  `, () => {
+    const name = document.getElementById('t-new-name').value.trim();
+    if (!name) { alert('Enter a template name.'); return false; }
+    const t = { id: uid(), name, title: document.getElementById('t-new-title').value.trim(),
+                content: '', createdAt: Date.now() };
+    if (!S.templates) S.templates = [];
+    S.templates.push(t);
+    persist();
+    schedSync();
+    refreshTemplatesBlock();
+    // Straight into the editor: naming it is not the job, writing it is.
+    openTemplateInEditor(t.id);
+  }, { ok: 'Create and write it' });
 }
 
 function settingsTemplateRow(t) {
