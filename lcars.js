@@ -258,6 +258,13 @@ const VERSIONS = [
       'Fixed: if sharing failed because the page was running an older version of LCARS than the server, the error was a raw database message about a missing column. It now says what it is and what to do — reload the page',
       'Changed: share links now say how long is left rather than a date and time — “Expires in 3 days”, “Expires in 5 hours”, “Expires in 45 minutes”. A clock time was shown in whichever timezone the reader happened to be in, so it meant two different moments to you and the person you sent it to',
       'Changed: the countdown on a shared sim keeps ticking while the page is open, instead of freezing at whatever it said when the page loaded',
+      'Added: Joint Posts. A sim can now be written by two or more people. Open a sim, choose Make this a joint sim, then invite the other writers by their Writer ID \u2014 they get an invitation next time they open LCARS',
+      'Added: one turn at a time on a joint sim. Whoever has the sim is the only one who can write; everyone else sees who is writing and waits. Hand it back when you are done, and the next person can pick it up',
+      'Added: a turn frees itself after 15 idle minutes, so a sim is never stuck because somebody closed their laptop while holding it. The owner of the sim can also free it straight away if they cannot wait',
+      'Added: joint sims refuse to be written over. If somebody else has saved while you were typing, your changes are held back rather than put through on top of theirs, and you are offered their version to read first \u2014 your own text stays on screen so you can keep what you wrote',
+      'Added: Writers on this sim, in the sim details panel \u2014 see everyone on a joint sim, invite more, withdraw an invitation that has not been taken up, or leave a sim you no longer write',
+      'Changed: joint sims are read-only when you are offline. Taking turns depends on the server knowing whose turn it is, so writing without it would mean two people editing the same sim with no way to reconcile the result. You can still read and copy the sim, and LCARS says why rather than just refusing',
+      'Changed: deleting your account no longer takes joint sims with it. A joint sim you started passes to whoever has been on it longest, so other people\u2019s writing is not destroyed. A joint sim with nobody else on it is still removed with your account',
     ],
   },
 ];
@@ -1778,6 +1785,10 @@ function showChooseOwnPin() {
 function cloudPayload() {
   const docs = {};
   for (const k in (S.docs || {})) {
+    // Joint sims live in jp_docs and must never ride along in here. This blob is
+    // written whole on every save, so a joint sim inside it would be overwritten
+    // by whichever member typed last -- see the Joint Posts section.
+    if (isJointDoc(S.docs[k])) continue;
     const { snapshots, ...rest } = S.docs[k];
     docs[k] = rest;
   }
@@ -1921,7 +1932,13 @@ function adoptCloudFromPrompt() {
 
 function adoptCloudState(remote) {
   if (!remote || !remote.docs) return;
+  // The server payload has no idea joint sims exist -- cloudPayload() strips
+  // them on the way out -- so carry them across, or adopting a cloud copy would
+  // silently drop every joint sim this browser knows about.
+  const joint = {};
+  for (const k in (S.docs || {})) if (isJointDoc(S.docs[k])) joint[k] = S.docs[k];
   Object.assign(S, remote);
+  for (const k in joint) S.docs[k] = joint[k];
   persist();
   curId = null; curView = null; curViewId = null;
   setTheme(S.settings.theme || 'dark', true);
@@ -2602,6 +2619,7 @@ function showDashboard() {
   ['dh','ec'].forEach(x=>document.getElementById(x).classList.add('hidden'));
   document.getElementById('sim-details').classList.add('hidden');
   document.getElementById('s-doc').textContent = 'No sim open';
+  jpStopPoll(); jpPaint();
   document.getElementById('chars-list').innerHTML =
     '<div style="padding:10px;font-size:0.8rem;color:var(--dim)">Open a sim to see characters</div>';
   renderDashboard();
@@ -2610,6 +2628,12 @@ function showDashboard() {
 function closeDoc() {
   const wasTemplate = !!curTmplId;
   flushSave();
+  // Closing a joint sim hands the turn back. Leaving it held is how a lock gets
+  // stuck, and the person who just walked away is the one least likely to
+  // notice. The 15-minute expiry is the backstop, not the plan.
+  const jd = curJointDoc();
+  if (jd && jpCanEdit(jd)) jpReleaseLock(jd.id, true);
+  jpStopPoll();
   exitTemplateMode();
   curId = null; curView = null; curViewId = null;
   showDashboard();
@@ -3425,6 +3449,7 @@ function getIndentTarget() {
 }
 
 function doIndent() {
+  if (jpEditBlocked()) return;
   const blocks = getIndentTargets();
   if (!blocks.length) return;
   // One undo entry for the whole action, so Ctrl+Z takes back what one press
@@ -3439,6 +3464,7 @@ function doIndent() {
 // and Enter from there continues the list (Enter on an empty bullet ends it).
 // Toggling again on an existing bullet turns it back into a plain paragraph.
 function toggleBullets() {
+  if (jpEditBlocked()) return;
   const ed = document.getElementById('editor');
   if (!ed) return;
   ed.focus();
@@ -3491,6 +3517,7 @@ function updateBulletBtn() {
 }
 
 function doOutdent() {
+  if (jpEditBlocked()) return;
   const blocks = getIndentTargets();
   if (!blocks.length) return;
   // One undo entry for the whole action, so Ctrl+Z takes back what one press
@@ -3731,6 +3758,10 @@ function openDoc(id) {
   updateSB();
   checkTitleDupe();
   renderNav();
+  // A joint sim paints its own bar, starts polling for presence, and pulls the
+  // current version -- what is cached may be several turns behind.
+  jpPaint();
+  if (isJointDoc(doc)) { jpStartPoll(); jpReload(id); } else jpStopPoll();
   // For a brand-new (empty) sim, drop the caret into the editor so it's obvious
   // where to start writing (the :empty placeholder hint shows until first keystroke).
   if (!doc.content) {
@@ -3770,6 +3801,9 @@ function flushSave() {
     const snap = {content:html, savedAt:Date.now(), wordCount:curWC};
     doc.snapshots.push(snap);
     if (doc.snapshots.length > 10) doc.snapshots.shift();
+    // Snapshots are per writer_uid, so on a joint sim each member keeps their
+    // own history of it rather than a shared one. That is the honest reading of
+    // "my revisions" and needs no schema change.
     pushSnapshot(curId, snap);
   }
   doc.content = html;
@@ -3785,7 +3819,11 @@ function flushSave() {
   doc.myChars = (doc.myChars||[]).filter(n => (doc.chars||[]).includes(n));
   syncDocMyChars(doc);   // re-add any that belong via alias chain
   persist();
-  schedSync();
+  // A joint sim goes to its own row, with the version check that stops a
+  // lapsed writer overwriting the next one. It must NOT go through schedSync(),
+  // which pushes the whole blob -- see the Joint Posts section.
+  if (isJointDoc(doc)) { if (jpCanEdit(doc)) jpSchedSave(doc); }
+  else schedSync();
   updateMeta(doc);
   updateCharsPanel(doc);
   renderNav();
@@ -4241,6 +4279,7 @@ function removeConfirmedPair(a, b) {
 // TOOLBAR ACTIONS
 // ================================================================
 function ec(cmd) {
+  if (jpEditBlocked()) return;
   // Bold / italic / strikethrough are unavailable in Academy sims
   if (isAcademyActive() && ['bold','italic','underline','strikeThrough'].includes(cmd)) return;
   document.getElementById('editor').focus(); document.execCommand(cmd,false,null);
@@ -6713,6 +6752,10 @@ document.addEventListener('keydown',e=>{
     return;
   }
   if(!inEditor) return;
+  // A joint sim you do not hold the turn on is read only, and that has to be
+  // enforced HERE as well as in the CSS and the commands. Twice in this file a
+  // button has been greyed out while its keyboard shortcut carried on writing.
+  if(jpEditBlocked()) { if(!(e.ctrlKey||e.metaKey)) e.preventDefault(); return; }
   // Tab = indent / Shift+Tab = outdent. Allowed in Academy sims like the buttons
   // are -- indenting is structure, not formatting.
   const acad = curId && isAcademyDoc(S.docs[curId]);
@@ -8533,10 +8576,656 @@ document.addEventListener('DOMContentLoaded',()=>{
     if (isCloud()) {
       cloudBoot()
         .then(checkDeletionPending)
-        .then(busy => { if (!busy) return checkMustChangePin(); });
+        .then(busy => { if (!busy) return checkMustChangePin(); })
+        // Joint sims come last of the boot prompts on purpose. Four things now
+        // want the one modal slot -- the reconcile question, a pending
+        // deletion, a temporary PIN and the Delta Prime intro -- and they have
+        // collided three times. jpMaybePromptInvites() checks the slot is free
+        // and falls back to the header badge, so an invitation can never take
+        // the screen away from something more urgent.
+        .then(() => jpRefreshList())
+        .then(() => jpLoadInvites())
+        .then(() => { jpMaybePromptInvites(); });
       initAdmin();
     }
     maybeShowStyleIntro();              // held back behind the gate on a first visit
     maybeShowWizard();
   }
 });
+
+// ================================================================
+// JOINT POSTS
+// ================================================================
+// A joint sim is one two or more writers take turns on. There is deliberately
+// no simultaneous typing: one soft lock at a time, handed back and forth.
+//
+// WHERE A JOINT SIM LIVES, and why it is not where the others live. Solo sims
+// sit inside S, which saveToCloud() POSTs *whole* every few seconds. Two people
+// sharing a sim in there would each be writing their entire document set over
+// the other's, with no field granularity to reconcile against -- so a joint sim
+// gets a row of its own in jp_docs instead. Lifting every doc out of the blob
+// is the better long-term shape and is a separate, staged piece of work; see
+// ROADMAP.
+//
+// The joint doc is nonetheless kept in S.docs alongside the solo ones, marked
+// docType:'joint'. That is deliberate. Every existing pass over S.docs -- the
+// nav tree, the dashboard, the manifest, character detection, search -- then
+// works on joint sims for free, instead of each one needing to learn about a
+// second collection. The branch is confined to three places, and it must stay
+// confined to three:
+//
+//   1. cloudPayload()  strips joint sims, so they never reach the blob;
+//   2. adoptCloudState() puts them back, since the server copy has no idea
+//      they exist;
+//   3. flushSave()     routes them to jpSave() rather than schedSync().
+//
+// If you find yourself adding a fourth, that is the signal this arrangement has
+// stopped paying for itself.
+
+const JP_POLL_MS = 8000;         // presence while a joint sim is open
+let _jpPollTimer = null;
+let _jpInvites   = [];
+let _jpBusy      = false;
+
+function isJointDoc(doc) { return !!(doc && doc.docType === 'joint'); }
+function curJointDoc()   { const d = curId ? S.docs[curId] : null; return isJointDoc(d) ? d : null; }
+
+// Can this writer type into the joint sim in front of them? Everything that
+// gates editing asks this one question, so the answer cannot drift between the
+// button, the command and the keyboard handler -- which is exactly how a
+// restriction has twice ended up half-applied in this file.
+function jpCanEdit(doc) {
+  if (!isJointDoc(doc)) return true;
+  if (!isCloud() || !navigator.onLine) return false;   // no server, no lock, no editing
+  const me = getAuth().uid;
+  return !!(doc.jpLock && doc.jpLock === me);
+}
+
+// Who is holding it, phrased for a human. Null when nobody is.
+function jpHolderLabel(doc) {
+  if (!doc || !doc.jpLockActive || !doc.jpLock) return null;
+  if (doc.jpLock === getAuth().uid) return 'You have the sim';
+  return (doc.jpLockWid || 'Someone else') + ' is writing';
+}
+
+// ── Reading ───────────────────────────────────────────────────────────────
+// One call feeds both the sim list and the presence line. The roadmap suggested
+// Supabase Realtime for presence; that is a WebSocket protocol normally reached
+// through supabase-js, and this project has no SDK and no bundler -- which is
+// what keeps the one-file offline download working. Polling is twenty lines and
+// no new failure mode, and play-by-email is measured in hours.
+function jpApplyRow(row, keepContent) {
+  const prev = S.docs[row.doc_id] || {};
+  const doc = Object.assign({}, prev, {
+    id: row.doc_id,
+    docType: 'joint',
+    title: row.title || '',
+    status: row.status || 'active',
+    postType: row.post_type || null,
+    postedAt: row.posted_at ? row.posted_at.slice(0, 10) : (prev.postedAt || null),
+    jpOwner: row.owner_uid,
+    jpOwnerWid: row.owner_wid || prev.jpOwnerWid || null,
+    jpVersion: row.version,
+    jpLock: row.locked_by || null,
+    jpLockWid: row.lock_wid || null,
+    jpLockActive: !!row.lock_active,
+    jpMembers: row.member_count != null ? row.member_count : prev.jpMembers,
+    updatedAt: row.updated_at ? Date.parse(row.updated_at) : Date.now(),
+  });
+  if (!keepContent && row.content != null) doc.content = row.content;
+  if (row.meta) {
+    doc.chars = row.meta.chars || [];
+    doc.myChars = row.meta.myChars || [];
+    doc.charColors = row.meta.charColors || {};
+  }
+  if (!doc.chars) doc.chars = [];
+  if (!doc.myChars) doc.myChars = [];
+  if (!doc.charColors) doc.charColors = {};
+  if (doc.content == null) doc.content = '';
+  S.docs[row.doc_id] = doc;
+  return doc;
+}
+
+// Refresh the list of joint sims. Cached locally like everything else, so the
+// dashboard paints instantly from the last known state and this only corrects
+// it -- a member who is offline still SEES their joint sims, marked read-only,
+// rather than watching them vanish, which would read as data loss.
+async function jpRefreshList() {
+  if (!isCloud()) return;
+  let rows;
+  try { rows = await supaRpc('jp_list'); }
+  catch(e) { return; }                       // offline: the cached copies stand
+  const seen = {};
+  for (const row of (rows || [])) { jpApplyRow(row, true); seen[row.doc_id] = 1; }
+  // Anything cached as joint that the server no longer lists is one we have
+  // been removed from, or that has been deleted. Drop it rather than leaving a
+  // sim that opens into a permission error.
+  for (const id in S.docs) {
+    if (isJointDoc(S.docs[id]) && !seen[id]) {
+      if (curId === id) { curId = null; showDashboard(); }
+      delete S.docs[id];
+    }
+  }
+  persist();
+  renderNav();
+}
+
+// Pull one joint sim in full, content included.
+async function jpFetchDoc(id) {
+  const rows = await supaRpc('jp_doc', { p_doc_id: id });
+  if (!rows || !rows.length) throw new Error('That joint sim is no longer shared with you.');
+  return rows[0];
+}
+
+// ── The lock ──────────────────────────────────────────────────────────────
+// Taking, holding and giving back the turn. The expiry that makes a stuck lock
+// recoverable is enforced in the database, not here -- a timer running in a tab
+// is not a lock, and the tab holding it is precisely the one that has gone away.
+async function jpTakeLock(id) {
+  const doc = S.docs[id]; if (!isJointDoc(doc)) return false;
+  let rows;
+  try { rows = await supaRpc('jp_take_lock', { p_doc_id: id }); }
+  catch(e) { showToast(e.message || 'Could not take the sim.'); return false; }
+  const r = (rows && rows[0]) || {};
+  doc.jpLock = r.locked_by || null;
+  doc.jpLockActive = !!r.locked_by;
+  if (!r.got) {
+    // Somebody else has it. jp_list carries the Writer ID; refresh so the line
+    // names them rather than saying "someone".
+    await jpRefreshList();
+    jpPaint();
+    showToast((S.docs[id].jpLockWid || 'Another writer') + ' has the sim right now.');
+    return false;
+  }
+  doc.jpLockWid = null;
+  // The content may have moved on since this browser last looked -- taking the
+  // turn is exactly the moment to find out, and the only safe moment to replace
+  // what is on screen.
+  try {
+    const fresh = await jpFetchDoc(id);
+    jpApplyRow(fresh, false);
+    if (curId === id) jpLoadIntoEditor(S.docs[id]);
+  } catch(e) { /* the lock is still ours; the editor keeps what it has */ }
+  persist(); jpPaint(); renderNav();
+  return true;
+}
+
+async function jpReleaseLock(id, quiet) {
+  const doc = S.docs[id]; if (!isJointDoc(doc)) return;
+  await jpSaveNow(doc, true);            // hand back a saved sim, never a stale one
+  try { await supaRpc('jp_release_lock', { p_doc_id: id }); } catch(e) { /* the expiry frees it anyway */ }
+  doc.jpLock = null; doc.jpLockActive = false; doc.jpLockWid = null;
+  persist(); jpPaint(); renderNav();
+  if (!quiet) showToast('Handed back. Anyone on the sim can pick it up now.');
+}
+
+// ── Saving ────────────────────────────────────────────────────────────────
+// THE VERSION CHECK IS THE POINT. The dangerous case is not two people typing
+// at once -- the lock covers that. It is one writer whose lock quietly expired,
+// whose browser has not noticed, saving over the next holder's work. Only the
+// version catches that, so every save names the version it loaded and the
+// database refuses anything else.
+async function jpSaveNow(doc, quiet) {
+  if (!isJointDoc(doc) || !isCloud()) return false;
+  if (_jpBusy) return false;
+  _jpBusy = true;
+  try {
+    const v = await supaRpc('jp_save', {
+      p_doc_id: doc.id,
+      p_version: doc.jpVersion,
+      p_content: doc.content || '',
+      p_title: doc.title || '',
+      p_status: doc.status || 'active',
+      p_meta: { chars: doc.chars || [], myChars: doc.myChars || [], charColors: doc.charColors || {} },
+    });
+    doc.jpVersion = v;
+    doc.jpLock = getAuth().uid; doc.jpLockActive = true; doc.jpLockWid = null;
+    persist();
+    setSyncStatus('ok', 'Saved ' + new Date().toLocaleTimeString());
+    return true;
+  } catch(e) {
+    const m = e.message || '';
+    if (/JP_STALE/.test(m))  { jpStaleWarning(doc); return false; }
+    if (/JP_LOCKED/.test(m)) { jpLostLockWarning(doc); return false; }
+    setSyncStatus('error', 'Not saved — ' + m);
+    if (!quiet) showToast('That did not save: ' + m);
+    return false;
+  } finally { _jpBusy = false; }
+}
+
+// Refused because somebody else moved the sim on. The one thing NOT to do here
+// is overwrite them, and the second is to throw away what this writer typed --
+// so the text stays on screen, and they are told plainly where they stand.
+function jpStaleWarning(doc) {
+  setSyncStatus('error', 'Not saved — the sim has moved on');
+  if (doc._jpWarned) return;
+  doc._jpWarned = true;
+  openModal('Somebody got there first',
+    '<div style="font-size:0.9rem;line-height:1.6">' +
+    '<p>Another writer has saved <strong>' + esc(doc.title || 'this sim') + '</strong> since you opened it, ' +
+    'so your changes were not saved — putting them through would have written over theirs.</p>' +
+    '<p>Your text is still on screen. Copy anything you want to keep, then reload the sim to see ' +
+    'their version.</p></div>',
+    () => { doc._jpWarned = false; jpReload(doc.id); },
+    { ok: 'Reload the sim' });
+}
+
+function jpLostLockWarning(doc) {
+  setSyncStatus('error', 'Not saved — somebody else has the sim');
+  if (doc._jpWarned) return;
+  doc._jpWarned = true;
+  showToast('Your turn ran out and ' + (doc.jpLockWid || 'someone else') + ' has the sim. Nothing was saved.');
+  setTimeout(() => { doc._jpWarned = false; }, 30000);
+}
+
+async function jpReload(id) {
+  try {
+    const fresh = await jpFetchDoc(id);
+    jpApplyRow(fresh, false);
+    persist();
+    if (curId === id) jpLoadIntoEditor(S.docs[id]);
+    jpPaint(); renderNav();
+  } catch(e) { showToast(e.message || 'Could not reload that sim.'); }
+}
+
+// Put server content into the editor without going through openDoc(), which
+// would flush a save on the way in.
+function jpLoadIntoEditor(doc) {
+  const ed = document.getElementById('editor');
+  if (!ed || curId !== doc.id) return;
+  ed.innerHTML = applyCharColors(applyMarkers(doc.content || ''));
+  normalizeEditorContent(ed);
+  const t = document.getElementById('doc-title');
+  if (t) t.value = doc.title || '';
+  updateWC(); updateSB(); updateMeta(doc); updateCharsPanel(doc);
+}
+
+// ── Presence, by polling ──────────────────────────────────────────────────
+// Runs only while a joint sim is open, and stops the moment one is not. It
+// refreshes the lock line so "X is writing" is true within a few seconds, and
+// it notices when the sim has moved on underneath a reader.
+function jpStartPoll() {
+  jpStopPoll();
+  if (!isCloud()) return;
+  _jpPollTimer = setInterval(jpPollOnce, JP_POLL_MS);
+}
+function jpStopPoll() { if (_jpPollTimer) { clearInterval(_jpPollTimer); _jpPollTimer = null; } }
+
+async function jpPollOnce() {
+  const doc = curJointDoc();
+  if (!doc) { jpStopPoll(); return; }
+  if (_jpBusy) return;
+  let row;
+  try { row = await jpFetchDoc(doc.id); } catch(e) { return; }
+  const heldByMe = doc.jpLock && doc.jpLock === getAuth().uid;
+
+  // Somebody else has saved. If we are only reading, show it. If we are holding
+  // the lock and typing, do NOT replace what is under the caret -- that would
+  // destroy work to display work. The version check will catch it at save time
+  // and offer a reload then, which is the moment the writer can act on it.
+  if (row.version !== doc.jpVersion && !heldByMe) {
+    jpApplyRow(row, false);
+    persist();
+    if (curId === doc.id) jpLoadIntoEditor(S.docs[doc.id]);
+  } else {
+    const keep = doc.content;
+    jpApplyRow(row, true);
+    S.docs[doc.id].content = keep;
+    if (!heldByMe) S.docs[doc.id].jpVersion = doc.jpVersion;
+  }
+  jpPaint();
+}
+
+// ── Invitations ───────────────────────────────────────────────────────────
+async function jpLoadInvites() {
+  if (!isCloud()) { _jpInvites = []; return; }
+  try { _jpInvites = (await supaRpc('jp_my_invites')) || []; }
+  catch(e) { _jpInvites = []; }
+  jpPaintInviteBadge();
+}
+
+// Boot raises prompts on a timer and they have collided three times now -- the
+// reconcile question, a pending deletion, a temporary PIN and the Delta Prime
+// intro have all wanted the one modal slot. So this one checks the slot is free
+// and, if it is not, settles for the badge in the header. An invitation is not
+// urgent; being clobbered by another prompt is worse than waiting.
+function jpMaybePromptInvites() {
+  if (!_jpInvites.length) return false;
+  const mo = document.getElementById('mo');
+  if (!mo || !mo.classList.contains('hidden')) return false;
+  jpShowInvites();
+  return true;
+}
+
+function jpShowInvites() {
+  if (!_jpInvites.length) { showToast('No invitations waiting.'); return; }
+  const rows = _jpInvites.map(i =>
+    '<div class="jp-inv">' +
+      '<div class="jp-inv-t">' + esc(i.title || 'Untitled sim') + '</div>' +
+      '<div class="jp-inv-s">from ' + esc(i.from_wid || 'another writer') + '</div>' +
+      '<div class="jp-inv-a">' +
+        '<button class="btn btn-s btn-sm" onclick="jpDecline(\'' + i.id + '\')">Decline</button>' +
+        '<button class="btn btn-p btn-sm" onclick="jpAccept(\'' + i.id + '\')">Join</button>' +
+      '</div>' +
+    '</div>').join('');
+  openModal('Joint sim invitations',
+    '<div style="font-size:0.9rem;line-height:1.6"><p style="margin:0 0 10px">' +
+    'You have been asked to write on ' + (_jpInvites.length === 1 ? 'a joint sim' : 'these joint sims') +
+    '. Joining puts the sim in your list; you take turns with the others on it.</p>' +
+    rows + '</div>');
+}
+
+async function jpAccept(id) {
+  try {
+    const docId = await supaRpc('jp_accept_invite', { p_id: id });
+    closeModal();
+    await jpRefreshList();
+    await jpLoadInvites();
+    showToast('Joined. The sim is in your list.');
+    if (docId && S.docs[docId]) openDoc(docId);
+  } catch(e) { showToast(e.message || 'Could not join that sim.'); }
+}
+
+async function jpDecline(id) {
+  try { await supaRpc('jp_decline_invite', { p_id: id }); } catch(e) { /* nothing to undo */ }
+  _jpInvites = _jpInvites.filter(i => i.id !== id);
+  jpPaintInviteBadge();
+  if (_jpInvites.length) jpShowInvites(); else closeModal();
+}
+
+// ── Making a sim joint, and inviting to it ────────────────────────────────
+// A joint sim starts life as an ordinary one and is handed over. That keeps the
+// creation path single: there is no second "new joint sim" flow to keep in step
+// with the first, and a writer can decide a sim is joint after starting it,
+// which is how it actually happens.
+async function jpMakeJoint(id) {
+  const doc = S.docs[id];
+  if (!doc || isJointDoc(doc)) return;
+  if (!isCloud()) { showToast('Joint sims need an account — sign in first.'); return; }
+  flushSave();
+  const a = getAuth();
+  const r = await supaFetch('/rest/v1/jp_docs', {
+    method: 'POST',
+    headers: { 'Prefer': 'return=representation' },
+    body: JSON.stringify({
+      doc_id: id, owner_uid: a.uid,
+      title: doc.title || '', content: doc.content || '',
+      status: doc.status || 'active', post_type: doc.postType || null,
+      posted_at: doc.postedAt ? new Date(doc.postedAt).toISOString() : null,
+      mission_id: doc.missionId || null, scene_id: doc.sceneId || null,
+      academy: isAcademyDoc(doc),
+      format: { boldLoc: !!S.settings.boldLoc, italOOC: !!S.settings.italOOC, italThoughts: !!S.settings.italThoughts },
+      meta: { chars: doc.chars || [], myChars: doc.myChars || [], charColors: doc.charColors || {} },
+    })
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    if (/PGRST205|PGRST204/.test(t)) {
+      showToast('The joint-sim tables are not set up on the server yet.');
+    } else showToast('Could not make that a joint sim.');
+    return;
+  }
+  const rows = await r.json().catch(() => null);
+  const row = rows && rows[0];
+  doc.docType = 'joint';
+  doc.jpOwner = a.uid;
+  doc.jpVersion = row ? row.version : 1;
+  doc.jpMembers = 1;
+  doc.jpLock = null; doc.jpLockActive = false;
+  persist();
+  // It has left the blob. Push the blob too, so the server copy stops carrying
+  // a solo sim with the same id -- otherwise a fresh device would rebuild it.
+  schedSync(200);
+  renderNav(); jpPaint();
+  showToast('This is a joint sim now. Invite someone to it.');
+}
+
+async function jpInvite(id, writerId) {
+  const wid = (writerId || '').trim();
+  if (!wid) { showToast('Enter a Writer ID.'); return; }
+  try {
+    await supaRpc('jp_invite', { p_doc_id: id, p_writer_id: wid });
+    // An unknown Writer ID is accepted silently by design, so that this cannot
+    // be used to find out which IDs hold accounts. The cost is that a typo
+    // looks exactly like a success -- so say so, and show the pending list,
+    // which is the honest way to notice.
+    showToast('Invitation sent, if that Writer ID has an account. Check the spelling if it does not appear.');
+    jpOpenRoster(id);
+  } catch(e) { showToast(e.message || 'Could not send that invitation.'); }
+}
+
+// ── The roster ────────────────────────────────────────────────────────────
+async function jpOpenRoster(id) {
+  const doc = S.docs[id];
+  if (!isJointDoc(doc)) return;
+  const mine = doc.jpOwner === getAuth().uid;
+  let roster = [], invites = [];
+  try { roster = (await supaRpc('jp_roster', { p_doc_id: id })) || []; } catch(e) { /* shown empty */ }
+  if (mine) {
+    try {
+      const r = await supaFetch('/rest/v1/jp_invitations?doc_id=eq.' + encodeURIComponent(id) +
+                                '&status=eq.open&select=id,writer_id,created_at');
+      if (r.ok) invites = await r.json();
+    } catch(e) { /* shown empty */ }
+  }
+
+  const memberRows = roster.map(m =>
+    '<div class="jp-row">' +
+      '<span class="jp-wid">' + esc(m.writer_id || 'unknown') + '</span>' +
+      '<span class="jp-role">' + (m.role === 'owner' ? 'owner' : 'writer') + '</span>' +
+      ((mine && m.role !== 'owner')
+        ? '<button class="btn btn-s btn-sm" onclick="jpRemove(\'' + id + '\',\'' + m.member_uid + '\')">Remove</button>'
+        : '<span></span>') +
+    '</div>').join('') || '<div class="jp-empty">Nobody on this sim yet.</div>';
+
+  const inviteRows = invites.length
+    ? '<div class="chars-divider">Invited, not yet joined</div>' + invites.map(i =>
+        '<div class="jp-row">' +
+          '<span class="jp-wid">' + esc(i.writer_id) + '</span>' +
+          '<span class="jp-role">pending</span>' +
+          '<button class="btn btn-s btn-sm" onclick="jpRevoke(\'' + id + '\',\'' + i.id + '\')">Withdraw</button>' +
+        '</div>').join('')
+    : '';
+
+  const addBox = mine
+    ? '<div class="chars-divider">Invite a writer</div>' +
+      '<div class="jp-add">' +
+        '<input class="mi" id="jp-wid" placeholder="Writer ID, e.g. A239809JP3" autocomplete="off" spellcheck="false">' +
+        '<button class="btn btn-p btn-sm" onclick="jpInvite(\'' + id + '\', document.getElementById(\'jp-wid\').value)">Invite</button>' +
+      '</div>'
+    : '';
+
+  const leave = !mine
+    ? '<div style="margin-top:14px"><button class="btn btn-s btn-sm" onclick="jpLeave(\'' + id + '\')">Leave this sim</button></div>'
+    : '';
+
+  openModal('Writers on this sim',
+    '<div style="font-size:0.9rem;line-height:1.6">' + memberRows + inviteRows + addBox + leave + '</div>');
+}
+
+async function jpRemove(id, uid) {
+  try {
+    await supaRpc('jp_remove_member', { p_doc_id: id, p_member: uid });
+    showToast('Removed. They no longer see this sim.');
+    jpOpenRoster(id);
+  } catch(e) { showToast(e.message || 'Could not remove them.'); }
+}
+
+async function jpRevoke(id, inviteId) {
+  try { await supaRpc('jp_revoke_invite', { p_id: inviteId }); jpOpenRoster(id); }
+  catch(e) { showToast(e.message || 'Could not withdraw that invitation.'); }
+}
+
+function jpLeave(id) {
+  const doc = S.docs[id]; if (!doc) return;
+  closeModal();
+  setTimeout(() => openModal('Leave this joint sim?',
+    '<div style="font-size:0.9rem;line-height:1.6"><p>You will stop seeing <strong>' +
+    esc(doc.title || 'this sim') + '</strong>, and the writing stays with the others on it. ' +
+    'You would need a fresh invitation to come back.</p></div>',
+    async () => {
+      const a = getAuth();
+      try {
+        await supaFetch('/rest/v1/jp_members?doc_id=eq.' + encodeURIComponent(id) +
+                        '&member_uid=eq.' + a.uid, { method: 'DELETE' });
+      } catch(e) { showToast('Could not leave that sim.'); return; }
+      if (curId === id) { curId = null; showDashboard(); }
+      delete S.docs[id];
+      persist(); renderNav();
+      showToast('You have left the sim.');
+    }, { ok: 'Leave the sim' }), 80);
+}
+
+// ── Painting ──────────────────────────────────────────────────────────────
+// One function owns every joint-sim control, so the button, the editor state
+// and the presence line cannot disagree with each other.
+function jpPaint() {
+  const doc = curJointDoc();
+  const bar = document.getElementById('jp-bar');
+  const row = document.getElementById('jp-row');
+  const mk  = document.getElementById('jp-make-row');
+  if (!bar || !row) return;
+
+  // "Make this joint" is offered on a solo sim with an account behind it, and
+  // nowhere else -- there is nothing to share to when signed out.
+  const solo = curId && S.docs[curId] && !isJointDoc(S.docs[curId]);
+  if (mk) mk.classList.toggle('hidden', !(solo && isCloud()));
+
+  if (!doc) {
+    bar.classList.add('hidden');
+    row.classList.add('hidden');
+    document.body.classList.remove('jp-readonly');
+    setEditorEditable(true);
+    return;
+  }
+
+  row.classList.remove('hidden');
+  bar.classList.remove('hidden');
+  const canEdit = jpCanEdit(doc);
+  const offline = !isCloud() || !navigator.onLine;
+  const mine = doc.jpOwner === getAuth().uid;
+
+  let msg, cls, action = '';
+  if (offline) {
+    // Read-only offline, and SAID rather than silently enforced. A joint sim's
+    // whole safety model is the lock, and a lock cannot be held without the
+    // server -- editing now and reconciling later is precisely the clobbering
+    // the lock exists to prevent.
+    msg = 'Offline — you can read and copy this sim, but writing needs a connection.';
+    cls = 'jp-off';
+  } else if (canEdit) {
+    msg = 'You have the sim. Hand it back when you are done.';
+    cls = 'jp-mine';
+    action = '<button class="btn btn-s btn-sm" onclick="jpReleaseLock(curId)">Hand back</button>';
+  } else if (doc.jpLockActive) {
+    msg = esc(doc.jpLockWid || 'Another writer') + ' is writing…';
+    cls = 'jp-busy';
+    action = mine
+      ? '<button class="btn btn-s btn-sm" onclick="jpForceRelease(curId)" title="Free the sim if they have gone">Free the sim</button>'
+      : '';
+  } else {
+    msg = 'Nobody is writing. Take the sim to add to it.';
+    cls = 'jp-free';
+    action = '<button class="btn btn-p btn-sm" onclick="jpTakeLock(curId)">Take the sim</button>';
+  }
+
+  bar.className = 'jp-bar ' + cls;
+  bar.innerHTML = '<span class="jp-msg">' + msg + '</span>' +
+                  '<span class="jp-acts">' + action +
+                  '<button class="btn btn-s btn-sm" onclick="jpOpenRoster(curId)">Writers (' +
+                  (doc.jpMembers || 1) + ')</button></span>';
+
+  document.body.classList.toggle('jp-readonly', !canEdit);
+  setEditorEditable(canEdit);
+}
+
+async function jpForceRelease(id) {
+  openModal('Free the sim?',
+    '<div style="font-size:0.9rem;line-height:1.6"><p>' +
+    esc((S.docs[id] || {}).jpLockWid || 'The current writer') +
+    ' has the sim. Freeing it lets anyone take a turn — anything they have not saved ' +
+    'stays on their screen and will be refused if they try to save it afterwards.</p>' +
+    '<p>A turn frees itself after 15 idle minutes anyway; this is for when you cannot wait.</p></div>',
+    async () => {
+      try { await supaRpc('jp_release_lock', { p_doc_id: id }); } catch(e) { showToast('Could not free it.'); return; }
+      await jpRefreshList(); jpPaint();
+      showToast('The sim is free.');
+    }, { ok: 'Free it' });
+}
+
+// The editor is a contenteditable div, so "read only" means turning that off.
+// A mode restriction in this app lives in more than one place -- the CSS that
+// greys controls out, the guards inside the commands, and the keyboard handler
+// -- and twice a button has been disabled while its shortcut still wrote. All
+// three hang off body.jp-readonly and this one flag.
+function setEditorEditable(on) {
+  const ed = document.getElementById('editor');
+  if (ed) ed.setAttribute('contenteditable', on ? 'true' : 'false');
+}
+
+function jpPaintInviteBadge() {
+  const b = document.getElementById('jp-invite-badge');
+  const btn = document.getElementById('btn-jp-invites');
+  if (!b || !btn) return;
+  // The button appears only when there is something in it. An empty Invites
+  // button in the header is a permanent piece of furniture for a feature most
+  // writers use rarely.
+  if (_jpInvites.length) {
+    b.textContent = _jpInvites.length;
+    b.classList.remove('hidden');
+    btn.classList.remove('hidden');
+  } else {
+    b.classList.add('hidden');
+    btn.classList.add('hidden');
+  }
+}
+
+// Joint saves are debounced like the blob is, but longer: every save is a round
+// trip that bumps a version other people are watching, and PBEM does not need
+// per-keystroke persistence.
+let _jpSaveTimer = null;
+function jpSchedSave(doc) {
+  clearTimeout(_jpSaveTimer);
+  _jpSaveTimer = setTimeout(() => jpSaveNow(doc, true), 2500);
+}
+
+// The single question every editing path asks. One flag, three enforcement
+// points -- the CSS that greys the toolbar out, the guards inside the commands,
+// and the keyboard handler -- because a restriction in this app that lives in
+// only two of them is a restriction that half works.
+function jpEditBlocked() {
+  const d = curJointDoc();
+  if (!d) return false;
+  if (jpCanEdit(d)) return false;
+  jpNudge();
+  return true;
+}
+
+// Say why, but not on every keystroke.
+let _jpNudgeAt = 0;
+function jpNudge() {
+  if (Date.now() - _jpNudgeAt < 4000) return;
+  _jpNudgeAt = Date.now();
+  const d = curJointDoc(); if (!d) return;
+  if (!isCloud() || !navigator.onLine) showToast('Offline — joint sims are read-only until you reconnect.');
+  else if (d.jpLockActive) showToast((d.jpLockWid || 'Another writer') + ' has the sim. You will get your turn.');
+  else showToast('Take the sim first — then it is your turn to write.');
+}
+
+// Turning a sim joint is one-way in this version and the dialog says so, since
+// there is no undo to offer and finding that out afterwards would be a nasty
+// surprise. Reverting a joint sim to solo is on the roadmap.
+function jpConfirmMakeJoint(id) {
+  const doc = S.docs[id];
+  if (!doc || isJointDoc(doc)) return;
+  if (!isCloud()) { showToast('Joint sims need an account — sign in first.'); return; }
+  openModal('Make this a joint sim?',
+    '<div style="font-size:0.9rem;line-height:1.6">' +
+    '<p><strong>' + esc(doc.title || 'This sim') + '</strong> moves out of your own storage and into ' +
+    'shared storage, so the writers you invite can take turns on it.</p>' +
+    '<p>You take one turn at a time — whoever holds the sim is the only one who can write, ' +
+    'and a turn frees itself after 15 idle minutes. Offline, a joint sim is read-only.</p>' +
+    '<p style="color:var(--dim)">This cannot be undone yet.</p></div>',
+    () => { jpMakeJoint(id); },
+    { ok: 'Make it joint' });
+}

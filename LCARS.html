@@ -136,6 +136,7 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
         <button class="theme-opt" onclick="toggleSkin(this,event)"><svg class="ic" aria-hidden="true"><use href="#i-sparkles"/></svg> Delta Prime look</button>
       </div>
     </div>
+    <button class="btn btn-s btn-sm hidden" onclick="jpShowInvites()" id="btn-jp-invites" title="Joint sim invitations"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg> Invites<span id="jp-invite-badge" class="hidden"></span></button>
     <button class="btn btn-s btn-sm hidden" onclick="openAdmin()" id="btn-admin" title="Moderator tools"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg> Admin<span id="admin-badge" class="hidden"></span></button>
     <button class="btn btn-s btn-sm" onclick="openSettings()" id="btn-settings" title="Settings"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg> Settings</button>
   </div>
@@ -273,6 +274,8 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
     </div>
 
     <div id="ec" class="hidden">
+      <!-- Whose turn it is on a joint sim. Painted only by jpPaint(). -->
+      <div id="jp-bar" class="jp-bar hidden"></div>
       <div id="editor" contenteditable="true" spellcheck="true" data-placeholder="Begin writing your sim here…" oncontextmenu="editorCtx(event)"></div>
     </div>
   </div>
@@ -313,6 +316,14 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
         <div class="sd-row">
           <span class="sd-lbl">Share</span>
           <button class="btn btn-s btn-sm hidden" id="btn-share" onclick="openShareDialog()" title="Create a read-only link to this sim"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg> Share Link</button>
+        </div>
+        <div class="sd-row" id="jp-row">
+          <span class="sd-lbl">Writers</span>
+          <button class="btn btn-s btn-sm" onclick="jpOpenRoster(curId)" title="Who is writing this sim">Writers on this sim</button>
+        </div>
+        <div class="sd-row" id="jp-make-row">
+          <span class="sd-lbl">Joint</span>
+          <button class="btn btn-s btn-sm" onclick="jpConfirmMakeJoint(curId)" title="Write this sim with another writer">Make this a joint sim</button>
         </div>
         <div class="sd-row">
           <span class="sd-lbl">Template</span>

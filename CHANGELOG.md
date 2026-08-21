@@ -72,6 +72,13 @@ _On `main` and live, not yet cut as a version._
 - Fixed: if sharing failed because the page was running an older version of LCARS than the server, the error was a raw database message about a missing column. It now says what it is and what to do — reload the page
 - Changed: share links now say how long is left rather than a date and time — “Expires in 3 days”, “Expires in 5 hours”, “Expires in 45 minutes”. A clock time was shown in whichever timezone the reader happened to be in, so it meant two different moments to you and the person you sent it to
 - Changed: the countdown on a shared sim keeps ticking while the page is open, instead of freezing at whatever it said when the page loaded
+- Added: Joint Posts. A sim can now be written by two or more people. Open a sim, choose Make this a joint sim, then invite the other writers by their Writer ID — they get an invitation next time they open LCARS
+- Added: one turn at a time on a joint sim. Whoever has the sim is the only one who can write; everyone else sees who is writing and waits. Hand it back when you are done, and the next person can pick it up
+- Added: a turn frees itself after 15 idle minutes, so a sim is never stuck because somebody closed their laptop while holding it. The owner of the sim can also free it straight away if they cannot wait
+- Added: joint sims refuse to be written over. If somebody else has saved while you were typing, your changes are held back rather than put through on top of theirs, and you are offered their version to read first — your own text stays on screen so you can keep what you wrote
+- Added: Writers on this sim, in the sim details panel — see everyone on a joint sim, invite more, withdraw an invitation that has not been taken up, or leave a sim you no longer write
+- Changed: joint sims are read-only when you are offline. Taking turns depends on the server knowing whose turn it is, so writing without it would mean two people editing the same sim with no way to reconcile the result. You can still read and copy the sim, and LCARS says why rather than just refusing
+- Changed: deleting your account no longer takes joint sims with it. A joint sim you started passes to whoever has been on it longest, so other people’s writing is not destroyed. A joint sim with nobody else on it is still removed with your account
 
 ## v4.23 — 2026-08-15
 
