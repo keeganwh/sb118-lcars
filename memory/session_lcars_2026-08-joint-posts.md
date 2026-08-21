@@ -4,8 +4,10 @@ _2026-08-21. Supersedes `session_lcars_2026-08-joint-posts-brief.md`, which was
 the plan going in. Read the platform-plan and views files first; this assumes
 them. Built on `claude/joint-posts-gu3h9b`._
 
-**Status: built and tested locally, NOT yet proven against real Supabase.** The
-schema has not been applied to the live project. See "What is left" at the end.
+**Status: SHIPPED in v4.24, 2026-08-21.** Applied to the live Supabase project
+and used in earnest by two writers over three rounds of feedback. Everything
+below the line held up; what real use broke is at the end, and it is the most
+useful part of this file.
 
 ---
 
@@ -135,3 +137,88 @@ Thirteen finished `claude/*` branches were retired. Five divergent ones
 are blocked with a 403 in this environment, branch pushes are not**, which is
 why they are branches rather than tags. The user deleted the originals; branch
 deletion is blocked by the sandbox's permission classifier.
+
+---
+
+## What real use broke, and what it taught
+
+Three rounds of feedback on a feature that had 61 passing checks. Every bug
+below was in a gap the tests could not see, not in something they got wrong.
+
+### The bugs, and the shape they share
+
+1. **Handing back inside the save debounce wiped the turn.** `doc.content` is
+   only refreshed by `flushSave()`, so the hand-off sent the older, often empty
+   version. Worst on a short first line — the exact case a writer tries first.
+2. **The poll replaced unsaved text on screen** whenever this browser was not
+   the lock holder. That is precisely the writer whose turn lapsed mid-sentence.
+   The fix needed a subtlety: a REFUSED save still updates `doc.content`
+   locally, so "editor differs from content" is not the question. Track what the
+   SERVER has confirmed (`jpSavedContent`).
+3. **The hand-off undid itself.** Releasing flushes the editor, which re-armed
+   the debounced save, which fired two seconds later — and `jp_save()` claims the
+   turn for whoever saves.
+4. **The reconcile prompt fired on every single load.** Joint sims are stripped
+   from the payload but were still counted locally, so the browser looked
+   permanently ahead of its own account. Choosing "use my account's copy" could
+   not settle it, because joint sims are deliberately carried across an adopt.
+5. **`jpApplyRow` replaced the doc object in `S.docs`.** Anything holding a
+   reference across an await or an open dialog was left mutating an orphan —
+   which is why filing a joint sim updated Sim Details but not the sim list.
+   **Fixed by mutating in place; do not reintroduce the replacement.**
+6. **A joint sim could not be deleted.** `delDoc` only removed `S.docs[id]`, so
+   the shared row survived and the next refresh brought it back. (`delDoc` also
+   never called `schedSync()` — an ordinary sim's deletion sat in localStorage
+   while the account still held it. Same shape, one layer down.)
+7. **The owner sorted to the BOTTOM of the roster.** `order by role desc` sorts
+   text, and 'writer' follows 'owner'.
+
+**The shared shape: a joint sim is the same object as a solo sim in `S.docs`,
+so every function that already handled "a doc" silently handled it wrong.** The
+three-branch rule (`cloudPayload`, `adoptCloudState`, `flushSave`) was right
+about where joint sims differ in the SYNC path, and wrong to imply nothing else
+needed to know. `delDoc`, the reconcile count and `jpApplyRow`'s object identity
+were all outside those three and all broken. **When touching anything that
+iterates or removes docs, ask what it does to a joint one.**
+
+### What the tests could not see, and now can
+
+- **The database harness only ever built a database FROM SCRATCH.** That cannot
+  see the failure that matters — applying `schema.sql` to a database that has
+  already run an earlier version, which is every real database. `run.sh` now
+  replays each earlier version individually, from clean, with the current file
+  on top. *Individually* matters: replaying them in sequence leaves the newest
+  prior already at the current shape, so the upgrade under test is a no-op and
+  the check passes while proving nothing.
+- **`create or replace` cannot change a function's OUT parameters**, and
+  `drop function if exists f();` only matches that one exact signature.
+  `jp_drop_overloads()` clears every overload by name; use it before any
+  redefinition whose shape may change.
+- **The test runner was piping schema errors to `/dev/null`.** A schema that
+  would not apply looked exactly like one that did. It fails loudly now, and
+  caught duplicate `jp_list`/`jp_doc`/`jp_roster` definitions the moment it did.
+- **Writing each reported symptom down as a test found a bug the user had not
+  hit yet** (number 2 above). Worth doing every time rather than fixing
+  directly.
+
+### One false alarm worth recognising again
+
+`cannot change return type of existing function`, three times over, is Postgres
+refusing a **downgrade** — an older copy of `schema.sql` run over a database
+already holding a newer one. Nothing is damaged; the newer functions are left
+intact. It is alarming and the cause is not obvious, so it is noted in
+`supabase/README.md` too.
+
+### Decisions real use changed
+
+- **Filing is per writer**, in their own blob, and a new member is always ASKED
+  where to file — not guessed from the owner's mission names. Guessing is right
+  often enough to be trusted and wrong often enough to misfile quietly.
+- **Auto Format settles locally.** Bold names is the only pass baked into stored
+  HTML (locations, OOC and thoughts are CSS classes driven by each reader's
+  prefs), so it is re-run on load to the local reader's setting.
+- **Deleting a joint sim is two actions**: the owner destroys it for everyone
+  and is told so; anybody else is leaving a sim that carries on.
+- **The turn expiry is 5 minutes, not 15** — safe only because saving renews the
+  turn and the app autosaves seconds after a keystroke, so the clock measures
+  genuine idleness.

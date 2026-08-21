@@ -1,6 +1,6 @@
 # LCARS SB118 Writing Tool — Roadmap
 
-_Outstanding work only, in the user's priority order. Current version: **4.23**, released 2026-08-15. There are unreleased pending changelog entries in `VERSIONS` awaiting the next bump._
+_Outstanding work only, in the user's priority order. Current version: **4.24**, released 2026-08-21. No pending changelog entries — `VERSIONS` and `CHANGELOG.md` are both cut clean._
 
 Each item has a **Done when…** so any session can pick it up and run without asking. Check items off (`- [x]`) as they ship, and delete them once they're rolled into a released version's changelog.
 
@@ -186,6 +186,30 @@ granting every sim, character and setting that writer owns.
 
 ## Next priority
 
+- [ ] **Real-time simultaneous writing. NEXT SESSION.**
+      **Read `memory/session_lcars_2026-08-realtime-brief.md` first.** This
+      reverses the earlier "explicitly NOT building simultaneous typing" line,
+      deliberately and at the user's request, after turn-based Joint Posts was
+      built, shipped in 4.24 and used by two writers. The reason is competitive,
+      in their words: _"otherwise people will just choose Google Docs over
+      LCARS."_
+
+      The CRDT is the easy half — Yjs is solved and must not be hand-rolled. The
+      project is that this editor is a hand-rolled `contenteditable` whose
+      marker, name-bolding and character-colour passes rewrite its HTML in bulk,
+      which a character-level CRDT binding cannot survive.
+
+      **Open the session with one question**, phrased as the brief puts it: does
+      the one-file offline download have to keep working? Yjs needs a build
+      step, which the project deliberately does not have. Vendoring a pre-built
+      bundle keeps `api/download.js` intact and is the recommendation; a real
+      build step is cleaner to maintain but costs the one-file copy.
+
+      Keep the turn-based system as the offline and fallback path — it is not
+      superseded by this, it is what this falls back to.
+      _Done when: two writers can type into the same sim at once without losing
+      each other's words, and the offline copy still works._
+
 - [ ] **Google Groups extension.**
       New `extension/` directory, MV3, content script scoped to `groups.google.com`, porting the existing dev-console script into a "Send to LCARS" button. Writes to Supabase as an inbox row so LCARS need not be open. Loaded unpacked.
       _Done when: a real thread can be grabbed and appears in the LCARS inbox with formatting intact._
@@ -208,55 +232,12 @@ granting every sim, character and setting that writer owns.
          details panel and the two resizable sidebars were never touched.
       _Done when: a sim can be read, written and copied out on a phone without pinch-zooming._
 
-- [x] **Joint Posts — built, not yet proven against real Supabase.**
-      Shipped on `claude/joint-posts-gu3h9b`. A joint sim lives in its own
-      `jp_docs` row with `jp_members` and `jp_invitations` beside it; solo sims
-      stay in the payload blob, untouched. Invite by Writer ID, accept, one soft
-      turn at a time, "X is writing…" by polling. Read-only offline, and it says
-      so. Account deletion transfers a joint sim to its longest-standing member
-      rather than destroying other people's writing.
-
-      Presence is polling, not Realtime — that would need `supabase-js`, and the
-      SDK costs the bundler-free offline download for latency PBEM does not need.
-
-      **Tested:** `supabase/test/run.sh` (38 checks against a throwaway local
-      Postgres — the lock, the version check, the RLS policies, the ownership
-      transfer) and `test/jp_browser.js` (23 checks across two browser contexts
-      with two Writer IDs, including a lapsed writer failing to clobber the next
-      holder). Neither touches real Supabase; the sandbox cannot reach it.
-
-      **Still to do, in order:**
-      1. Apply the schema. **Deploy the app first, then run the migration** —
-         new code tolerates columns it does not use, old code does not tolerate
-         columns that have appeared or vanished.
-      2. Exercise it end to end with two real accounts.
-      3. **Drop the rollout gate.** `jpCanCreate()` in `lcars.js` limits
-         *starting* a joint sim to super admins while this is unproven; anyone
-         invited can already join and write. Opening it up is making that
-         function return true.
-
-      _Explicitly NOT built: simultaneous typing. CRDT/OT on a hand-rolled
-      `contenteditable` is the largest and riskiest work available, for something
-      PBEM does not need. Settled; do not reopen._
-
-- [ ] **Real-time simultaneous writing. NEXT PRIORITY.**
-      **Read `memory/session_lcars_2026-08-realtime-brief.md` first.** This
-      reverses the earlier "explicitly NOT building simultaneous typing" line,
-      deliberately and at the user's request, after turn-based Joint Posts was
-      built and used. The reason is competitive, in their words: _"otherwise
-      people will just choose Google Docs over LCARS."_
-
-      The CRDT is the easy half — Yjs is solved and must not be hand-rolled. The
-      project is that this editor is a hand-rolled `contenteditable` whose
-      marker, name-bolding and character-colour passes rewrite its HTML in bulk,
-      which a character-level CRDT binding cannot survive.
-
-      Two things to settle with the user before any code: whether to vendor a
-      pre-built Yjs bundle (keeps `api/download.js` working) or accept a build
-      step, and confirmation that the editor rework is understood as the cost.
-      Keep the turn-based system as the offline and fallback path.
-      _Done when: two writers can type into the same sim at once without losing
-      each other's words, and the offline copy still works._
+- [ ] **Open Joint Posts to everyone.**
+      Shipped in 4.24 and used in earnest by two writers. `jpCanCreate()` in
+      `lcars.js` still limits *starting* a joint sim to super admins, from when
+      it was unproven; anyone invited can already join and write. Opening it up
+      is making that function return true and deleting this item.
+      _Done when: any writer can start a joint sim._
 
 - [ ] **Joint Posts — the follow-ups it deliberately left.**
       None of these block using the feature; all were noticed while building it.

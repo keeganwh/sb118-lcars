@@ -9,7 +9,7 @@ For more depth: `TECH_STACK.md` (stack), `ROADMAP.md` (what's next), `USER_PROTO
 
 - **Vanilla web app, no build step, no npm, no framework.** The app is `LCARS.html` (~415 lines of markup), `lcars.css` (~1,240) and `lcars.js` (~8,500). `lcars-render.js` holds the sim render pass and is loaded by the app *and* by `share.html`, the standalone read-only viewer (with its own `share.js`) served at `/s/<token>`.
 - **Vercel** hosts it; **Supabase** holds accounts and synced data. Both are reached over plain `fetch` — no SDK, no CDN script.
-- Current app version: **4.23**. `APP_VERSION` and the `VERSIONS` array are at the top of `lcars.js`, right after `const SKEY` (line ~5).
+- Current app version: **4.24**. `APP_VERSION` and the `VERSIONS` array are at the top of `lcars.js`, right after `const SKEY` (line ~5).
 
 ## Architecture in brief
 
@@ -69,7 +69,7 @@ Entries are read by writers, not developers. Write them in plain language, sayin
 - **`--accent` is defined nowhere.** Bare `var(--accent)` renders as inherited text colour. Use `var(--amber)`.
 - **`localStorage` is per-origin** — Pages, Vercel production and every Vercel preview URL hold separate data. Test on a stable URL so data survives a push.
 - **Supabase free tier pauses a project after ~1 week idle.** It resumes from the dashboard.
-- **`lcars.js` is ~7,200 lines** — read targeted ranges, not the whole file.
+- **`lcars.js` is ~9,500 lines** — read targeted ranges, not the whole file.
 - **`<p>` and `<div>` are not interchangeable outside the editor.** `#editor p,#editor div{margin:0}` flattens both, so pasted content (Google Docs and Word give `<p>`) looks identical to typed content (`<div>`) while writing — and then copies out double spaced, because `<p>` carries a margin everywhere else. The copy handler normalises `<p>`→`<div>` on the way to the clipboard. Normalise on the way *out*, not at paste time: it fixes sims that already exist and leaves stored content untouched.
 - **A mode restriction lives in more than one place.** Academy mode blocks things in three: the CSS that greys the button out, the guard inside the command (`doIndent`), and the keyboard handler. Changing a rule means changing all three — twice now a button has started working while its keyboard shortcut silently did not.
 - **`stripFormattingHtml()` runs on open, on paste and on applying source view.** Anything it strips is removed repeatedly, not once, so a structural feature it touches will appear to work and then quietly revert the next time the sim is opened.
@@ -78,6 +78,21 @@ Entries are read by writers, not developers. Write them in plain language, sayin
 - **Deploy before running a schema migration, never after.** New app code tolerates columns it no longer uses; old app code does not tolerate columns that have vanished. Applying a migration while a browser still holds the previous build gives a raw PostgREST error about a missing column. There is a friendly `PGRST204` message in `publishShare`, but the ordering is the real fix.
 - **The editor's render pass is not the reader's.** `applyMarkers` tints markers so a *writer* can spot them mid-sim. Anything showing a finished sim to someone else wants what the editor's **`copy` handler** produces: locations bold, OOC and thoughts italic, markers plain, and no colour at all — character colours included. `lrToReadingHtml()` in `lcars-render.js` is that pass; use it rather than writing a third answer.
 - **A new shared file means updating `api/download.js` AND the `vercel.json` cache-header list.** Miss the first and the offline download breaks; miss the second and a fix never reaches anyone's browser.
+- **A joint sim is an ordinary doc in `S.docs`, marked `docType:'joint'`.** That
+  is what makes the nav, dashboard, manifest and search work on it for free, and
+  it is why anything that iterates, counts or DELETES docs handles it silently
+  wrong. `delDoc`, the reconcile count and `jpApplyRow`'s object identity were
+  all broken this way after the feature "shipped". Ask what your change does to
+  a joint sim.
+- **Never replace an object in `S.docs`; mutate it.** `jpApplyRow` used to
+  assign a fresh object, orphaning every reference held across an await or an
+  open dialog — an edit would appear to work in one panel and not in the tree.
+- **The schema tests build a database from scratch, which cannot see an
+  upgrade.** `supabase/test/run.sh` now replays each earlier version of
+  `schema.sql` individually before applying the current one. `create or replace`
+  cannot change a function's OUT parameters, and `drop function if exists f();`
+  matches one exact signature — use `jp_drop_overloads()` before any
+  redefinition that may change shape.
 - Don't recreate the `main-ikuxoc` branch.
 
 ## Git workflow

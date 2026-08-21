@@ -1,8 +1,6 @@
 # LCARS SB118 Writing Tool — Changelog
 
-## Unreleased
-
-_On `main` and live, not yet cut as a version._
+## v4.24 — 2026-08-21
 
 - Changed: new icon — the gold delta — in the browser tab, and on your home screen if you add LCARS to it from a phone
 - Added: the delta now sits in the top-left LCARS badge as well, on a dark disc with a fine light ring. The disc is not quite solid, so the duty-post colour tints it — and it keeps the delta legible even on Operations gold, where the badge is the same colour as the mark
