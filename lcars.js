@@ -255,6 +255,7 @@ const VERSIONS = [
       'Changed: shared sims now open in light mode by default, with the Light / Dark switch still there and still remembered. A sim someone has been sent to read is a document, and a page of prose reads like one — the dark chrome is for the person writing it',
       'Changed: character colours no longer carry over to a shared sim. They are a way of telling your own speakers apart while writing, and mean nothing to a reader who does not know the scheme — copying a sim out has always dropped them, and a share link now matches that exactly',
       'Added: if a share link expires, the page says so at the top — “Shared sim · Read only · Link expires Aug 24, 2:30 PM” — so a reader knows before the link dies rather than after',
+      'Fixed: if sharing failed because the page was running an older version of LCARS than the server, the error was a raw database message about a missing column. It now says what it is and what to do — reload the page',
     ],
   },
 ];
@@ -8283,7 +8284,16 @@ async function publishShare(doc, hours) {
     body: JSON.stringify(body),
   });
   const j = await r.json().catch(() => null);
-  if (!r.ok) throw new Error(supaErr(j, 'Could not share this sim.'));
+  if (!r.ok) {
+    // PGRST204 is PostgREST saying the row mentions a column it does not have.
+    // In practice that always means one thing: this browser is running an older
+    // copy of LCARS than the database has been migrated to. The raw message
+    // ("Could not find the 'x' column ... in the schema cache") tells a writer
+    // nothing they can act on, so say what actually helps.
+    if (j && (j.code === 'PGRST204' || /schema cache/i.test(j.message || '')))
+      throw new Error('This page is running an older version of LCARS than the server expects. Reload the page and try again.');
+    throw new Error(supaErr(j, 'Could not share this sim.'));
+  }
   const row = (j && j[0]) || null;
   _shareCache[doc.id] = row;
   return row;
