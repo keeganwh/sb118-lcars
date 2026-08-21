@@ -73,3 +73,11 @@ Without this, OAuth logins bounce back to the wrong place.
   exercises the Joint Posts lock, the stale-write check and the RLS policies.
   It proves the SQL, not Supabase: PostgREST, the JWT and the hosted `auth`
   schema are stubbed. Worth running after any change to `schema.sql`.
+- **Run the schema from the branch you just deployed, not from an open tab.**
+  Applying an OLDER copy of `schema.sql` over a database that already holds a
+  newer one fails with `cannot change return type of existing function`, three
+  times over. It is Postgres refusing to go backwards and nothing is damaged --
+  the newer functions are left exactly as they were -- but it looks alarming.
+  `supabase/test/run.sh` replays every earlier version of the file forwards to
+  make sure real upgrades apply; it cannot protect you from running an old file
+  by hand.

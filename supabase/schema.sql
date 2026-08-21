@@ -1218,8 +1218,36 @@ revoke all on function public.jp_save(text, integer, text, text, text, jsonb) fr
 grant execute on function public.jp_save(text, integer, text, text, text, jsonb) to authenticated;
 
 -- ---------------------------------------------------------------------------
+-- jp_drop_overloads() : make a function definition genuinely re-runnable
+-- ---------------------------------------------------------------------------
+-- Postgres refuses to `create or replace` a function whose OUT parameters have
+-- changed, and `drop function if exists public.jp_list();` only matches that
+-- one exact signature -- so it does nothing on a database that holds an older
+-- shape, which is every database that has already run an earlier version of
+-- this file. The upgrade then fails with "cannot change return type of existing
+-- function", on the real databases and never on a fresh one, which is exactly
+-- the case a from-scratch test cannot see.
+--
+-- This clears every overload of a name, whatever shape it is in.
+create or replace function public.jp_drop_overloads(p_name text)
+returns void
+language plpgsql
+as $$
+declare f record;
+begin
+  for f in select p.oid::regprocedure as sig
+             from pg_proc p
+             join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public' and p.proname = p_name
+  loop
+    execute 'drop function if exists ' || f.sig || ' cascade';
+  end loop;
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- jp_my_invites() : open invitations addressed to the caller
 -- ---------------------------------------------------------------------------
+select public.jp_drop_overloads('jp_my_invites');
 create or replace function public.jp_my_invites()
 returns table (id uuid, doc_id text, title text, from_wid text, created_at timestamptz)
 language sql
@@ -1345,7 +1373,8 @@ alter table public.jp_docs add column if not exists scene_name   text;
 -- nothing at a glance; the display name is what people actually know each other
 -- by. Both are returned -- the ID stays as the unambiguous handle for invites
 -- and for the roster, where two people could share a display name.
-drop function if exists public.jp_list();
+select public.jp_drop_overloads('jp_list');
+
 create or replace function public.jp_list()
 returns table (
   doc_id      text,
@@ -1387,7 +1416,7 @@ as $$
    order by d.updated_at desc;
 $$;
 
-drop function if exists public.jp_doc(text);
+select public.jp_drop_overloads('jp_doc');
 create or replace function public.jp_doc(p_doc_id text)
 returns table (
   doc_id text, owner_uid uuid, title text, content text, status text,
@@ -1412,7 +1441,7 @@ as $$
    where d.doc_id = p_doc_id and public.is_jp_member(p_doc_id);
 $$;
 
-drop function if exists public.jp_roster(text);
+select public.jp_drop_overloads('jp_roster');
 create or replace function public.jp_roster(p_doc_id text)
 returns table (member_uid uuid, writer_id text, display_name text, role text, joined_at timestamptz)
 language sql

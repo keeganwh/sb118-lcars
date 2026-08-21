@@ -52,7 +52,49 @@ apply() {
     return 1
   fi
 }
-echo "· applying schema.sql"
+# THE UPGRADE PATH, which is the one that actually breaks. Applying this file
+# to an EMPTY database proves nothing about applying it to a database that has
+# already run an EARLIER version of it -- and every real database is the second
+# kind. A change to a function's return type passes a from-scratch test and then
+# fails in the Supabase SQL editor with "cannot change return type of existing
+# function".
+#
+# EACH prior version is tested ON ITS OWN, from a clean database, with the
+# current file applied on top. Replaying them in sequence does not work: the
+# newest prior already has the current shape, so the upgrade being tested is a
+# no-op and the check passes while the real upgrade fails.
+reset_db() {
+  psql -q -c "drop schema if exists public cascade; create schema public;" >/dev/null 2>&1
+  psql -q -c "drop schema if exists auth cascade; drop schema if exists storage cascade;" >/dev/null 2>&1
+  psql -q -f "$HERE/harness.sql" >/dev/null 2>&1
+}
+
+PRIORS=$(cd "$HERE/.." && git log --format=%H --reverse -- schema.sql 2>/dev/null)
+if [ -n "$PRIORS" ]; then
+  n=0
+  for sha in $PRIORS; do
+    (cd "$HERE/.." && git show "$sha:supabase/schema.sql" > "$WORK/prior.sql" 2>/dev/null) || continue
+    reset_db
+    # A prior version that will not apply to a clean database is not a version
+    # anybody upgraded FROM, so it is not an upgrade path worth testing.
+    psql -q -f "$WORK/prior.sql" >/dev/null 2>&1 || continue
+    n=$((n + 1))
+    if ! out=$(psql -q -f "$HERE/../schema.sql" 2>&1); then
+      echo "· UPGRADE FAILS from schema.sql as of ${sha}"
+      echo "$out" | grep -v NOTICE | grep -i error | head -4
+      echo
+      echo "  This is what breaks in the Supabase SQL editor. A database that has"
+      echo "  already run that version cannot take the current file."
+      exit 1
+    fi
+  done
+  echo "· upgrades from $n earlier version(s) of schema.sql apply cleanly"
+fi
+
+reset_db
+echo "· applying schema.sql to a clean database"
+psql -q -c "drop schema public cascade; create schema public; grant usage on schema public to anon, authenticated;" >/dev/null 2>&1
+psql -q -f "$HERE/harness.sql" >/dev/null 2>&1
 apply || { echo "schema.sql failed to apply"; exit 1; }
 echo "· applying it a second time (it must be re-runnable)"
 apply || { echo "schema.sql is not re-runnable"; exit 1; }
