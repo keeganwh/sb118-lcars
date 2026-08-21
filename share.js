@@ -173,16 +173,21 @@ function escHtml(s) {
 
 // Anyone reading a link that dies on Friday should be told before Friday, not
 // after -- so the expiry sits in the header rather than at the foot of the sim.
-// Date and time both, because "expires today" is not much use at 23:00.
+//
+// It ticks. Someone can leave a sim open in a tab for hours, and a countdown
+// that froze on load is worse than none at all. Once a minute is plenty for a
+// figure that only ever changes by the minute.
 function renderHeaderNote(doc) {
-  const el = document.getElementById('hdr-note');
-  if (!el || !doc.expires_at) return;
-  const d = new Date(doc.expires_at);
-  if (isNaN(d)) return;
-  const when = d.toLocaleString(undefined, {
-    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-  });
-  el.textContent = 'Shared sim · Read only · Link expires ' + when;
+  // Only the expiry is written here. The rest of the note is static markup, so
+  // the narrow-screen rule can drop "Shared sim" without JS knowing about it.
+  const el = document.getElementById('note-exp');
+  if (!el) return;
+  const paint = () => {
+    const left = lrExpiresIn(doc.expires_at);
+    el.textContent = left ? ' · ' + left : '';
+  };
+  paint();
+  if (doc.expires_at) setInterval(paint, 60000);
 }
 
 function render(doc) {

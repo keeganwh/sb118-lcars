@@ -124,12 +124,12 @@ footer a{color:var(--dim)}
 @media (max-width:820px){
   header{min-height:42px; gap:8px; padding-right:10px}
   .badge{font-size:0.93rem; letter-spacing:3px; padding:0 14px 0 10px}
-  /* With an expiry the note is long, and how long depends on the reader's
-     locale -- a date format this page does not control. So it wraps rather
-     than being truncated: a header one line taller beats an expiry the reader
-     cannot read. */
+  /* "Shared sim" is redundant on a phone -- the sim's title is directly below
+     it -- and dropping it keeps the note on one line once an expiry is
+     appended. It still wraps rather than truncating if it ever needs to. */
+  .note-lead{display:none}
   .hdr-note{font-size:0.6rem; letter-spacing:1px; white-space:normal;
-    overflow:visible; text-overflow:clip; padding:5px 0; line-height:1.35}
+    overflow:visible; text-overflow:clip; padding:4px 0; line-height:1.35}
   main{padding:18px 14px 40px}
   .title{font-size:1.13rem}
   #body{font-size:11.5pt}
@@ -144,7 +144,7 @@ footer a{color:var(--dim)}
 
 <header>
   <span class="badge">LCARS</span>
-  <span class="hdr-note" id="hdr-note">Shared sim &middot; Read only</span>
+  <span class="hdr-note" id="hdr-note"><span class="note-lead">Shared sim &middot; </span>Read only<span id="note-exp"></span></span>
   <button id="theme-btn" type="button" hidden>Light</button>
 </header>
 

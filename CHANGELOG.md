@@ -70,6 +70,8 @@ _On `main` and live, not yet cut as a version._
 - Changed: character colours no longer carry over to a shared sim. They are a way of telling your own speakers apart while writing, and mean nothing to a reader who does not know the scheme — copying a sim out has always dropped them, and a share link now matches that exactly
 - Added: if a share link expires, the page says so at the top — “Shared sim · Read only · Link expires Aug 24, 2:30 PM” — so a reader knows before the link dies rather than after
 - Fixed: if sharing failed because the page was running an older version of LCARS than the server, the error was a raw database message about a missing column. It now says what it is and what to do — reload the page
+- Changed: share links now say how long is left rather than a date and time — “Expires in 3 days”, “Expires in 5 hours”, “Expires in 45 minutes”. A clock time was shown in whichever timezone the reader happened to be in, so it meant two different moments to you and the person you sent it to
+- Changed: the countdown on a shared sim keeps ticking while the page is open, instead of freezing at whatever it said when the page loaded
 
 ## v4.23 — 2026-08-15
 

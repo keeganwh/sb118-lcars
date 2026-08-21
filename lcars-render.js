@@ -170,3 +170,36 @@ function lrToReadingHtml(html, opts) {
 
   return tmp.innerHTML;
 }
+
+// How long a share link has left, in words.
+//
+// Lives here, in the file both pages load, because the writer's share dialog
+// and the reader's page must say the same thing -- two copies of this would
+// drift and one of them would start rounding differently.
+//
+// Relative, never a clock time. An absolute time renders in whichever timezone
+// the reader happens to be in, so "expires 2:30 PM" means two different moments
+// to the writer and the person they sent it to. "In 3 days" means the same
+// thing everywhere.
+//
+// Returns null when there is no expiry to describe.
+function lrExpiresIn(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d)) return null;
+  const ms = d - Date.now();
+  if (ms <= 0) return 'Expired';
+
+  const mins = Math.round(ms / 60000);
+  if (mins < 1)  return 'Expires in less than a minute';
+  if (mins < 60) return `Expires in ${mins} minute${mins === 1 ? '' : 's'}`;
+
+  // Round to the unit being shown, so 90 minutes reads "2 hours" rather than
+  // "1 hour". Hours run all the way to 48 before days take over: "36 hours" is
+  // more use to someone deciding whether to read now than "2 days" would be.
+  const hours = Math.round(ms / 3600000);
+  if (hours < 48) return `Expires in ${hours} hour${hours === 1 ? '' : 's'}`;
+
+  const days = Math.round(ms / 86400000);
+  return `Expires in ${days} day${days === 1 ? '' : 's'}`;
+}
