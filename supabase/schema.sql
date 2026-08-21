@@ -1082,13 +1082,20 @@ grant execute on function public.jp_remove_member(text, uuid) to authenticated;
 --      older than jp_lock_minutes() is free for the taking. The expiry is
 --      evaluated HERE, against now() in the database -- a countdown running in
 --      a tab is not a lock, it is a wish.
+--      Five minutes reads short for a form of writing measured in hours, and it
+--      is only safe because saving RENEWS the turn (see jp_save) and the app
+--      autosaves a couple of seconds after a keystroke. So the clock measures
+--      genuine idleness, not thinking-while-typing. Someone who stares at the
+--      screen for six minutes without touching the keyboard can lose the turn --
+--      they take it back with one press, and nothing they typed is lost, because
+--      a stale save is refused rather than applied.
 --   2. IT MUST NOT BE THE ONLY GUARD. See jp_save(): a lapsed holder whose
 --      browser has not noticed is the actual danger, and only the version
 --      check catches that one.
 --   3. THE OWNER MUST BE ABLE TO BREAK IT. If a lock is stuck and the holder is
 --      asleep, waiting is not a plan.
 create or replace function public.jp_lock_minutes()
-returns integer language sql immutable as $$ select 15 $$;
+returns integer language sql immutable as $$ select 5 $$;
 
 -- Returns the row as it stands after the attempt, so one round trip tells the
 -- app both whether it got the lock and who has it if not.

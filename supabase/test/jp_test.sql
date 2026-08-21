@@ -113,8 +113,18 @@ end $$;
 select pg_temp.ok(true, 'a writer without the lock cannot save over the holder');
 
 -- --- expiry, and the case the lock cannot catch -----------------------------
--- Age A's lock past the limit. B may now take it -- this is the handover.
-update public.jp_docs set locked_at = now() - interval '30 minutes' where doc_id = 'doc1';
+-- Pin the boundary rather than stepping miles over it: a lock just INSIDE the
+-- window is still held, and one just outside it is not. Aging by half an hour
+-- would pass whatever jp_lock_minutes() returned.
+update public.jp_docs set locked_at = now() - make_interval(mins => public.jp_lock_minutes() - 1)
+ where doc_id = 'doc1';
+select pg_temp.be('b');
+select pg_temp.ok(not (select got from public.jp_take_lock('doc1')),
+                  'a lock inside the window is still the holder''s');
+
+-- Now age it just past the limit. B may take it -- this is the handover.
+update public.jp_docs set locked_at = now() - make_interval(mins => public.jp_lock_minutes() + 1)
+ where doc_id = 'doc1';
 select pg_temp.be('b');
 select pg_temp.ok((select got from public.jp_take_lock('doc1')),
                   'an expired lock can be taken by the next writer');

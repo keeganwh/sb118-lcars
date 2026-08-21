@@ -24,7 +24,7 @@ const DB = {
   docs: {},           // doc_id -> row
   members: {},        // doc_id -> [uid]
   invites: [],
-  LOCK_MS: 15 * 60 * 1000,
+  LOCK_MS: 5 * 60 * 1000,   // must match jp_lock_minutes() in schema.sql
 };
 const widOf = u => (u === A.uid ? A.wid : B.wid);
 const lockActive = d => !!(d.locked_by && Date.now() - d.locked_at < DB.LOCK_MS);
@@ -203,7 +203,7 @@ async function ctxFor(browser, who, errors) {
   // --- the dangerous case -------------------------------------------------
   // A's turn lapses. B takes it and writes. A's tab still believes it is at
   // version 2 and tries to save -- this is the clobber the lock cannot stop.
-  DB.docs[docId].locked_at = Date.now() - 20 * 60 * 1000;
+  DB.docs[docId].locked_at = Date.now() - (DB.LOCK_MS + 60 * 1000);
   const gotB = await b.p.evaluate(id => jpTakeLock(id), docId);
   await b.p.waitForTimeout(500);
   ok(gotB === true, 'an expired turn can be taken by the next writer');

@@ -260,7 +260,7 @@ const VERSIONS = [
       'Changed: the countdown on a shared sim keeps ticking while the page is open, instead of freezing at whatever it said when the page loaded',
       'Added: Joint Posts. A sim can now be written by two or more people. Open a sim, choose Make this a joint sim, then invite the other writers by their Writer ID \u2014 they get an invitation next time they open LCARS',
       'Added: one turn at a time on a joint sim. Whoever has the sim is the only one who can write; everyone else sees who is writing and waits. Hand it back when you are done, and the next person can pick it up',
-      'Added: a turn frees itself after 15 idle minutes, so a sim is never stuck because somebody closed their laptop while holding it. The owner of the sim can also free it straight away if they cannot wait',
+      'Added: a turn frees itself after 5 idle minutes, so a sim is never stuck because somebody closed their laptop while holding it. Saving keeps your turn alive, and LCARS saves a moment after you stop typing, so the clock only runs when you are genuinely away. The owner of the sim can also free it straight away if they cannot wait',
       'Added: joint sims refuse to be written over. If somebody else has saved while you were typing, your changes are held back rather than put through on top of theirs, and you are offered their version to read first \u2014 your own text stays on screen so you can keep what you wrote',
       'Added: Writers on this sim, in the sim details panel \u2014 see everyone on a joint sim, invite more, withdraw an invitation that has not been taken up, or leave a sim you no longer write',
       'Changed: joint sims are read-only when you are offline. Taking turns depends on the server knowing whose turn it is, so writing without it would mean two people editing the same sim with no way to reconcile the result. You can still read and copy the sim, and LCARS says why rather than just refusing',
@@ -9147,7 +9147,7 @@ async function jpForceRelease(id) {
     esc((S.docs[id] || {}).jpLockWid || 'The current writer') +
     ' has the sim. Freeing it lets anyone take a turn — anything they have not saved ' +
     'stays on their screen and will be refused if they try to save it afterwards.</p>' +
-    '<p>A turn frees itself after 15 idle minutes anyway; this is for when you cannot wait.</p></div>',
+    '<p>A turn frees itself after 5 idle minutes anyway; this is for when you cannot wait.</p></div>',
     async () => {
       try { await supaRpc('jp_release_lock', { p_doc_id: id }); } catch(e) { showToast('Could not free it.'); return; }
       await jpRefreshList(); jpPaint();
@@ -9226,7 +9226,7 @@ function jpConfirmMakeJoint(id) {
     '<p><strong>' + esc(doc.title || 'This sim') + '</strong> moves out of your own storage and into ' +
     'shared storage, so the writers you invite can take turns on it.</p>' +
     '<p>You take one turn at a time — whoever holds the sim is the only one who can write, ' +
-    'and a turn frees itself after 15 idle minutes. Offline, a joint sim is read-only.</p>' +
+    'and a turn frees itself after 5 idle minutes. Offline, a joint sim is read-only.</p>' +
     '<p style="color:var(--dim)">This cannot be undone yet.</p></div>',
     () => { jpMakeJoint(id); },
     { ok: 'Make it joint' });
