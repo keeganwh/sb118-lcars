@@ -4,7 +4,7 @@
 const ZWS = String.fromCharCode(0x200B); // zero-width space used as caret anchor after marker spans
 const SKEY = 'lcars_v1';
 
-const APP_VERSION = '4.23';
+const APP_VERSION = '4.24';
 const VERSIONS = [
   {
     version: '4.0',
@@ -187,8 +187,8 @@ const VERSIONS = [
     ],
   },
   {
-    version: 'pending',
-    date: '2026-08-15',
+    version: '4.24',
+    date: '2026-08-21',
     changes: [
       'Changed: new icon \u2014 the gold delta \u2014 in the browser tab, and on your home screen if you add LCARS to it from a phone',
       'Added: the delta now sits in the top-left LCARS badge as well, on a dark disc with a fine light ring. The disc is not quite solid, so the duty-post colour tints it \u2014 and it keeps the delta legible even on Operations gold, where the badge is the same colour as the mark',
