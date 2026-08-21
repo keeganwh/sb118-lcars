@@ -1426,7 +1426,9 @@ as $$
     from public.jp_members m
     left join public.writers w on w.id = m.member_uid
    where m.doc_id = p_doc_id and public.is_jp_member(p_doc_id)
-   order by m.role desc, m.joined_at;
+   -- Owner first, then by when they joined. NOT `order by role desc`: that
+   -- sorts the text, and 'writer' comes after 'owner', so it did the reverse.
+   order by (m.role = 'owner') desc, m.joined_at;
 $$;
 
 revoke all on function public.jp_list()       from public, anon;

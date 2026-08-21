@@ -309,6 +309,63 @@ async function ctxFor(browser, who, errors) {
   ok(await a.p.evaluate(() => getComputedStyle(document.getElementById('jp-bar')).position === 'sticky'),
      'the turn bar sticks rather than scrolling away');
 
+  // --- second round of reported bugs -------------------------------------
+  // THE PROMPT THAT WOULD NOT GO AWAY. Joint sims are stripped from the payload
+  // blob, so counting them on the local side made this browser look permanently
+  // ahead of its own account -- "62 sims here, 60 in your account" on every
+  // single load, for a difference that was not one.
+  const counts = await a.p.evaluate(() => {
+    const local = Object.keys(S.docs).length;
+    const localSolo = Object.keys(S.docs).filter(id => !isJointDoc(S.docs[id])).length;
+    return { local, localSolo, payload: Object.keys(cloudPayload().docs).length };
+  });
+  ok(counts.local > counts.localSolo, 'the browser really does hold a joint sim');
+  ok(counts.localSolo === counts.payload,
+     'the count compared against the account excludes joint sims, so the reconcile prompt stops firing');
+
+  // THE HAND-BACK THAT UNDID ITSELF. Releasing flushed the editor, which
+  // re-armed the debounced save, which fired seconds later -- and jp_save takes
+  // the lock for whoever saves, so the turn came straight back.
+  await a.p.evaluate(id => jpTakeLock(id), docId);
+  await a.p.waitForTimeout(400);
+  await a.p.evaluate(() => {
+    document.getElementById('editor').innerHTML = '<div>A short turn, then hand back.</div>';
+    schedSave();
+  });
+  await a.p.evaluate(id => jpReleaseLock(id, true), docId);
+  await a.p.waitForTimeout(4500);          // longer than the 2.5s save debounce
+  ok(DB.docs[docId].locked_by === null,
+     'a hand-off stays handed off — the pending save does not take the turn back');
+  ok(DB.docs[docId].content.includes('A short turn'),
+     'and the turn that was handed back is the one that was saved');
+
+  // Filing a sim that is in no mission at all -- the case with no right-click
+  // to reach, because it is not in the tree to right-click on.
+  await a.p.evaluate(id => { S.docs[id].missionId = null; S.docs[id].sceneId = null;
+                             delete S.jpFiling[id]; persist(); renderNav(); openDoc(id); }, docId);
+  await a.p.waitForTimeout(400);
+  ok(await a.p.evaluate(() => {
+       const b = document.getElementById('btn-file-sim');
+       return !!b && !!b.offsetParent && /Not filed/.test(document.getElementById('btn-file-lbl').textContent);
+     }),
+     'a sim filed nowhere offers a way to file it from Sim Details, and says it is unfiled');
+
+  await a.p.evaluate(id => fileSimDialog(id), docId);
+  await a.p.waitForTimeout(300);
+  ok(await a.p.evaluate(() => {
+       const m = document.getElementById('fs-m');
+       return !!m && [...m.options].some(o => o.value === '__new');
+     }),
+     'and the filing dialog can create a new mission rather than sending you away to make one');
+
+  // The header mark is a way home without becoming a new-looking control.
+  ok(await a.p.evaluate(() => {
+       const h = document.querySelector('.hdr-home');
+       const cs = getComputedStyle(h);
+       return cs.padding === '0px' && (cs.backgroundColor === 'rgba(0, 0, 0, 0)' || cs.backgroundColor === 'transparent');
+     }),
+     'the header mark is clickable but keeps the look it always had');
+
   console.log('\n--- browser checks ---');
   pass.forEach(l => console.log('PASS: ' + l));
   fail.forEach(l => console.log('FAIL: ' + l));

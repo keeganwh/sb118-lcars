@@ -276,6 +276,14 @@ const VERSIONS = [
       'Changed: handing a joint sim back and forth is quicker to show up \u2014 LCARS checks more often while a joint sim is open, and more often still for a few seconds after a hand-off',
       'Added: tagging a sim as a JP now offers to set it up as a shared sim and invite the other writers, rather than leaving you to find the button',
       'Added: the LCARS badge and title in the top left are now a link back to the Command Dashboard, and there is a Dashboard button beside Character Manifest',
+      'Fixed: the \u201cwhich copy is right?\u201d question appeared on every single load once you had a joint sim, comparing numbers that were never meant to match \u2014 joint sims are stored separately and were being counted on one side but not the other. Choosing your account\u2019s copy could not settle it either, which is why it kept coming back',
+      'Changed: when LCARS does have to ask which copy is right, it now lists the sims that are only on this device and only in your account, so you can see what you would be giving up before you choose',
+      'Fixed: handing a joint sim back could take it straight back a few seconds later. The save that runs as you hand off was re-arming itself, and saving is what claims the turn',
+      'Fixed: the owner of a joint sim now appears at the top of Writers on this sim, rather than at the bottom',
+      'Added: Filed under, in the sim details panel \u2014 shows which mission and scene a sim sits in and lets you move it. A sim filed nowhere does not appear in the sim list at all, so it could not be right-clicked to move: the only sims that needed moving were the ones you could not reach',
+      'Added: you can now create a mission or a scene while filing a sim, instead of being sent away to make one first and then having to find the sim again',
+      'Added: joining a joint sim now asks where you want to file it in your own missions and scenes. Your scene partner\u2019s filing is offered as a suggestion, since their missions are not yours',
+      'Changed: the LCARS badge in the top left is still a link to the dashboard, but looks exactly as it did before \u2014 no box, no highlight on hover',
     ],
   },
 ];
@@ -1918,13 +1926,39 @@ async function cloudBoot() {
 
   // Both sides have data. Same account on a second device is the normal case, so
   // prefer the server, but never silently discard local work.
-  const localDocs = Object.keys(S.docs || {}).length;
+  //
+  // COUNT LIKE FOR LIKE. Joint sims live in their own table and are stripped
+  // from the payload, so counting them here made every browser holding one look
+  // permanently ahead of its own account -- and raised this prompt on every
+  // single load, for a difference that was not a difference. Choosing "use my
+  // account's copy" could not fix it either, because the joint sims are
+  // deliberately carried across an adopt.
+  const localIds = Object.keys(S.docs || {}).filter(id => !isJointDoc(S.docs[id]));
+  const localDocs = localIds.length;
   if (remoteDocs >= localDocs) { adoptCloudState(remote); setSyncStatus('ok', ''); return; }
+
+  // Say WHAT is different, not just how many. "62 against 60" is not enough to
+  // decide on when the answer means overwriting one side with the other.
+  const remoteIds = Object.keys(remote.docs || {});
+  const onlyHere = localIds.filter(id => !remoteIds.includes(id))
+                           .map(id => S.docs[id]);
+  const onlyThere = remoteIds.filter(id => !localIds.includes(id))
+                             .map(id => remote.docs[id]);
+  const listOf = (docs) => docs.length
+    ? '<ul class="rec-list">' + docs.map(d =>
+        '<li>' + esc(getDisplayTitle(d) || d.title || 'Untitled') +
+        (d.updatedAt ? '<span class="rec-when">' + new Date(d.updatedAt).toLocaleDateString() + '</span>' : '') +
+        '</li>').join('') + '</ul>'
+    : '<p class="rec-none">None.</p>';
 
   openModal('Which copy is right?',
     `<div style="font-size:0.85rem;line-height:1.6">
       <p>This browser has <strong>${localDocs} sim(s)</strong>, but your account holds <strong>${remoteDocs}</strong>.</p>
-      <p>Keeping this device's copy will replace what is stored online. Backup Data first if you are unsure.</p>
+      <div class="chars-divider">Only on this device — lost if you use your account's copy</div>
+      ${listOf(onlyHere)}
+      <div class="chars-divider">Only in your account — lost if you keep this device's copy</div>
+      ${listOf(onlyThere)}
+      <p style="margin-top:10px">Backup Data first if you are unsure.</p>
      </div>`,
     null,
     { noCancel: true, extra: [
@@ -3750,6 +3784,7 @@ function openDoc(id) {
   updateTitleColor(doc);
   updateStatusStyle(doc);
   updateShareButton();   // reads the cache only; opening the dialog is what fetches
+  updateFiledUnder(doc);
   // Academy mode is per-mission — strip and apply when opening
   const isAcad = isAcademyDoc(doc);
   document.body.classList.toggle('academy', isAcad);
@@ -5770,32 +5805,7 @@ function ctxDoc(e,id){
   showCtx(e, items);
 }
 
-function moveDocToScene(id) {
-  const d = S.docs[id]; if (!d) return;
-  let opts = `<option value="">— No scene (unsorted within mission) —</option>`;
-  Object.values(S.missions)
-    .filter(m => m.status !== 'archived')
-    .sort((a,b) => a.name.localeCompare(b.name))
-    .forEach(m => {
-      const scenes = Object.values(S.scenes)
-        .filter(sc => sc.missionId === m.id && sc.status !== 'archived' && sc.id !== d.sceneId)
-        .sort((a,b) => a.name.localeCompare(b.name));
-      if (!scenes.length) return;
-      opts += `<optgroup label="${esc(m.name)} (${m.year})">`;
-      scenes.forEach(sc => { opts += `<option value="${sc.id}">${esc(sc.name)}</option>`; });
-      opts += `</optgroup>`;
-    });
-  openModal('MOVE SIM TO SCENE', `
-    <div style="font-size:0.8rem;color:var(--dim);margin-bottom:10px">"${esc((d.title||'Untitled').slice(0,60))}"</div>
-    <div class="mf"><label class="ml">TARGET SCENE</label><select class="ms" id="m-mv-sc">${opts}</select></div>
-  `, () => {
-    const sceneId = document.getElementById('m-mv-sc').value || null;
-    d.sceneId = sceneId;
-    if (sceneId) d.missionId = S.scenes[sceneId].missionId;
-    jpRememberFiling(d);
-    persist(); renderNav();
-  });
-}
+function moveDocToScene(id) { fileSimDialog(id, { title: 'MOVE SIM' }); }
 
 function setDocDisplayTitle(id, val) {
   const d = S.docs[id]; if (!d) return;
@@ -8741,7 +8751,7 @@ function jpApplyRow(row, keepContent) {
   if (doc.content == null) doc.content = '';
   // The server row carries no filing of this writer's own -- restore theirs,
   // and offer the owner's as a starting point the first time they see it.
-  jpSeedFiling(doc, row);
+  if (row.mission_name) doc._jpHint = { mission: row.mission_name, scene: row.scene_name || null };
   jpRestoreFiling(doc);
   S.docs[row.doc_id] = doc;
   return doc;
@@ -8819,17 +8829,20 @@ async function jpReleaseLock(id, quiet) {
   // last committed -- for a sim that had only just been started, that was the
   // empty string, and the hand-off wiped it. A short first line is exactly the
   // case that hit it: enough to type, not enough time to debounce.
-  if (curId === id) { clearTimeout(_jpSaveTimer); flushSave(); }
-  jpForceSnapshot(doc);                  // a hand-off is always worth a revision
-  const saved = await jpSaveNow(doc, true);
-  if (!saved && (doc.content || '').trim()) {
-    // Refuse to hand back what we could not save, or the next writer takes a
-    // sim that is missing the turn just written into it.
-    showToast('Could not save before handing back — you still have the sim.');
-    jpPaint();
-    return;
-  }
-  try { await supaRpc('jp_release_lock', { p_doc_id: id }); } catch(e) { /* the expiry frees it anyway */ }
+  _jpHandingBack = true;
+  try {
+    if (curId === id) { clearTimeout(_jpSaveTimer); flushSave(); clearTimeout(_jpSaveTimer); }
+    jpForceSnapshot(doc);                // a hand-off is always worth a revision
+    const saved = await jpSaveNow(doc, true);
+    if (!saved && (doc.content || '').trim()) {
+      // Refuse to hand back what we could not save, or the next writer takes a
+      // sim that is missing the turn just written into it.
+      showToast('Could not save before handing back — you still have the sim.');
+      jpPaint();
+      return;
+    }
+    try { await supaRpc('jp_release_lock', { p_doc_id: id }); } catch(e) { /* the expiry frees it anyway */ }
+  } finally { _jpHandingBack = false; }
   doc.jpLock = null; doc.jpLockActive = false; doc.jpLockWid = null; doc.jpLockName = null;
   persist(); jpPaint(); renderNav();
   if (curId === id) jpStartPoll(true);
@@ -8974,9 +8987,12 @@ async function jpPollOnce() {
     if (curId === doc.id) jpLoadIntoEditor(S.docs[doc.id]);
   } else {
     const keep = doc.content;
+    const keepVersion = doc.jpVersion;
     jpApplyRow(row, true);
     S.docs[doc.id].content = keep;
-    if (!heldByMe) S.docs[doc.id].jpVersion = doc.jpVersion;
+    // Only our own unsaved version is worth preserving; the lock always comes
+    // from the server, so a hand-off cannot be undone by stale local state.
+    if (jpHasUnsaved(doc)) S.docs[doc.id].jpVersion = keepVersion;
   }
   jpPaint();
 }
@@ -9027,7 +9043,7 @@ async function jpAccept(id) {
     await jpRefreshList();
     await jpLoadInvites();
     showToast('Joined. The sim is in your list.');
-    if (docId && S.docs[docId]) openDoc(docId);
+    if (docId && S.docs[docId]) { openDoc(docId); setTimeout(() => jpAskWhereToFile(docId), 400); }
   } catch(e) { showToast(e.message || 'Could not join that sim.'); }
 }
 
@@ -9117,6 +9133,12 @@ async function jpOpenRoster(id) {
     } catch(e) { /* shown empty */ }
   }
 
+  // Owner first regardless of what the server sent back: this is cosmetic, and
+  // an app running against a database that has not been migrated yet should
+  // still look right.
+  roster = roster.slice().sort((x, y) =>
+    (y.role === 'owner') - (x.role === 'owner') ||
+    String(x.joined_at || '').localeCompare(String(y.joined_at || '')));
   const memberRows = roster.map(m =>
     '<div class="jp-row">' +
       '<span class="jp-wid">' + esc(jpWho(m.display_name, m.writer_id)) +
@@ -9294,7 +9316,9 @@ function jpPaintInviteBadge() {
 // trip that bumps a version other people are watching, and PBEM does not need
 // per-keystroke persistence.
 let _jpSaveTimer = null;
+let _jpHandingBack = false;      // a hand-off in progress must not re-arm a save
 function jpSchedSave(doc) {
+  if (_jpHandingBack) return;
   clearTimeout(_jpSaveTimer);
   _jpSaveTimer = setTimeout(() => jpSaveNow(doc, true), 2500);
 }
@@ -9390,18 +9414,9 @@ function jpRestoreFiling(doc) {
 // if this writer happens to have a mission and scene of the same name. Cheap,
 // and it means a partner who mirrors the mission structure gets it for free
 // rather than having to file every joint sim by hand.
-function jpSeedFiling(doc, row) {
-  if (jpFiling()[doc.id] || doc.missionId) return;
-  if (!row || !row.mission_name) return;
-  const m = Object.values(S.missions || {}).find(x => x.name === row.mission_name);
-  if (!m) return;
-  doc.missionId = m.id;
-  const sc = row.scene_name
-    ? Object.values(S.scenes || {}).find(x => x.missionId === m.id && x.name === row.scene_name)
-    : null;
-  doc.sceneId = sc ? sc.id : null;
-  jpRememberFiling(doc);
-}
+// The owner's mission and scene names ride along as a HINT for the dialog to
+// preselect, not as something applied behind the writer's back.
+function jpOwnerFilingHint(doc) { return doc && doc._jpHint ? doc._jpHint : null; }
 
 // A Writer ID is an identifier, not a name -- "A239809JP3 is writing" tells you
 // nothing at a glance. Prefer what people actually call each other, and fall
@@ -9456,4 +9471,157 @@ function jpHasUnsaved(doc) {
   if (!ed) return false;
   try { return stripMarkers(ed.innerHTML) !== (doc.content || ''); }
   catch(e) { return true; }        // cannot tell: assume there is work to lose
+}
+// A sim that is filed nowhere does not appear in the mission tree at all --
+// renderNav drops it -- so the right-click "Move to scene" it would have been
+// reachable by is not there either. That is a trap: the only sims that NEED
+// moving are exactly the ones you cannot reach to move. Sim Details always has
+// this, and says where the sim currently sits.
+function updateFiledUnder(doc) {
+  const lbl = document.getElementById('btn-file-lbl');
+  const btn = document.getElementById('btn-file-sim');
+  if (!lbl || !btn) return;
+  if (!doc) return;
+  const m = doc.missionId ? S.missions[doc.missionId] : null;
+  const sc = doc.sceneId ? S.scenes[doc.sceneId] : null;
+  if (!m) {
+    lbl.textContent = 'Not filed — choose';
+    btn.classList.add('sd-warn');
+    btn.title = 'This sim is not in any mission, so it does not appear in the sim list';
+  } else {
+    lbl.textContent = sc ? sc.name : m.name;
+    btn.classList.remove('sd-warn');
+    btn.title = 'Filed under ' + m.name + (sc ? ' → ' + sc.name : '') + '. Click to move it.';
+  }
+}
+
+// ── Filing a sim, with the option to create somewhere to put it ───────────
+// Replaces the old scene-only mover. Two things it has to do that the old one
+// did not: let you pick a MISSION on its own (a sim with no mission is invisible
+// in the tree, and the old dialog only listed scenes, so there was no way back),
+// and let you make the mission or scene from here -- being told to go and create
+// one first, then find the sim again, is the kind of errand nobody finishes.
+function fileSimDialog(id, opts) {
+  const doc = S.docs[id]; if (!doc) return;
+  opts = opts || {};
+  const missions = Object.values(S.missions)
+    .filter(m => m.status !== 'archived')
+    .sort((a, b) => (b.year || 0) - (a.year || 0) || a.name.localeCompare(b.name));
+
+  const mOpts = ['<option value="">— No mission —</option>']
+    .concat(missions.map(m =>
+      `<option value="${m.id}"${m.id === doc.missionId ? ' selected' : ''}>${esc(m.name)} (${m.year || '—'})</option>`))
+    .concat(['<option value="__new">+ New mission…</option>']).join('');
+
+  openModal(opts.title || 'FILE THIS SIM', `
+    <div style="font-size:0.8rem;color:var(--dim);margin-bottom:10px">"${esc((doc.title || 'Untitled').slice(0, 60))}"</div>
+    ${opts.intro || ''}
+    <div class="mf"><label class="ml">MISSION</label>
+      <select class="ms" id="fs-m" onchange="fsMissionChange()">${mOpts}</select></div>
+    <div class="mf hidden" id="fs-mnew-wrap">
+      <label class="ml">NEW MISSION NAME</label>
+      <input class="mi" id="fs-mnew" placeholder="e.g. The Artemis Initiative">
+      <label class="ml" style="margin-top:8px">OOC YEAR</label>
+      <input class="mi" id="fs-myear" value="${new Date().getFullYear()}">
+    </div>
+    <div class="mf"><label class="ml">SCENE</label>
+      <select class="ms" id="fs-s" onchange="fsSceneChange()"></select></div>
+    <div class="mf hidden" id="fs-snew-wrap">
+      <label class="ml">NEW SCENE NAME</label>
+      <input class="mi" id="fs-snew" placeholder="e.g. Deck Twelve">
+    </div>
+  `, () => {
+    let missionId = document.getElementById('fs-m').value;
+    if (missionId === '__new') {
+      const name = document.getElementById('fs-mnew').value.trim();
+      if (!name) { alert('Please name the new mission.'); return false; }
+      const year = document.getElementById('fs-myear').value.trim() || String(new Date().getFullYear());
+      missionId = uid();
+      S.missions[missionId] = { id: missionId, name, year, simType: null, status: 'active', createdAt: Date.now() };
+    }
+    let sceneId = document.getElementById('fs-s').value;
+    if (sceneId === '__new') {
+      const name = document.getElementById('fs-snew').value.trim();
+      if (!name) { alert('Please name the new scene.'); return false; }
+      if (!missionId) { alert('A scene needs a mission. Pick or create one first.'); return false; }
+      sceneId = uid();
+      S.scenes[sceneId] = { id: sceneId, name, missionId, status: 'active', startedAt: null, createdAt: Date.now() };
+    }
+    doc.missionId = missionId || null;
+    doc.sceneId = (missionId && sceneId) ? sceneId : null;
+    jpRememberFiling(doc);
+    persist(); renderNav(); updateFiledUnder(doc);
+    if (opts.onDone) opts.onDone();
+  }, { ok: opts.ok || 'File it', cancel: opts.cancel });
+
+  setTimeout(fsMissionChange, 0);
+}
+
+function fsMissionChange() {
+  const m = document.getElementById('fs-m'); if (!m) return;
+  document.getElementById('fs-mnew-wrap').classList.toggle('hidden', m.value !== '__new');
+  const sel = document.getElementById('fs-s');
+  const doc = curId ? S.docs[curId] : null;
+  // A brand-new mission has no scenes yet, and "no mission" cannot have one.
+  if (!m.value) {
+    sel.innerHTML = '<option value="">— No scene —</option>';
+    sel.disabled = true;
+  } else {
+    sel.disabled = false;
+    const scenes = Object.values(S.scenes)
+      .filter(sc => sc.missionId === m.value && sc.status !== 'archived')
+      .sort((a, b) => a.name.localeCompare(b.name));
+    sel.innerHTML = ['<option value="">— No scene (unsorted within mission) —</option>']
+      .concat(scenes.map(sc =>
+        `<option value="${sc.id}"${doc && sc.id === doc.sceneId ? ' selected' : ''}>${esc(sc.name)}</option>`))
+      .concat(['<option value="__new">+ New scene…</option>']).join('');
+  }
+  fsSceneChange();
+}
+
+function fsSceneChange() {
+  const sel = document.getElementById('fs-s'); if (!sel) return;
+  const wrap = document.getElementById('fs-snew-wrap');
+  if (wrap) wrap.classList.toggle('hidden', sel.value !== '__new');
+}
+
+// Ask a writer who has just joined a joint sim where THEY want it. Missions and
+// scenes are private to each writer, so there is no correct answer to inherit
+// -- the owner's filing is offered as a starting point and nothing more. The
+// dialog can create the mission or scene on the spot, because "go and make a
+// mission first, then come back and find this sim" is an errand, not a step.
+function jpAskWhereToFile(id) {
+  const doc = S.docs[id];
+  if (!doc || !isJointDoc(doc)) return;
+  if (jpFiling()[id]) return;                       // already filed by this writer
+  const mo = document.getElementById('mo');
+  if (!mo || !mo.classList.contains('hidden')) {    // never fight another prompt
+    setTimeout(() => jpAskWhereToFile(id), 1200);
+    return;
+  }
+  const hint = jpOwnerFilingHint(doc);
+  const where = hint
+    ? '<p style="color:var(--dim)">The writer who started it files it under <strong>' +
+      esc(hint.mission) + (hint.scene ? ' → ' + esc(hint.scene) : '') +
+      '</strong>. You do not have to — your missions and scenes are your own.</p>'
+    : '';
+  fileSimDialog(id, {
+    title: 'Where does this sim go?',
+    intro: '<p style="font-size:0.85rem;line-height:1.6">Choose where <strong>' +
+           esc(doc.title || 'this sim') + '</strong> sits in your own missions and scenes, ' +
+           'so it appears in your sim list.</p>' + where,
+    ok: 'File it',
+    cancel: 'Not now',
+  });
+  // Preselect the owner's names if this writer happens to use the same ones.
+  if (hint) setTimeout(() => {
+    const m = Object.values(S.missions || {}).find(x => x.name === hint.mission);
+    const sel = document.getElementById('fs-m');
+    if (m && sel) { sel.value = m.id; fsMissionChange(); }
+    if (m && hint.scene) {
+      const sc = Object.values(S.scenes || {}).find(x => x.missionId === m.id && x.name === hint.scene);
+      const ssel = document.getElementById('fs-s');
+      if (sc && ssel) ssel.value = sc.id;
+    }
+  }, 60);
 }

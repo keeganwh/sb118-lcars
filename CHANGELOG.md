@@ -90,6 +90,14 @@ _On `main` and live, not yet cut as a version._
 - Changed: handing a joint sim back and forth is quicker to show up — LCARS checks more often while a joint sim is open, and more often still for a few seconds after a hand-off
 - Added: tagging a sim as a JP now offers to set it up as a shared sim and invite the other writers, rather than leaving you to find the button
 - Added: the LCARS badge and title in the top left are now a link back to the Command Dashboard, and there is a Dashboard button beside Character Manifest
+- Fixed: the “which copy is right?” question appeared on every single load once you had a joint sim, comparing numbers that were never meant to match — joint sims are stored separately and were being counted on one side but not the other. Choosing your account’s copy could not settle it either, which is why it kept coming back
+- Changed: when LCARS does have to ask which copy is right, it now lists the sims that are only on this device and only in your account, so you can see what you would be giving up before you choose
+- Fixed: handing a joint sim back could take it straight back a few seconds later. The save that runs as you hand off was re-arming itself, and saving is what claims the turn
+- Fixed: the owner of a joint sim now appears at the top of Writers on this sim, rather than at the bottom
+- Added: Filed under, in the sim details panel — shows which mission and scene a sim sits in and lets you move it. A sim filed nowhere does not appear in the sim list at all, so it could not be right-clicked to move: the only sims that needed moving were the ones you could not reach
+- Added: you can now create a mission or a scene while filing a sim, instead of being sent away to make one first and then having to find the sim again
+- Added: joining a joint sim now asks where you want to file it in your own missions and scenes. Your scene partner’s filing is offered as a suggestion, since their missions are not yours
+- Changed: the LCARS badge in the top left is still a link to the dashboard, but looks exactly as it did before — no box, no highlight on hover
 
 ## v4.23 — 2026-08-15
 
