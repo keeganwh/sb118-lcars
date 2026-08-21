@@ -533,3 +533,169 @@ end $$;
 
 revoke all on function public.admin_list_writers() from public, anon;
 grant execute on function public.admin_list_writers() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- shared_docs : read-only share links
+-- ---------------------------------------------------------------------------
+-- A share is a SNAPSHOT, not a window. Pressing Share copies the sim into this
+-- table; later edits stay private until the writer publishes again. That is the
+-- behaviour people expect from "share this post" -- share a draft, keep writing,
+-- and strangers are not watching it change -- and it is also what makes the
+-- read path safe to expose.
+--
+-- The reason it has to be a copy at all: every doc a writer owns lives inside
+-- one jsonb blob, public.state.payload, under a policy of auth.uid() =
+-- writer_uid. A policy on that row is all-or-nothing over the whole payload,
+-- so there is no way to grant a stranger access to a single sim by writing one
+-- -- grant it and you have published every sim, character and setting the
+-- writer owns. A row here holds exactly what was deliberately published and
+-- nothing adjacent to it.
+--
+-- Content is stored as the editor stores it, with markers stripped, alongside
+-- what the render pass needs: the academy flag, and `format` -- the writer's
+-- bold-locations / italic-OOC / italic-thoughts preferences. share.html runs
+-- the same lcars-render.js the app runs.
+--
+-- The rule for what a reader sees is exactly what the app puts on the
+-- CLIPBOARD: locations bold, OOC and thoughts italic, marker punctuation left
+-- as plain text, and no colour of any kind. So the Visual Aids toggles are not
+-- carried (they tint markers for a writer mid-sim, and are noise in a finished
+-- sim), and neither are character colours -- copy-out drops those too, keeping
+-- only margin-left. There is no char_colors column for the same reason there is
+-- no mission or word count: a share carries what was deliberately published and
+-- nothing more.
+--
+-- authors is a list from the outset even though a sim has one writer today.
+-- Joint Posts will have several, and migrating a text column to an array after
+-- real links exist in the wild is the kind of change that breaks them.
+-- doc_id is the primary key, not a generated id of its own, so a share is
+-- addressed as "this doc, published" rather than "this writer's shared thing".
+-- When docs eventually move out of the payload blob into rows of their own --
+-- which Joint Posts requires -- this table and share.html carry over untouched.
+create table if not exists public.shared_docs (
+  doc_id         text primary key,
+  owner_uid      uuid not null references auth.users(id) on delete cascade,
+  token          text not null unique
+                   default encode(extensions.gen_random_bytes(16), 'hex'),
+  title          text not null default '',
+  authors        jsonb not null default '[]'::jsonb,
+  status         text,
+  doc_updated_at timestamptz,
+  content        text not null default '',
+  format         jsonb not null default '{}'::jsonb,
+  academy        boolean not null default false,
+  expires_at     timestamptz,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+
+create index if not exists shared_docs_owner_idx on public.shared_docs (owner_uid);
+create index if not exists shared_docs_expiry_idx
+  on public.shared_docs (expires_at) where expires_at is not null;
+
+drop trigger if exists shared_docs_touch on public.shared_docs;
+create trigger shared_docs_touch before update on public.shared_docs
+  for each row execute function public.touch_updated_at();
+
+alter table public.shared_docs enable row level security;
+
+-- Owners see and manage their own shares -- the app needs this to show the
+-- link, its expiry, and a Stop sharing button.
+--
+-- There is deliberately NO anon policy. A `using (true)` select policy would
+-- make every share readable, which sounds right until you notice it also makes
+-- every TOKEN readable: one request returns the whole table and with it a key
+-- to every shared sim on the service. Anonymous reads go through
+-- get_shared_doc(token) below, which returns one row and only to someone who
+-- already holds its token.
+drop policy if exists shared_docs_own on public.shared_docs;
+create policy shared_docs_own on public.shared_docs
+  for all using (auth.uid() = owner_uid) with check (auth.uid() = owner_uid);
+
+revoke all on table public.shared_docs from anon, authenticated;
+grant select, insert, update, delete on table public.shared_docs to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- shared_docs : fmts/thought_italic -> format
+-- ---------------------------------------------------------------------------
+-- The first cut of this table stored the editor's Visual Aids toggles and
+-- rendered shared sims with the marker highlights switched on. That was the
+-- wrong pass: the highlights are a writing aid, and a reader wants the sim as
+-- it goes out -- locations bold, OOC and thoughts italic, markers plain. The
+-- replacement column carries those preferences instead.
+--
+-- create table if not exists leaves an existing table alone, so a project that
+-- ran the first version needs these. They are no-ops everywhere else.
+alter table public.shared_docs add column if not exists format jsonb not null default '{}'::jsonb;
+alter table public.shared_docs drop column if exists fmts;
+alter table public.shared_docs drop column if exists thought_italic;
+-- Character colours went the same way, and for the same reason: copy-out drops
+-- them, so a shared sim carrying them did not match what the app produces.
+alter table public.shared_docs drop column if exists char_colors;
+
+-- ---------------------------------------------------------------------------
+-- get_shared_doc() : the anonymous read path
+-- ---------------------------------------------------------------------------
+-- The only thing on this table anon can call. Takes a token, returns one row,
+-- and returns nothing at all for a token that is unknown, revoked or expired --
+-- the three cases are indistinguishable from outside on purpose, so a stale
+-- link cannot be used to work out whether a sim ever existed.
+--
+-- Expiry is enforced HERE rather than by a cleanup job, so a lapsed link stops
+-- working the moment it lapses even if its row is still sitting in the table.
+-- owner_uid is never returned; the byline comes from the published authors
+-- list, which holds only what the writer chose to publish.
+-- Dropped first, not just replaced: the return type changed when `fmts` and
+-- `thought_italic` became `format` and `char_colors` went, and create or
+-- replace cannot change a return type.
+drop function if exists public.get_shared_doc(text);
+create or replace function public.get_shared_doc(p_token text)
+returns table (
+  title          text,
+  authors        jsonb,
+  status         text,
+  doc_updated_at timestamptz,
+  content        text,
+  format         jsonb,
+  academy        boolean,
+  expires_at     timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select s.title, s.authors, s.status, s.doc_updated_at, s.content,
+         s.format, s.academy, s.expires_at
+    from public.shared_docs s
+   where s.token = p_token
+     and (s.expires_at is null or s.expires_at > now());
+$$;
+
+revoke all on function public.get_shared_doc(text) from public;
+grant execute on function public.get_shared_doc(text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- purge_expired_shares() : lazy cleanup
+-- ---------------------------------------------------------------------------
+-- get_shared_doc() already refuses an expired row, so this is housekeeping and
+-- not a security control -- which is exactly why it can run lazily on any
+-- signed-in boot rather than needing a scheduler, the same arrangement
+-- purge_expired_deletions() uses.
+create or replace function public.purge_expired_shares()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n integer;
+begin
+  delete from public.shared_docs
+   where expires_at is not null and expires_at <= now();
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+revoke all on function public.purge_expired_shares() from public, anon;
+grant execute on function public.purge_expired_shares() to authenticated;

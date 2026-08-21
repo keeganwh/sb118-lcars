@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shared sim — LCARS</title>
+<meta name="robots" content="noindex, nofollow">
+<!-- A shared sim is somebody else's HTML rendered on our origin. The sanitiser
+     in share.js is the first line; this is the second, and the reason every
+     script on this page lives in a file rather than inline. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src https://nyjpqaelilrqzmnangft.supabase.co; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+<link href="https://fonts.googleapis.com/css2?family=Droid+Sans:wght@400;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" sizes="180x180" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAMAAAAKE/YAAAADAFBMVEUAAAD///8pOQ1/hiL+/tttbDL//b3/+5mvpzf/9oj+96pyaRdfWBWThi6HdhnNu0jGrzfSvVT/53L96IH97Jutkyv/3lzy23PbxWrp4LjbuD385Y715KX/1FDhv1P/22jLr1n/3XH934Pvx1jlwWH713XoynD823vu0X7w1Yrx25n+yEXqvUrbsEjdskr7ylXuwVLht07ovlLjuFDlulL+0l7pv1fnvVbtwlrqv1n1y17rwVruw13vxV/xx2LzymX2zmnfumD50Gz503CNZw/9vznorzXToTLGmDLOnTXDlTLJmzbFlzXWpzrGmTbDljbOoDrJmznKnTrHmjnhsUPPoj7Mnz3Up0HRpUCffDHltkj3w0/WqkTZrUa8lD/gtE3kt1TNpkzmu1bXr1LrwV7lv2yzgR64hh+ldx2+iySpeyGkdyDysDCxgSOrfSKneSHDkCjgpS/Oliu6iCepeyOygia1hievgSarfSW8jCq2hinJli6zhSm5iiu3iSvAkS66iy27jS69ji/BkjK/kTLyuUPfqT/suE/HnkffsFS2kkimhEPhtF3WsGD1y3mgaw/RkByvexi+gxuqeBqbaxiebhnHjCDhnyWjcxuhcRuveh6fbxundR2ndx2ldR3WmSaich2fcRypdx+ndx+jdR6ldR+reSGreyGpeSGteyKndyGicyCufiOreyO2gyayfyWpeSOufiWreyaRaSLVnTztske2iTfkrErRnkXTpVDvu2CKWAO6dwzBfhHJhxazdhSqcxW4fBeUZBa/hCKlcx6ndR+pdyHBiSmueyeGXx7KjzHNkzeugDHMlkHXp1rsvW/qwoHewZCoZQKybgWdYQWrbQ5QMgeaYRB9Ug+LWRFwSQ+pbxm7gSzCijORbTXepVLGlU3nrlvmtGqbeUjMomHUrG7htnnNr4GXWAOCSwOjZxSxdSSRYB7Pm1SyjlzBmmZ0QQVkOQaeaSmocC2DWSOgbjKodTbAi0jeqWaZbkCzgE2hXiDilE2SWzE9EgH///8JkJthAAABAHRSTlP///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////8AU/cHJQAAAAlwSFlzAAALEwAACxMBAJqcGAAAHYVJREFUeJzVnQl0VMeV9/+1vdfdai1sAgRi37TQSCBZCLCwwdixyTgOOXbAY4+dTBZnmYmdcTyebF8mi+1szkxiO8k3zsQnjvdlMkns2DjGBmSEkNCGxCI2AxbaQGht9Vuq6jvVIh/yfPkSAd1C3CPOUaPq9366uu/WrXtvVRONy08oLkOhybt012UI7YcuP+hObK253KDv0mUfGh9L0sVJkrxH++7b53ZvTht/OWna3/2N1A537cDlpOnTHzk+cUHT8QznsH3ZaPoXTmNax1dqcluR61w2mu6eX9hc3/7bTxX0BtK7WpNwA514OWF9J3v/3vG20x20rdwk3IAmXg39V6x6+sYFn8SqNLJd80M5ib8DTfwlj4xjM35y877FMlw6f7yP45cDdHfxmqteeeWtfKDgcHQ/h5ud8Fsk/EF84svz7RcxOx+EtNCjfRXXQk1sHeuaXhq0X069epGjCYNiqVNWKivh4V6iobvW3xBI+dZpLQj0DDqDO88yX2WPcegr5+K7hx7N0gRSanjjlv1qM6y2h8c0dJte/MCiDamKeO5JQgBYDy+c4dMfjWXo2Nrs9PC3O8ZpMEyO/8+40/o3nLfljGHopRPy7uv73YwIFCwOKABp2bPv8a3jYxe6G0UfTb3Sy2sw4QGgKWyAzvuH6fDzxiz0sdsjaS/ZqgGEwCPAdAbYaZ3jf+HzQ2MVuvsL41biN4pRDaKEsQ7pwIEVmrIUyBub0Df9MpA/7wV4UEQqDqnYcWHDRggZ/xtph3LHJPRjOzZGml+miFAwrUCIhhJm5WJlz7ohir6xCP1duT6c+jKvM08gmLeQQmafvTpd+HWZ1pUzBqHv/vSevFea5oHAU3lgUNpYtTD2wTsXXRVF/9iD7v73676MZxpEAWoBSOwzBgJ4Q3eZ+XAw1DF/zEEfbX+3o7ZhCcGSJWBN+QoE0DMQN+rxvHP+16I8Ntbi6ZZ7l39g6meoZ0ET2gS95AAjYCcQ93pR+BPqF9HeQ9ljS9MdZQfUA3CIiwZa60rSZB5HNWNG/IehEG/j34jyD2BMQXd1BB/kr/ieRJ2u0YWMckgQLQEB2IhC5G3MlocWji1NH9l78ulbYTELSwpII4iv4sgAwsaqQ7xTPM4wMJagN78b/EpWY7Wrtc4FGKQElQuhjYnAcRACaO7EIO9cOIagJ/XsOvmDgBJQDlAv8xmDJ/dRAhijtm0EwDsn3+6DjR3oro5jD/L9g5bneQxEa2hXghGj6OPx8BQxgOZ9Lg2H68cMdK9Vf/JpxxvwnIAWKECthwihcDUhZiEQN2rwzgnFSt06VqC77z9wV1ajVEhJjUf/BShkTdKXnEDOgAlSbRPr0bwfWDj08BiB7l19YOoPfEot88L3QY2zi0AzYyhDQ5z4tDjnRqjHx8aM6NyRdRf5cl4VZ8Iw0r0ghWgkggGUcH2CwjNrAUT9CQ3TgDn7xoKm2z+wd/Ief+h7SaiVW1BYCzDpuYs0JJmhDDEQHc87w5uUenYsaNr5dOtXI7eX7KBU2lwz7gEHzszFYaOOHhKdMaXNM+YRV3XV1nvBL36G4Rd9hY7xrZGnmC6tUFy7Ag7je2/9kypueX7TN94SwgSotoNQdFnfE41u/ZJLrun5b36/9IO3LOc+r4TFfWWL3P98dd65nx/PmQ7qnVW1e6J5HR9/4pLb9IuNU9fXU2b+ZD48COU/v6eC/F+JvTwFABNwhlaLKUXoaL3Umq67R8x76HuW4qiglGkhVaDlj3HfNyTe4mnkOKjnxN0eujvr1mNW0yXW9FvTTt7dtju+JlGSWD5wpn34z/s8pc1NbNt8wZq06gp56IeXFvqHP68rnPxvy21GfHBbD7hKWM8Oe7gPl0hzB3X2ZTSEvgcZX3dpoX8xrfMuHFUO1ZzClwwWTuYMmz2mkdmKzJhOhYi/DMHKyw+E1l9aaHJw3fzfFtIgUKEUZ8z2+/oGh2XAojPiM/l0BWEMxLRU/OzOvo6plxI6J0a/gMPFgPJXUEqEcDSZNqTUIemF1kqeLcvFc2T02lI6iV9K6H7Rl9rl7jRZ3R2MKD9mcX6/KQCclZruQWhtlgImbeMY6knLblwfi625dNA/ih3/56mPF3MoTUuLNCVCe8fKbjo3YNY9SmtQqc8uy422aXR1FP926aAfhhpfZVU4UZcQAt9kwmJR9sa5Ab2amJIRzNeQeQAk944Fev3mSwbd0TftxqNXlDJuEXg+1dSh5DPDl4EPGIentVbsuFJCmMQeJp7uuToae+hSQWdDfwpHZQVnGgOooq7HwBsHzw14V0fJIk3MXabF7SNOzbu+manbLhV0B/idXcVVAox6Fl9RbNYtxx57YtiIg5BNCzWBMuahVDx1g3HFpzak9bZcGuhcqBlkn14Byx0QXOsK+GpxlH3u3AjWShUaTYcGMORC4obNM+b0XJS2LuK9nZyu0+/wKjoApqUGlhmTGWbSr57+GNMSyjOrXZ193EwyAmHovFnX87WXBjoqU2/cX1qOYjDEKMGK3RTVs4aZdP4X9kgIppgJJqWpkB+nZm0+9XTB5+GcuBTQDSF8KfK7ypLiSuWY+YTsAGWZj/3HsCF6X4R5CxmBlsaws42BGL2TrrmDuutSQG9KTbG7giVV7/gMVkBTlFLMfo/dfW5E1yBt9GSj1EqZeZECM2bAxE7h0gkFE7dMG33oqT0D9966bzEE14McGp4HHylzhpt05yyoyBIi3bhNQ5m+BKjpSqSj57Zjj/xh9KFf5zM/gcbAVociFdKJMVOvaPrXYSMa/heUbjCrFGk8nlaEEmRnH4cSOm/hkgl69KHXLLip/r8GkA7PBhxhgWnuT8i87tyIWzsPRDwppWBO3KQJlNaEZM8ApvcUrG/76MnRhm4NIyeyn8CBcjxuM0YJ/GIMDzy6VpLawohkvuLGPqiJUo3CTVudjKZArRlt6I67kHcmWLKjpITaQnOtPa1X9Awf8cYXYks0Gqgr84iZCLXS0EoqShRoeGXkrgtvCr9Q6C0ZNKO8fwu2QTmcSWiTjW751zPnRizqjZrrq4is18p0BwFKK0WJzp4+Pe3drBVdQ+my0YOuz2/aYDeuWj2IKltQBSkJof6BzAnDxowzqvQiMEVQ6edQuPH7xaNULnlW2rQDowut/9C8up2pqF8WXQpfKWJcmls8VJ8dkv3TTfeEcRFaeh49YOIlE1xrZf4za62Y1v7FllGFfmtB8ZSaMog1VYEKD67STA7KwZsD50Y8tLsbegkIaiNKaubN9yQzPsR4RoUZcw5nfLn36AXe/cLeduK55ttQuWW72KqwAopzRoQl9hcPM+kDL7qeR+p0LRChS1zZZDFC4w/jUK9Q2MkfspRRg87MaJraXoYysYaW7IRnyiuKDWSkDjPpLbcEIbDEADaYGr/vKkhlDEabyVGHi3pzMlatGUXof7h+Lip1GffoUqgV5i/uSCA43Btsrw2YwkDBElLje5GI4kx6ytxNa7jQmHsq419aWy5sgXtBGYiH59l3o6I0JF5fVa8oFQQW0RhcOGxivi6rJ90THoSpwRXWwkJOE6VaGy8NoYmiKYOhoAlGRkvTn2sPTGkP2XgTlsCKclAqfamObBw25NqceJVZEOPxaguFNvUNT8ZLdHH/oRZfMekxfU3tqEFv+6CHPYJ7y69EQVE5oT6IhAy9YCpyZ+XWZgbiA7oAWhc25OejIU8px/d9+Ka8qDW6Ml4bjLLRgp4/v2G1fjPXodBbUG48tPK5Hw1+cdgYpytk+hB86NwlgKxtUGjwQQkl2nCaVWNw8Fpg42hBX92JyW3hauKUl4cqA7BdFvOp6M8fNkR+aZCAKHDPzDc1SxAxM4tiOfGJyDVeBHOvyJur+x4eJeiv9THyxvIQ8dV1rKQElDvgUXXss8O6HP3iZT4B1Y4igiwpgK41TlnIenA4JvADRbDrpcdVx6bRgf54E1mHvdE8r351rFhsiw1ScB5wU9WCc2M6mmu1b/ommPBMtgaIQEkfzPMlpAdfa5DMTbk0be3o1FycB8fd2bZ380poQdX2tKIqRkFxZv2Vw2LNj3UJRRg8QQk4SB0INClsokoTCkWFFBrUP1ZGXiedowJ98pAq/J3tll+1DatonVEnZcCpzfFy55C8sv+9E4qAazDJTKu9EdpItDI9IBRCEs2J3t1csxGHspB881jjellk39ZYkWtq3yVKraKMUmTvG5bxuGaf40Fr32RMJTzXdEXWw8vLN8ETIDyluVQkM0yD4y9A0+cP/UQnmdzu8LCF0lJevaWopFyYlXiTSjk3Zm13Fgghvg8wavqSNRq00rW1oBQgHgFxjeEsy/snvmk0oL89wNFWWgp7N4SIEV5lcosUBcPCUtxYWGecsVmhx4MkAh3J1cY7mxSIT7R0KfG9ST2ibNA5OQrQCydOIR1vVVToUiFeX2HvUvAo8bsLh9Xp30WLL12TMfBMxUvG0yICKAAikfx8+JIwIk2L5DM56PaTD91S1j4ZFauLijxsexP1DLRkhdJyav2w4vFLzSHNWDzmI0wpRoUPAVIAoLYWDSpfRaBylEL2wd5Jc69LPvTEFkHaqOkriJbxK/MGi4urqmxgX+0wL/3UqQylPKY0Idz3tIZvCucmUDUbnKVsoA1ENgBKvCx+FnVnJx369IJM7CqI0tmz6yvIzuoyIZTTgwL8/tyQnz2UW6GWm2AO2iOCme5eYpbrcQOpQSEdqsP4+UxD98ryZEO/26bGI6XfAd4rLfJXelXwC0tCtGOY68Cjz3eVLtdmaQBKmFZKKgkSM06wTmuCBsg8s+yi9Tqb2GmZncmG7nbb7fbXYFe9VxHFamdtqQ97W7Foy60+N2bSLSDUtE5LR3OT7yCayaE+ZGPWkJ5EvoTJkW1cm/e56EeGLS2TMiPOv2/+0vp3FdSCQ3zW0RAc2yXb1tH/3NJ7boy8sYjF489qrRg3Do/74NQkELRVZ8jrSCHQaNzH0eo/PDb5yNHkLrceyRItT7PFBIfgN/M3l1tbi/ga2lq65dyQV5p4sxbwtXUEKKgjDIg0onMiOITuLTBWU0AbIg2INFCVPW5GVsc2JBU68gSZSnSxYwsrqoVeCrcodYdTRvcO09X1132GgO3NUd/1f85M4Hyg46p44kAy0tb1UNCMqS1siNRC5hy45b5PbOjiyTWP1b+MTW/dRnLeNfXZBY0pYBZQVVx/6CfnsgeH9DEAV+xCsWP2QwHFJNZgYtMz4zK1XlAK1Js/gCaaQxa+3VT9Yv2TM8+L4jx/yQ/FNn+8Q+sm2xGqWlnSsjyIYq8xMCzjMQ/xHQvXnP1nJC3+TSbgNeX6PD7LLEFd3PHhzNQDtGtmMr3HZyfcgGYb3kAet4qoa5cP6u0+TmUM89J/UdQjvvY04mGfmXAYxl3ZTO4b2gaYJE2/PknMaN+10rdFs6V9hLRIdUUdum7eMMIL/MgNQ/lcYNO++oK6pUDtgoyrT/xxMZKo6Tt/R4gq6Q9npHi+DKchWhLzRBEm+FeP7P01zaeZYtrrwV69BKipqdHN9VDe/juSCJ1z82R0sBTd3RHgqlyS6tjbsgjFKVcNnxD/grTF0xyEhGCSkwUFxhG4P10nnn0gidDr9JmWfYR4LpcuCgbIcmul0Ns7m0fI/GFxxpamJiB8Ek9Omqk+79HuyM0sedAfv05PnhZDv8ttSmk47Csttu/0xZwR7hX6bINpoGBM+zClR5Oe1NgzLa+izU0edH4GTrYG+7VFPWBe+SzY1QOlInh44odG9v5v+/tN/gAm+vO8+O6BggK4uCf29PeTNrkcPzqJsLd9TWC5liSwoRDeFWXfW9wlkNGdcQpA+p/yvY59thCU2QPHTu9Bmv/oq8cgbXNPDwGzwI0T7Pnbv3mrcvEXkwX9epbIeoapofURt+FobhEhJjh3S2qalc5e8E/fGulNQzyUSutN60nNjQYJdy0NzyaApMIzedXB6s2vRu+cmiQ/3QIytb0mQjiooqb/XAsLGNhXduxTKJyEzdduRqGZM8ycTXRDQR2a8peYRNiiRnOfPfb+kM98As8KaGl0Ha8r6QOTwaY2njTdIknQdOt7vcXtrxPbNdZhuUrv84sFdpV5LjjZvha7FGzP/EomfwOfa24yM5JBg3hV3LUUlfGGMbMjwwuYSdHcXhz5tfP64N3DV/MJfBDtQQEtbEdzwHVdnbKyFJ4SAx6BP7CG+8WUOpCOOzjoKu2blmpFd3sEklTvrDJpBrMHPl5spl7cns02XCK83peofWs3kgO9S2W1tDPX9DICVhiE+FBeoUttjtTKHWxrcTFlgli2bWswwkC4LhaQJG4HJuNHmVngUhhqGYtJg+1h0R4SeEomB3ozlJ9V62h4PnSYDcIdgBC2x3dJEgqULMUaQ1Zkm1KhzSQIM2VRsx+qonTZCiHNK0imqesSWJ5RtivN9BIQmNeZJOgXFxFiwktA27brhwNeLOYNzOQ7YW3fPiCxzcVW6e2MgRKoKDzt+yBKS11h+L34vZQy3SzKgW+W6L4ym7rg7M5q8ja9npQHcU14w4fbtpqNFC4sETMrPMtDCnfJO0UpVNp+OVazHat2GGP2wbj0A1TGY2a3iyITdbKk0nKZ6f2g0iLcpdxkziST+xav/G/5ZFYyNP3Ehj0gpkDvwrIc5mtNPB2umO56t4Wo6/tYtbpyR4kPypVizHFoQEumWyagMd2dN++94OxroyDKowRCMKJcc2svZpbmhbdfEw9DRirsGyMeuqvz1NW9qQ2EaMIGZUgSSZG6ywt5pFfP7EqhUlfb+mTLiqMMFA4EJfp01u4Tb+61tu2ruf+OBQtm/mQFBm2faaGYJtTk17U2abN+O3fBZlKaBPNYPD4S+egzvpnCTSKG+1roeA3Og6ovJbriykqUoBKx1VtT4Qlbu7P29h15yn/Gf7pffWjDpPbw0tPt96TnhKolFTFY8cp+fN+OwIEXv1rJip5LvHm8ynElPFhwtJkhfIvbltPve7u4s7tMaQS3xkpMFQ5bA16R4DLLqRz45pee60n7WSv9rDi2HeEzwXlPfuO1k55FTLbdhdZUQgjheerAnR1t9ydhGud9B2ir8E0QRFxoEpjdBKo18mcdWOlxxos8S6MaK6tcjWorv2V74AdSTg888vL1i7+1JiOjGxkNi0k48MrVcyZ3QCtYmnrS9kBhuYu6XlPx/E6ioTvQYUqtkQYTURJhy30+l5aibD/xSUhvKd3Oyyqxage04GrCc0U/lsR/5pVdV3QA9w4txYsd+72JdMfKtLVvgDIJqgBrgElYZNLdvxkxyPmYx5bDG6e86qPBhEQkaBMHGXvDniUVX0iCGCwSa4JVzKT6iTXpdPRHN1MZ2/OxF3uGtY+lZ6bz2xpbftXQt06CCuVpODFmMifO4+kzsSkJ0D8crEXq2WUz9wZiEDuKB4Tr0dixpmgMFRrF0l/mxYR1VfmPaOr4Ewhek57+Py6y8KWHTvV/4Oe75htbcCGJUp4Llxykd8qj3QmHbj2jAvAbzDOfSjw/RcOJ9LMFNAD+zlJKRBnZ4nImZGBqR/XP/E/tqpqemfZnLpP2Bn/Iu2HbwEylhCW5MnGUVnJxWz1VprsssS6vdRY5FT1o6j9hzyEpjg66KsWHgyB8oYnQGjavkPT6n6y4JU3HSODPIcclNW0c2m9aulnFywPU9hRA/i5wx8CRrERrupOjFqZxVAw4MLUhV+UNOLE8Rqjr7ax24WPrgO6b++S/fzptsCrwZ9U8JH37TrZO21IzC74SlDOfUKr47PlzU0YcM40YeqOcNanLgzC1bmFZri/tJg3rCAb6rXpxhb+VlJfVX5/V+9PwwCCZ9j9t+X2S5unWG7b3z+HmGCHA85VwftDz4bkvItHQvfTj49tBbEo4B4uZijeIqJ/jW9YuFM1UKyrWbJuy885PRWOdgcy/cjxNX8/6t2441D1HKNMCTqG8Un/ulRmPfD/BfvqkE3Tt/QIDVgovX+4gBSqGUPWSZmuXvVLQI6lY88e8BUWn7M7Wv6zmuMieWd7Xx7X9tkXRIlP3oJUrDmvIWxOtaZUy2UT/UGRglaeFEgzCudlz3RXL3Ip3bFXVnuaU1aR3TrpmJKcApfceOtD7cte0oPI9BapURUfmwlVIMHT73LTV8dPCIO2BnMW25bth4TdqUkcgSssCu6dVfv6mnixY8VXCXxf5XJ289f4zmagqLkVJMdTTNC8vmGDo3AVZ2hFweIoEx0FvQAuPBAhq4e0W23Tr3zv3HI0eYF0jPgEo7akXJk7/XrAY0MW+WF6Up7yp/Qn20yc+kXfDAZCUGLHFoM9Uip7dZKcMOLVX2Ay8HbHFlFiTz+vQotRXxkWzfs65aWKmquqXjVL+bUdibXrThgixUxyZF5oJTkJUNwJvI+82scurOKFW/IoffD5yfgct9d1wZlbjuI7qnaZXj+LwVCyqTaz32N9TH1HK0Xsy0IwUeDKKvf4y1Rio9ar/5d07fnXXg3Vb///zyZ+X/nVfWZqrv9ehzQZAhoyWpuVIpKaPPYGbsQdMrFQerbE8b7YlsFwjuNO7+pP33ZqW8cDOjvM/O+yNvMbAma6JVJskW0cPfhxIqE13VQSXdbzNTZvojpUVy10LO1YK1yO28noatk44Fjx5fhnms9LT6vPZHzapEl2Z/tPdVvbMhNp0JohKp5Y9G6vZctQAV2nPsgTp7ZHHbmgjF8aM9KmnZM3P+0zoVJLXMcXfj0RC9zkcRAqCFwTA+SrCwbSL9PbAR/Juf6u388KYgfSl7XM672mhHvffaaMTX/hOIqG/NUXrNzhg0kVWhcUY2UGwu/5w5852a/fh4xfacg6k3dg0TQ2cYL5Q9nvAZxIJ/fLgZDQSReyytTu2BupqrDpEreC03s5/Dhz/6eD5uo3h0v9gY/SBiREOK68YNw/fNnrR0BswnohybTGhAgE4xSguCtVNrvjYd6LbP3/+jVPvkx+/oNxPv+57kSa0Vw1vsr1Y6L+7GT1wS2yIHSAkRiohxc7JOb8aVGfuu9gDB3OeejO6d/41GOggyH82gdC6Apntt5k+CLUbOpXHUC5m5+b3pJ8uuPjzKPu+siXr833tzTGwYc1bFw890E+I+jUr37rDdmUKK8LW0MTcvDBOk4sx5z9J1biOE5GPLa5vr4s34ScKWpjT16hAUCjb6ovuTE3Pqrwi7HSShJygmVP80qD3znQb+WrYGSwXDb356j/iYGhHAI4WYLCtDu+T1NHZCTr1M+fJt1PyPzgBEeTOThz0Vb9fh5OrooRZGAwwi1099+9pTAcTYRtx6bu2ceZLBwHSiMRBh9EKsjMgYVmWCtW37jR6ThwzoJ73bro+027/bAIDpox3JgXuSwucyrCqADFl/sZwYpmB1N/mDmYeawtOnZkwTW8A2ilByKpSJJg1f2O4qrMroczo+5vGaPesSb8ctlXmIqE/3q9sZEo/zAkR2c4m4SyenuhPhzj5vDreRDeZRrPErFz6zRZ8P0SrFEmf+9rvqD41/a/nNs5T0p7KXadOydyEabq30BwI5UORtDNHH+/B6cQzA/3r27vqsTdh0MEeU3wPVgXSuifUhL3nRBKYAY16oP1YoqDfdva2tUMqGZ1Q8/vBR69L2PHG75P5A6KQnj2pPwHQel3+uB5eReDsfDJa/lSCDq/9f2RTbeN+9b6TyS7mQaTvjQu8NpGkTf39m4dP3J/Ac8bfL33hlAhSE6Vp01cQqhJnah49cvAf37cNP7HS/+vdIxo3ssllyTQoMqf/Q7z565VIomxvrhtIlHmk+OkIzOhsPRH8zWASPnLonCysaLkhO0GaXkaeb0dwZ6nXVZ40gx6S3Wc+gsRo+l4Xt9iDf8gY99/n2al4/jK/fSTLgJFomm1sONNSE8t4flWymQE/PUHQYSAjtWH97nufRvLlix9MDPS6Z/PfO3XHW+FvYhTkS386pO4iFwH/tHjOkVjTma8k1XGcj4zkQdyLPn7orXd/jbEidITj3EjiPrpiVKA1cJB/DZcXdCUU+Y8xY9AY4TQ+jzw+howDI4PeG05iaJck6PtC12JMCR3BGP3VsWTQGNnkwi8y159wSdYnBidVKC5DobgMhV5qgAuR/wOwAv6GbjiHVwAAAABJRU5ErkJggg==">
+<style>
+/* share.html is deliberately not lcars.css. The app stylesheet is 1,200 lines
+   of editor chrome, panels and skins that a reader never sees, and the point of
+   a separate page is that a share link does not drag the application down with
+   it. What IS held in common is the palette: these are the app's own Dark and
+   Light themes, value for value, so a share link looks like LCARS rather than
+   like a generic web page. Keep them in step with the top of lcars.css. */
+:root{
+  --bg:#0E1012;--panel:#171B20;
+  --amber:#FF6600;--amber2:#FF8833;
+  --blue:#4d88ff;--blue2:#99bbff;
+  --gold:#C9A227;
+  --text:#AABBC4;--dim:#8EA2B1;
+  --border:#232937;
+  --ui:15px;
+}
+:root[data-theme="light"]{
+  --bg:#E8ECF2;--panel:#F4F6FA;
+  --amber:#E85500;--amber2:#CC3300;
+  --blue:#1155cc;--blue2:#0033aa;
+  --gold:#9A7209;
+  --text:#141A24;--dim:#6878A0;
+  --border:#C8D0DC;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:'Droid Sans',Verdana,Arial,sans-serif;
+  font-size:var(--ui); line-height:1.5;
+  -webkit-text-size-adjust:100%;
+}
+
+/* ── HEADER ──
+   The app's header shape: a filled badge with the bottom-right elbow, over a
+   rule in the accent colour. */
+header{
+  background:var(--panel); border-bottom:3px solid var(--amber);
+  display:flex; align-items:stretch; gap:12px; min-height:48px; padding-right:14px;
+}
+.badge{
+  background:var(--amber); color:#fff; font-weight:bold;
+  font-size:1.06rem; letter-spacing:4px;
+  padding:0 18px 0 14px; border-radius:0 0 30px 0;
+  display:flex; align-items:center; flex-shrink:0;
+}
+.hdr-note{color:var(--dim); font-size:0.73rem; letter-spacing:1px; text-transform:uppercase;
+  flex:1; min-width:0; align-self:center;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+#theme-btn{
+  align-self:center;
+  background:transparent; border:1px solid var(--border); color:var(--dim);
+  font-family:inherit; font-size:0.73rem; letter-spacing:1px;
+  padding:4px 12px; border-radius:10px; cursor:pointer; flex-shrink:0;
+}
+#theme-btn:hover{border-color:var(--amber); color:var(--amber)}
+
+/* ── SHEET ── */
+main{max-width:780px; margin:0 auto; padding:26px 18px 56px}
+.title{
+  font-size:1.22rem; font-weight:bold; color:var(--blue2);
+  line-height:1.3; overflow-wrap:break-word;
+}
+.title.complete{color:var(--gold)}
+/* One line, not four. Display name leads; everything else is supporting detail
+   at the same weight, separated by middots and allowed to wrap on a phone. */
+.meta{
+  display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px;
+  margin-top:6px; font-size:0.8rem; color:var(--dim);
+}
+.meta .who{color:var(--text); font-weight:bold}
+.meta .sep{opacity:.5}
+.meta .st-complete{color:var(--gold)}
+
+/* ── SIM BODY ──
+   Block margins are ZERO, exactly as in #editor. Sims separate their paragraphs
+   with empty divs of their own, so adding a margin here double-spaces every
+   one of them -- which is what it did. */
+#body{
+  margin-top:18px; padding-top:18px; border-top:1px solid var(--border);
+  font-size:12pt; line-height:1.15; overflow-wrap:break-word;
+}
+#body *{margin:0; padding:0}
+#body p,#body div{margin:0; padding:0; min-height:1.15em}
+#body blockquote{margin:0 0 0 2em; border:none; font-style:normal; display:block}
+#body ul,#body ol{margin:0; padding-left:2em; list-style-position:outside}
+#body ul{list-style-type:disc}
+#body ol{list-style-type:decimal}
+#body li{margin:0; min-height:1.15em}
+#body a{color:var(--blue2); text-decoration:underline}
+#body img{max-width:100%; height:auto}
+#body .ind-1{margin-left:2em}
+#body .ind-2{margin-left:4em}
+#body .ind-3{margin-left:6em}
+#body .ind-4{margin-left:8em}
+
+/* ── STATES ── */
+.state{max-width:520px; margin:15vh auto; padding:0 24px; text-align:center}
+.state h1{font-size:1.06rem; color:var(--amber); letter-spacing:2px; margin-bottom:12px}
+.state p{color:var(--dim); margin-bottom:8px; font-size:0.87rem}
+.hidden{display:none}
+
+footer{
+  max-width:780px; margin:0 auto; padding:0 18px 36px;
+  color:var(--dim); font-size:0.73rem; text-align:center;
+}
+footer a{color:var(--dim)}
+
+/* ── RESPONSIVE ──
+   These get opened on a phone far more often than on a desktop. Nothing here
+   has to fight a skin the way lcars.css does -- this page has no skins. */
+@media (max-width:820px){
+  header{min-height:42px; gap:8px; padding-right:10px}
+  .badge{font-size:0.93rem; letter-spacing:3px; padding:0 14px 0 10px}
+  /* "Shared sim" is redundant on a phone -- the sim's title is directly below
+     it -- and dropping it keeps the note on one line once an expiry is
+     appended. It still wraps rather than truncating if it ever needs to. */
+  .note-lead{display:none}
+  .hdr-note{font-size:0.6rem; letter-spacing:1px; white-space:normal;
+    overflow:visible; text-overflow:clip; padding:4px 0; line-height:1.35}
+  main{padding:18px 14px 40px}
+  .title{font-size:1.13rem}
+  #body{font-size:11.5pt}
+  #body .ind-1{margin-left:1.2em}
+  #body .ind-2{margin-left:2.4em}
+  #body .ind-3{margin-left:3.6em}
+  #body .ind-4{margin-left:4.8em}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="badge">LCARS</span>
+  <span class="hdr-note" id="hdr-note"><span class="note-lead">Shared sim &middot; </span>Read only<span id="note-exp"></span></span>
+  <button id="theme-btn" type="button" hidden>Light</button>
+</header>
+
+<div id="loading" class="state">
+  <h1>Retrieving…</h1>
+</div>
+
+<div id="gone" class="state hidden">
+  <h1>This link is not available</h1>
+  <p>It may have expired, or the writer may have stopped sharing it.</p>
+  <p>If someone sent it to you, ask them for a fresh link.</p>
+</div>
+
+<div id="failed" class="state hidden">
+  <h1>Could not reach LCARS</h1>
+  <p>Something went wrong fetching this sim. Try again in a moment.</p>
+</div>
+
+<main id="sheet" class="hidden">
+  <h1 class="title" id="title"></h1>
+  <div class="meta" id="meta"></div>
+  <article id="body"></article>
+</main>
+
+<footer id="foot" class="hidden">
+  Written in <a href="/">LCARS</a>, a writing tool for Starbase 118.
+</footer>
+
+<!-- Absolute paths: the page is served at /s/<token>, so a relative src would
+     resolve to /s/lcars-render.js and 404. -->
+<script src="/lcars-render.js"></script>
+<script src="/share.js"></script>
+</body>
+</html>

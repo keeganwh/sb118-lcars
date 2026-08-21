@@ -239,6 +239,25 @@ const VERSIONS = [
       'Fixed: an indent applied in an Academy sim was silently undone the next time the sim was opened, pasted into, or edited through source view',
       'Added: select across several lines and the indent button now indents all of them at once, rather than only the line you started on. Works on bullets and ordinary lines together, and Ctrl+Z takes the whole lot back in one press',
       'Fixed: Tab and Shift+Tab did not indent in Academy sims even though the buttons did',
+      'Changed: the code that renders sims for reading — markers, thoughts, comms, character colours — now lives in one shared file rather than only inside the editor. Nothing looks or behaves differently; it is groundwork for read-only share links, so a shared sim renders exactly as it does here instead of slowly drifting out of step',
+      'Added: share links. Sim Details now has a Share Link button that gives you a web address anyone can open — no account needed, nothing they can change. It shows your display name (or your Writer ID if you have not set one), the title, whether the sim is active or complete, and when you last shared it',
+      'Added: a share link is a snapshot, not a window. It shows the sim as it was when you shared it, so you can carry on writing without strangers watching the draft change. The dialog tells you when the shared copy has fallen behind, and Update shared copy publishes the current version to the same link',
+      'Added: share links can be set to expire — after 24 hours, 7 days, 30 days, or never. Stop sharing kills the link immediately for everyone who has it, and sharing again afterwards makes a new address rather than reviving the old one',
+      'Added: shared sims open on a page of their own rather than loading the whole of LCARS, so a link is quick on a phone. It is built for a narrow screen from the start, since that is where these get read',
+      'Changed: expired share links are now tidied away automatically, so a link that has run out does not sit around after it has stopped working',
+      'Fixed: shared sims were double spaced. The page added a gap under every paragraph on top of the blank lines the sim already contains — it now spaces them exactly as the editor does',
+      'Fixed: shared sims showed the coloured marker highlights from the editor. Those are a writing aid for spotting your own markers mid-sim, and have no place in a finished sim someone has been sent a link to — a shared sim now reads the way it does when you copy it out',
+      'Fixed: formatting was missing from shared sims. Locations are bold again, and thoughts and OOC notes are italic, following the same preferences the app uses when you copy a sim to the clipboard',
+      'Fixed: locations and OOC notes were tinted grey on the share page, which is a colour the app has never given them',
+      'Added: a Light / Dark switch on the share page. It follows the reader’s own device setting to begin with and remembers their choice — it used to be dark for everyone, whatever they preferred',
+      'Changed: the share page header takes up far less room. The title is smaller and the writer, Writer ID, status and date now sit on one line under it instead of four stacked rows above the sim',
+      'Changed: the share page now uses the app’s own colours and header, so a shared sim looks like LCARS instead of a plain web page',
+      'Changed: shared sims now open in light mode by default, with the Light / Dark switch still there and still remembered. A sim someone has been sent to read is a document, and a page of prose reads like one — the dark chrome is for the person writing it',
+      'Changed: character colours no longer carry over to a shared sim. They are a way of telling your own speakers apart while writing, and mean nothing to a reader who does not know the scheme — copying a sim out has always dropped them, and a share link now matches that exactly',
+      'Added: if a share link expires, the page says so at the top — “Shared sim · Read only · Link expires Aug 24, 2:30 PM” — so a reader knows before the link dies rather than after',
+      'Fixed: if sharing failed because the page was running an older version of LCARS than the server, the error was a raw database message about a missing column. It now says what it is and what to do — reload the page',
+      'Changed: share links now say how long is left rather than a date and time — “Expires in 3 days”, “Expires in 5 hours”, “Expires in 45 minutes”. A clock time was shown in whichever timezone the reader happened to be in, so it meant two different moments to you and the person you sent it to',
+      'Changed: the countdown on a shared sim keeps ticking while the page is open, instead of freezing at whatever it said when the page loaded',
     ],
   },
 ];
@@ -1858,6 +1877,7 @@ function hasLocalData() {
 async function cloudBoot() {
   if (!isCloud()) return;
   purgeExpiredDeletions();          // clears out anyone whose grace period lapsed
+  purgeExpiredShares();             // and any share link that has run out
   setSyncStatus('syncing', 'Loading…');
   let row;
   try { row = await loadFromCloud(); }
@@ -3223,35 +3243,14 @@ function installCopyHandler() {
 // ================================================================
 // MARKER TRANSFORM
 // ================================================================
+// Marker rendering lives in lcars-render.js so share.html renders sims
+// identically. This wrapper supplies the editor's current state.
 function applyMarkers(html) {
-  html = html.split(ZWS).join(''); // strip any ZWS caret-anchor nodes left by pushCaretOutOfMarkerSpans
-  html = html.replace(/<span class="am">([\s\S]*?)<\/span>/g, '$1');
-  html = html.replace(/<span class="cm">([\s\S]*?)<\/span>/g, '$1');
-  html = html.replace(/<span class="bk">([\s\S]*?)<\/span>/g, '$1');
-  html = html.replace(/<span class="lm">([\s\S]*?)<\/span>/g, '$1');
-  html = html.replace(/<span class="om">([\s\S]*?)<\/span>/g, '$1');
-  html = html.replace(/<span class="tm"><em>(oO\s[\s\S]*?\sOo)<\/em><\/span>/g, '$1');
-  html = html.replace(/<span class="tm">(oO\s[\s\S]*?\sOo)<\/span>/g, '$1');
-  html = html.replace(/<em>(oO\s[\s\S]*?\sOo)<\/em>/g, '$1');
-  if (fmts.action)
-    html = html.replace(/::((?:(?!::)[\s\S])*?)::/g, (_,i) => `<span class="am">::${i}::</span>`);
-  if (fmts.comms)
-    html = html.replace(/=\/\\=((?:(?!=\/\\=)[\s\S])*?)=\/\\=/g, (_,i) => `<span class="cm">=/\\= ${i.trim()} =/\\=</span>`);
-  const tItalic = getPrefs().thoughtItalic;
-  // Prevent matching across paragraph (div) boundaries in innerHTML
-  const thoughtRe = /\boO\s((?:(?!<div|<\/div>)[\s\S])*?)\sOo\b/g;
-  // Italic is applied via CSS on .tm, not via <em>, so typing after a thought doesn't inherit italic
-  if (fmts.thought)
-    html = html.replace(thoughtRe, (_,i) => `<span class="tm">oO ${i} Oo</span>`);
-  else if (tItalic)
-    html = html.replace(thoughtRe, (_,i) => `<em>oO ${i} Oo</em>`);
-  // OOC: any ((OOC...)) — must start with OOC (case-sensitive); runs first so Location doesn't catch it
-  html = html.replace(/\(\((OOC[^)<>]*)\)\)/g, (_,i) => `<span class="om">((${i}))</span>`);
-  // Location: any ((text)) that does NOT start with OOC
-  html = html.replace(/\(\((?!OOC)([^)<>]+)\)\)/g, (_,i) => `<span class="lm">((${i}))</span>`);
-  if (curId && isAcademyDoc(S.docs[curId]))
-    html = html.replace(/\[([^\]\n<]+)\]/g, (_,i) => `<span class="bk">[${i}]</span>`);
-  return html;
+  return lrApplyMarkers(html, {
+    fmts,
+    thoughtItalic: getPrefs().thoughtItalic,
+    academy: isAcademyActive(),
+  });
 }
 function stripMarkers(html) {
   return html
@@ -3712,6 +3711,7 @@ function openDoc(id) {
   updatePostedMeta(doc);
   updateTitleColor(doc);
   updateStatusStyle(doc);
+  updateShareButton();   // reads the cache only; opening the dialog is what fetches
   // Academy mode is per-mission — strip and apply when opening
   const isAcad = isAcademyDoc(doc);
   document.body.classList.toggle('academy', isAcad);
@@ -4767,68 +4767,11 @@ const CC_PRESETS = [
   {name:'Green',  hex:'#27ae60'},
 ];
 
+// Character colouring lives in lcars-render.js; see applyMarkers above.
 function applyCharColors(html) {
   if (!curId) return html;
   const doc = S.docs[curId];
-  const colors = (doc && doc.charColors) || {};
-  // Fast path: nothing to apply AND nothing previously applied to strip.
-  // (When the last colour is removed, colors is empty but old markup still
-  //  needs clearing — so we must still run the strip pass in that case.)
-  if (!Object.keys(colors).length && !/data-char-clr|cc-nm/.test(html)) return html;
-
-  // Pre-compute lowercased color map for fast lookup
-  const lcolorMap = {};
-  Object.entries(colors).forEach(([k,v]) => { lcolorMap[k.toLowerCase()] = {name:k, hex:v}; });
-
-  const tmp = document.createElement('div');
-  tmp.innerHTML = html;
-
-  const blocks = tmp.querySelectorAll('div,p,li');
-  blocks.forEach(bl => {
-    // Strip any previously applied color coding first
-    if (bl.hasAttribute('data-char-clr')) {
-      bl.removeAttribute('data-char-clr');
-      bl.style.removeProperty('color');
-      bl.querySelectorAll('span.cc-nm').forEach(s => {
-        while (s.firstChild) s.parentNode.insertBefore(s.firstChild, s);
-        s.parentNode.removeChild(s);
-      });
-    }
-
-    // Manual paragraph override takes priority
-    const overrideChar = bl.getAttribute('data-char-override');
-    if (overrideChar) {
-      const entry = lcolorMap[overrideChar.toLowerCase()];
-      if (entry) {
-        bl.setAttribute('data-char-clr','1');
-        bl.style.color = entry.hex;
-      }
-      return;
-    }
-
-    // Get the text content of just this block (not nested blocks)
-    const text = bl.childNodes.length
-      ? [...bl.childNodes].filter(n=>n.nodeType===3||n.nodeType===1)
-          .map(n=>n.nodeType===3?n.textContent:(n.innerText||n.textContent)).join('')
-      : '';
-    const trimText = text.trimStart();
-
-    // Colour single-speaker lines only ("Name:" / "Name: …"). Multi-name lines
-    // (e.g. "Name1/Name2:") are left at the default colour — colouring just one
-    // name there required fragile <span> wrapping that broke removal and the
-    // [Names] bolding pass, so it is deliberately not attempted.
-    for (const [lname, entry] of Object.entries(lcolorMap)) {
-      const {name, hex} = entry;
-      const safeN = name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-      if (new RegExp(`^${safeN}\\s*:`, 'i').test(trimText)) {
-        bl.setAttribute('data-char-clr','1');
-        bl.style.color = hex;
-        break;
-      }
-    }
-  });
-
-  return tmp.innerHTML;
+  return lrApplyCharColors(html, (doc && doc.charColors) || {});
 }
 
 function getCharColor(name) {
@@ -8235,6 +8178,261 @@ function bootRoute() {
     applyRoute((e.state && e.state.view) || (c && c.view) || 'dash');
   });
   if (ctx.view !== 'dash') applyRoute(ctx.view);
+}
+
+
+// ================================================================
+// SHARE LINKS
+// ================================================================
+// A share is a SNAPSHOT. Pressing Share copies the sim into public.shared_docs
+// and hands back a link; later edits stay private until it is published again.
+// That is deliberate -- see the schema comment for why -- and it is also what
+// makes the panel below honest about "Update shared copy".
+//
+// Sims only. Scenes are out of scope.
+
+let _shareCache = {};   // docId -> share row, or null for "not shared"
+
+// Housekeeping, not a security control -- get_shared_doc() already refuses an
+// expired row, so this only stops dead rows accumulating. Which is exactly why
+// it can ride along on any signed-in boot instead of needing a scheduler, the
+// same arrangement purgeExpiredDeletions() uses.
+function purgeExpiredShares() {
+  if (!isCloud()) return;
+  supaFetch('/rest/v1/rpc/purge_expired_shares', { method: 'POST', body: '{}' }).catch(() => {});
+}
+
+const SHARE_EXPIRY = [
+  { label: 'No expiry',  hours: null },
+  { label: '24 hours',   hours: 24 },
+  { label: '7 days',     hours: 24 * 7 },
+  { label: '30 days',    hours: 24 * 30 },
+];
+
+// Share links are served by a vercel.json rewrite of /s/<token>. GitHub Pages
+// has no rewrites and a file:// copy has no server at all, so a link built
+// anywhere but the real deployment is a link that 404s. Better to say so than
+// to hand someone a URL that quietly does not work.
+function canShare() {
+  if (!isCloud()) return false;
+  return location.protocol === 'https:' && !/\.github\.io$/i.test(location.hostname);
+}
+
+function shareUrl(token) { return location.origin + '/s/' + token; }
+
+function shareWhyNot() {
+  if (!isCloud()) return 'Share links need an account — this browser is in offline-only mode.';
+  if (location.protocol !== 'https:') return 'Share links only work from the LCARS website, not from a downloaded copy.';
+  return 'Share links only work at sb118-lcars.vercel.app. This copy is served from GitHub Pages, which cannot handle the link address.';
+}
+
+// What gets published. Everything the viewer needs to render the sim the way
+// the writer sees it, and deliberately nothing else -- no mission, no scene, no
+// word count, no snapshot history.
+function sharePayload(doc) {
+  const p = getPrefs();
+  return {
+    doc_id:         doc.id,
+    owner_uid:      getAuth().uid,
+    title:          doc.title || 'Untitled sim',
+    authors:        [{ writer_id: getAuth().writerId || '',
+                       display_name: _writerProfile.display_name || null }],
+    status:         doc.status || 'active',
+    doc_updated_at: new Date().toISOString(),
+    content:        doc.content || '',
+    academy:        isAcademyDoc(doc),
+    // The formatting a READER should see -- the same set the copy handler puts
+    // on the clipboard. Deliberately not the Visual Aids toggles: those tint
+    // markers so a writer can spot them mid-sim, and have no business in a
+    // finished sim someone has been sent a link to. Character colours are left
+    // out for the same reason copy-out drops them: they are a way of telling
+    // your own speakers apart while writing, and mean nothing to a reader.
+    format:         { boldLocations: !!p.boldLocations,
+                      italicOOC:     !!p.italicOOC,
+                      thoughtItalic: !!p.thoughtItalic },
+  };
+}
+
+// _writerProfile is filled in when the Settings view renders, which means a
+// writer who has never opened Settings would publish a share with no display
+// name on it -- and the byline would fall back to their Writer ID even though
+// they had set a name. So the dialog makes sure of the profile before it
+// publishes anything. It refetches when the name is empty, which is cheap and
+// is the only case that could be wrong.
+async function ensureWriterProfile() {
+  if (!isCloud() || _writerProfile.display_name) return;
+  try { _writerProfile = await fetchWriterProfile(); } catch (e) {}
+}
+
+async function fetchShare(docId) {
+  if (!canShare()) return null;
+  const r = await supaFetch('/rest/v1/shared_docs?select=*&doc_id=eq.' + encodeURIComponent(docId));
+  if (!r.ok) throw new Error('Could not check whether this sim is shared.');
+  const rows = await r.json();
+  const row = (rows && rows[0]) || null;
+  _shareCache[docId] = row;
+  return row;
+}
+
+// Upsert rather than insert-or-update by hand, so re-publishing keeps the SAME
+// token and any link already sent out stays valid. token is absent from the
+// payload, which is what stops the merge overwriting it.
+async function publishShare(doc, hours) {
+  const body = sharePayload(doc);
+  body.expires_at = hours == null ? null : new Date(Date.now() + hours * 3600 * 1000).toISOString();
+  const r = await supaFetch('/rest/v1/shared_docs?on_conflict=doc_id', {
+    method: 'POST',
+    headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) {
+    // PGRST204 is PostgREST saying the row mentions a column it does not have.
+    // In practice that always means one thing: this browser is running an older
+    // copy of LCARS than the database has been migrated to. The raw message
+    // ("Could not find the 'x' column ... in the schema cache") tells a writer
+    // nothing they can act on, so say what actually helps.
+    if (j && (j.code === 'PGRST204' || /schema cache/i.test(j.message || '')))
+      throw new Error('This page is running an older version of LCARS than the server expects. Reload the page and try again.');
+    throw new Error(supaErr(j, 'Could not share this sim.'));
+  }
+  const row = (j && j[0]) || null;
+  _shareCache[doc.id] = row;
+  return row;
+}
+
+async function revokeShare(docId) {
+  const r = await supaFetch('/rest/v1/shared_docs?doc_id=eq.' + encodeURIComponent(docId), { method: 'DELETE' });
+  if (!r.ok) throw new Error('Could not stop sharing this sim.');
+  _shareCache[docId] = null;
+}
+
+// Worded by lrExpiresIn, the same helper the share page uses, so the writer and
+// the person they sent the link to are never told two different things.
+function shareExpiryText(row) {
+  if (!row.expires_at) return 'This link does not expire.';
+  const left = lrExpiresIn(row.expires_at);
+  if (!left || left === 'Expired') return 'This link has expired. Share again to make a new one.';
+  return left + '.';
+}
+
+function shareStaleNote(doc, row) {
+  const same = (row.content || '') === (doc.content || '') &&
+               (row.title || '') === (doc.title || '') &&
+               (row.status || '') === (doc.status || 'active');
+  return same
+    ? '<p class="sh-note">The shared copy matches this sim.</p>'
+    : '<p class="sh-note sh-stale">You have edited this sim since you shared it. Readers still see the older copy until you update it.</p>';
+}
+
+// ---------------------------------------------------------------
+// The dialog
+// ---------------------------------------------------------------
+async function openShareDialog() {
+  if (!curId) { showToast('Open a sim first.'); return; }
+  if (!canShare()) { openModal('SHARE THIS SIM', `<p>${esc(shareWhyNot())}</p>`, null, { ok:'OK' }); return; }
+
+  openModal('SHARE THIS SIM', '<p class="sh-note">Checking…</p>', null);
+  try { await Promise.all([fetchShare(curId), ensureWriterProfile()]); }
+  catch (e) { document.getElementById('mo-body').innerHTML = `<p class="sh-note">${esc(e.message)}</p>`; return; }
+  if (document.getElementById('mo').classList.contains('hidden')) return;  // closed while we waited
+  drawShareDialog();
+}
+
+function drawShareDialog() {
+  const doc = S.docs[curId]; if (!doc) return;
+  const row = _shareCache[curId];
+  const body = document.getElementById('mo-body');
+  const acts = document.getElementById('mo-actions');
+  if (!body || !acts) return;
+
+  if (!row) {
+    body.innerHTML = `
+      <p class="sh-note">Anyone with the link can read this sim. They will not need an account,
+      and they will not be able to change anything.</p>
+      <p class="sh-note">A link shows the sim <strong>as it is now</strong>. Keep writing and readers
+      keep seeing this version until you share again.</p>
+      <div class="mf"><label class="ml">LINK LASTS FOR</label>
+        <select class="ms" id="sh-exp">
+          ${SHARE_EXPIRY.map((o,i)=>`<option value="${i}">${o.label}</option>`).join('')}
+        </select>
+      </div>
+      <p class="sh-note sh-dim">Shared as ${esc(_writerProfile.display_name || getAuth().writerId || 'you')}.</p>`;
+    acts.innerHTML = `<button class="btn btn-s" onclick="closeModal()">Cancel</button>
+                      <button class="btn btn-p" onclick="onShareCreate()">Create link</button>`;
+    return;
+  }
+
+  const url = shareUrl(row.token);
+  body.innerHTML = `
+    <div class="mf"><label class="ml">SHARE LINK</label>
+      <input class="mi" id="sh-url" readonly value="${esc(url)}" onclick="this.select()"></div>
+    <p class="sh-note">${esc(shareExpiryText(row))}</p>
+    ${shareStaleNote(doc, row)}`;
+  acts.innerHTML = `
+    <button class="btn btn-s" onclick="closeModal()">Close</button>
+    <button class="btn btn-s sh-stop" onclick="onShareStop()">Stop sharing</button>
+    <button class="btn btn-s" onclick="onShareUpdate()">Update shared copy</button>
+    <button class="btn btn-p" onclick="onShareCopy()">Copy link</button>`;
+}
+
+async function onShareCreate() {
+  const sel = document.getElementById('sh-exp');
+  const hours = SHARE_EXPIRY[Number(sel ? sel.value : 0)].hours;
+  const doc = S.docs[curId]; if (!doc) return;
+  try {
+    await publishShare(doc, hours);
+    drawShareDialog();
+    updateShareButton();
+    onShareCopy();
+  } catch (e) { showToast(e.message); }
+}
+
+async function onShareUpdate() {
+  const doc = S.docs[curId], row = _shareCache[curId];
+  if (!doc || !row) return;
+  // Keep whatever expiry is already running rather than silently restarting it.
+  const hours = row.expires_at
+    ? Math.max(1, Math.round((new Date(row.expires_at) - Date.now()) / 3600000))
+    : null;
+  try {
+    await publishShare(doc, hours);
+    drawShareDialog();
+    showToast('Shared copy updated.');
+  } catch (e) { showToast(e.message); }
+}
+
+// Stop sharing is the only protection anyone has if a link escapes, so it
+// confirms first and says plainly that the link dies rather than pausing.
+function onShareStop() {
+  const id = curId;
+  openModal('STOP SHARING', `
+    <p>The link stops working immediately, for everyone who has it.</p>
+    <p class="sh-note">Sharing again later makes a <strong>new</strong> link — the old one will not come back.</p>`,
+    async () => {
+      try { await revokeShare(id); showToast('Sharing stopped.'); updateShareButton(); }
+      catch (e) { showToast(e.message); }
+    }, { ok: 'Stop sharing' });
+}
+
+function onShareCopy() {
+  const url = _shareCache[curId] ? shareUrl(_shareCache[curId].token) : '';
+  if (!url) return;
+  navigator.clipboard.writeText(url)
+    .then(() => showToast('Link copied.'))
+    .catch(() => showToast('Copy the link from the box above.'));
+}
+
+// The button says whether the open sim is shared, so nobody has to open the
+// dialog to find out. It reads the cache only -- boot must not fire a request
+// per sim -- and fetchShare fills the cache when the dialog is opened.
+function updateShareButton() {
+  const btn = document.getElementById('btn-share');
+  if (!btn) return;
+  btn.classList.toggle('hidden', !canShare());
+  const row = curId ? _shareCache[curId] : null;
+  btn.classList.toggle('sh-on', !!row);
+  btn.title = row ? 'This sim is shared — open to copy or stop the link' : 'Create a read-only link to this sim';
 }
 
 // ================================================================

@@ -35,16 +35,16 @@ _On `main` and live, not yet cut as a version._
 - Added: moderators. A writer can now be given a moderator or super admin role, so the fleet can look after its own accounts — previously anyone who lost their PIN without a linked account had to find the maintainer
 - Added: Request a PIN reset, on the Forgotten your PIN? screen. If you never linked a Google or Discord account, or they are not working, you can now ask a moderator directly. You give your Writer ID and a note saying how they can check the request really came from you — a Discord handle or an email address they can reach you at
 - Added: an Admin panel for moderators, with a count in the header of requests waiting. Every moderator sees the same count, so a request cannot sit unnoticed because one person did not log in
-- Added: moderators can issue a temporary PIN from the panel, to pass on however that writer asked to be contacted. The PIN is shown once and never stored anywhere readable, the writer's old PIN and any open sessions stop working immediately, and LCARS makes them choose their own PIN the moment they sign in with it
+- Added: moderators can issue a temporary PIN from the panel, to pass on however that writer asked to be contacted. The PIN is shown once and never stored anywhere readable, the writer’s old PIN and any open sessions stop working immediately, and LCARS makes them choose their own PIN the moment they sign in with it
 - Added: requests can also be rejected, with a confirmation first. Rejecting only closes the request — there is nowhere to send a reply, since whoever filed it is locked out — so a request that might be genuine is better followed up in person
 - Added: an Archive of every request ever decided, showing who actioned or rejected it and when. Nothing is ever deleted, so a reset can always be accounted for afterwards
-- Added: super admins can assign roles from the panel, by Writer ID. Moderators only ever see the reset queue — there is no list of writers and no access to anyone's sims
+- Added: super admins can assign roles from the panel, by Writer ID. Moderators only ever see the reset queue — there is no list of writers and no access to anyone’s sims
 - Changed: a request filed against a Writer ID with no LCARS account is accepted and quietly dropped, so this cannot be used to find out who has an account. The confirmation says to double-check the Writer ID, because a typo is the one mistake with no other symptom
 - Fixed: the introduction to the Delta Prime look could paint over a prompt that had to be answered — including the one asking you to replace a temporary PIN, which has no way to dismiss it. It now waits for the next visit if anything is already on screen
 - Added: super admins now see a list of every account in the Admin panel — Writer ID, display name if one is set, when they joined, and their role. It scrolls, and there is a filter box for finding someone by either Writer ID or name
 - Changed: a role is now set from the row itself rather than by typing a Writer ID into a separate box, which was two chances to promote the wrong person. Changing one asks you to confirm, and says what the new role can do
 - Added: your own row cannot be changed, because with no super admin left the only way back is a hand-run database statement. Accounts in their 48-hour deletion window are marked as such
-- Changed: moderators still see no writer list — the roster is super admins only. It shows who holds an account and what they can do, and nothing about anyone's sims
+- Changed: moderators still see no writer list — the roster is super admins only. It shows who holds an account and what they can do, and nothing about anyone’s sims
 - Fixed: sims pasted in from Google Docs or Word copied out double spaced. Those apps hand LCARS paragraph blocks, which look right in the editor but carry spacing of their own everywhere else — so every line, and every blank line, arrived with a gap around it. Copying out now produces the same plain blocks a sim typed in LCARS does. Sims you have already pasted in are fixed too, and nothing about what is stored changes
 - Fixed: blank lines pasted in from Google Docs could vanish entirely when copied into some apps, while showing as a full blank line in others
 - Fixed: lines separated by a soft line break ran together into one line when copied as plain text — in Discord in particular, where only plain text is accepted
@@ -53,6 +53,25 @@ _On `main` and live, not yet cut as a version._
 - Fixed: an indent applied in an Academy sim was silently undone the next time the sim was opened, pasted into, or edited through source view
 - Added: select across several lines and the indent button now indents all of them at once, rather than only the line you started on. Works on bullets and ordinary lines together, and Ctrl+Z takes the whole lot back in one press
 - Fixed: Tab and Shift+Tab did not indent in Academy sims even though the buttons did
+- Changed: the code that renders sims for reading — markers, thoughts, comms, character colours — now lives in one shared file rather than only inside the editor. Nothing looks or behaves differently; it is groundwork for read-only share links, so a shared sim renders exactly as it does here instead of slowly drifting out of step
+- Added: share links. Sim Details now has a Share Link button that gives you a web address anyone can open — no account needed, nothing they can change. It shows your display name (or your Writer ID if you have not set one), the title, whether the sim is active or complete, and when you last shared it
+- Added: a share link is a snapshot, not a window. It shows the sim as it was when you shared it, so you can carry on writing without strangers watching the draft change. The dialog tells you when the shared copy has fallen behind, and Update shared copy publishes the current version to the same link
+- Added: share links can be set to expire — after 24 hours, 7 days, 30 days, or never. Stop sharing kills the link immediately for everyone who has it, and sharing again afterwards makes a new address rather than reviving the old one
+- Added: shared sims open on a page of their own rather than loading the whole of LCARS, so a link is quick on a phone. It is built for a narrow screen from the start, since that is where these get read
+- Changed: expired share links are now tidied away automatically, so a link that has run out does not sit around after it has stopped working
+- Fixed: shared sims were double spaced. The page added a gap under every paragraph on top of the blank lines the sim already contains — it now spaces them exactly as the editor does
+- Fixed: shared sims showed the coloured marker highlights from the editor. Those are a writing aid for spotting your own markers mid-sim, and have no place in a finished sim someone has been sent a link to — a shared sim now reads the way it does when you copy it out
+- Fixed: formatting was missing from shared sims. Locations are bold again, and thoughts and OOC notes are italic, following the same preferences the app uses when you copy a sim to the clipboard
+- Fixed: locations and OOC notes were tinted grey on the share page, which is a colour the app has never given them
+- Added: a Light / Dark switch on the share page. It follows the reader’s own device setting to begin with and remembers their choice — it used to be dark for everyone, whatever they preferred
+- Changed: the share page header takes up far less room. The title is smaller and the writer, Writer ID, status and date now sit on one line under it instead of four stacked rows above the sim
+- Changed: the share page now uses the app’s own colours and header, so a shared sim looks like LCARS instead of a plain web page
+- Changed: shared sims now open in light mode by default, with the Light / Dark switch still there and still remembered. A sim someone has been sent to read is a document, and a page of prose reads like one — the dark chrome is for the person writing it
+- Changed: character colours no longer carry over to a shared sim. They are a way of telling your own speakers apart while writing, and mean nothing to a reader who does not know the scheme — copying a sim out has always dropped them, and a share link now matches that exactly
+- Added: if a share link expires, the page says so at the top — “Shared sim · Read only · Link expires Aug 24, 2:30 PM” — so a reader knows before the link dies rather than after
+- Fixed: if sharing failed because the page was running an older version of LCARS than the server, the error was a raw database message about a missing column. It now says what it is and what to do — reload the page
+- Changed: share links now say how long is left rather than a date and time — “Expires in 3 days”, “Expires in 5 hours”, “Expires in 45 minutes”. A clock time was shown in whichever timezone the reader happened to be in, so it meant two different moments to you and the person you sent it to
+- Changed: the countdown on a shared sim keeps ticking while the page is open, instead of freezing at whatever it said when the page loaded
 
 ## v4.23 — 2026-08-15
 
