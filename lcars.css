@@ -1157,6 +1157,58 @@ body.hc .contact-card-bar{color:#000}
 #btn-share.sh-on{border-color:var(--amber);color:var(--amber)}
 #sh-url{font-size:0.8rem}
 
+
+/* ── JOINT POSTS ──────────────────────────────────────────────────────────
+   The turn bar sits above the editor and is the only place that says whose
+   turn it is, so it has to read at a glance without being shouty. Colour
+   carries the state; the words carry the meaning, because colour alone is not
+   an answer on a high-contrast theme. */
+.jp-bar{display:flex;align-items:center;gap:12px;justify-content:space-between;
+  flex-wrap:wrap;padding:8px 14px;margin:0 0 8px;border-radius:8px;
+  border:1px solid var(--border);background:var(--panel);
+  font-size:0.82rem;line-height:1.4}
+.jp-bar .jp-msg{flex:1 1 auto;min-width:0}
+.jp-bar .jp-acts{display:flex;gap:8px;flex:0 0 auto}
+.jp-bar.jp-mine{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 12%,var(--panel))}
+.jp-bar.jp-busy{border-color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--panel))}
+.jp-bar.jp-free{border-color:var(--border)}
+.jp-bar.jp-off {border-color:var(--dim);color:var(--dim)}
+
+/* Read-only: grey the writing controls out. This is one of THREE places the
+   restriction lives -- the guards in the commands and the keyboard handler are
+   the other two, and all three key off body.jp-readonly so they cannot drift
+   apart. Greying a button without the other two is how a shortcut ends up
+   still writing into a sim somebody else holds. */
+body.jp-readonly #editor{opacity:0.82;cursor:default}
+body.jp-readonly #tb .btn,
+body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
+
+/* Roster and invitations. */
+.jp-row{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;
+  padding:7px 0;border-bottom:1px solid var(--border)}
+.jp-row:last-child{border-bottom:none}
+.jp-wid{font-weight:bold;letter-spacing:0.02em}
+.jp-role{font-size:0.74rem;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em}
+.jp-empty{padding:10px 0;color:var(--dim)}
+.jp-add{display:flex;gap:8px;align-items:center;margin-top:8px}
+.jp-add .mi{flex:1 1 auto;margin:0}
+
+.jp-inv{border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;
+  background:var(--bg)}
+.jp-inv-t{font-weight:bold}
+.jp-inv-s{font-size:0.76rem;color:var(--dim);margin-bottom:8px}
+.jp-inv-a{display:flex;gap:8px;justify-content:flex-end}
+
+#btn-jp-invites{position:relative}
+#jp-invite-badge{display:inline-block;min-width:16px;margin-left:6px;padding:0 4px;
+  border-radius:8px;background:var(--gold,#c9a227);color:#000;
+  font-size:0.66rem;font-weight:bold;line-height:16px;text-align:center}
+
+/* A joint sim in the nav tree, so it is obvious which ones are shared. */
+.jp-tag{display:inline-block;margin-left:6px;padding:0 5px;border-radius:6px;
+  border:1px solid var(--amber);color:var(--amber);
+  font-size:0.62rem;line-height:14px;letter-spacing:0.06em}
+
 /* ── RESPONSIVE ──
    Kept last so it outranks the skin overrides above. Covers the header and the
    two views built as pages (Settings has its own rules with its section). */
@@ -1231,4 +1283,17 @@ body.hc .contact-card-bar{color:#000}
   #mo-actions .btn{flex:1 1 auto}
   .sh-note{font-size:0.87rem}
   #sh-url{font-size:16px}   /* iOS Safari zooms into any focused field under 16px */
+}
+
+/* Joint sims: the turn bar stacks on a phone rather than squeezing the
+   message down to nothing, and the roster's Remove buttons drop under the
+   Writer ID instead of shrinking it. */
+@media (max-width:820px){
+  .jp-bar{align-items:flex-start}
+  .jp-bar .jp-acts{width:100%}
+  .jp-bar .jp-acts .btn{flex:1 1 auto}
+  .jp-row{grid-template-columns:1fr auto}
+  .jp-row .btn{grid-column:1 / -1}
+  .jp-add{flex-wrap:wrap}
+  .jp-add .mi{flex:1 1 100%;font-size:16px}
 }

@@ -68,3 +68,8 @@ Without this, OAuth logins bounce back to the wrong place.
   `schema.sql`, so applying the schema is the whole deployment.
 - **Free tier** pauses a project after ~1 week with no activity. It resumes from
   the dashboard, but is worth knowing during quiet stretches early on.
+- **The schema has tests now** — `supabase/test/run.sh` stands up a throwaway
+  local Postgres, applies `schema.sql` twice (it has to be re-runnable) and
+  exercises the Joint Posts lock, the stale-write check and the RLS policies.
+  It proves the SQL, not Supabase: PostgREST, the JWT and the hosted `auth`
+  schema are stubbed. Worth running after any change to `schema.sql`.

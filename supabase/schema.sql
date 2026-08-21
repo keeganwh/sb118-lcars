@@ -699,3 +699,726 @@ end $$;
 
 revoke all on function public.purge_expired_shares() from public, anon;
 grant execute on function public.purge_expired_shares() to authenticated;
+
+-- ===========================================================================
+-- JOINT POSTS
+-- ===========================================================================
+-- A joint sim is a sim two or more writers take turns on. One soft lock at a
+-- time, handed back and forth; there is deliberately no simultaneous typing.
+--
+-- WHY THESE ROWS EXIST AT ALL. Every solo sim lives inside one jsonb blob,
+-- public.state.payload, which the app POSTs *in its entirety* every few seconds
+-- while you type. Two writers sharing a sim in that blob would each be writing
+-- their whole document set over the other's, every few seconds, with no field
+-- granularity to reconcile against. A joint sim in the payload is not racy --
+-- it is unbuildable. So it gets a row of its own.
+--
+-- WHY ONLY JOINT SIMS MOVE. Lifting *every* doc out of the blob is the right
+-- long-term shape (saving one sentence currently re-uploads your whole
+-- archive), but it drags in the sync path, the reconcile prompt, offline mode
+-- and a data migration for every existing writer. That is a separate, staged
+-- piece of work -- add the table, dual-write, flip reads behind a flag, then
+-- stop writing the blob -- and it is tracked in ROADMAP. Everything below is
+-- built so that migration inherits it rather than replacing it.
+--
+-- doc_id is text and is the same id the app already uses locally, matching
+-- public.shared_docs, so a joint sim can be shared read-only with no special
+-- casing at all.
+
+-- ---------------------------------------------------------------------------
+-- jp_docs : one row per joint sim
+-- ---------------------------------------------------------------------------
+-- `version` is the whole safety model for writes. Every save sends the version
+-- it loaded and updates `where version = $expected`; zero rows updated means
+-- "somebody else moved it under you", and the app reloads instead of
+-- overwriting. This is NOT belt-and-braces on top of the lock -- it is the part
+-- that actually works. The dangerous case is not two people typing at once; it
+-- is one person whose lock quietly expired, whose browser has not noticed,
+-- saving over the next holder's work. A lock cannot catch that. A version can.
+--
+-- mission_id / scene_id are the OWNER's filing. Missions and scenes still live
+-- in each writer's own payload blob, so those ids mean nothing to anybody else
+-- -- a member sees the sim in a Joint Posts group rather than under a mission
+-- of theirs. Per-member local filing is a follow-up, noted in ROADMAP.
+create table if not exists public.jp_docs (
+  doc_id       text primary key,
+  owner_uid    uuid not null references auth.users(id) on delete cascade,
+  title        text not null default '',
+  content      text not null default '',
+  status       text not null default 'active',
+  post_type    text,
+  posted_at    timestamptz,
+  mission_id   text,
+  scene_id     text,
+  academy      boolean not null default false,
+  format       jsonb  not null default '{}'::jsonb,
+  meta         jsonb  not null default '{}'::jsonb,
+  version      integer not null default 1,
+  locked_by    uuid references auth.users(id) on delete set null,
+  locked_at    timestamptz,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+
+comment on column public.jp_docs.version is
+  'Bumped on every accepted save. A save that names a stale version is refused
+   rather than applied -- see jp_save().';
+comment on column public.jp_docs.meta is
+  'chars / myChars / charColors, the parts of a doc the render pass needs but
+   nothing queries on.';
+
+create index if not exists jp_docs_owner_idx on public.jp_docs (owner_uid);
+
+drop trigger if exists jp_docs_touch on public.jp_docs;
+create trigger jp_docs_touch before update on public.jp_docs
+  for each row execute function public.touch_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- jp_members : who is on a joint sim
+-- ---------------------------------------------------------------------------
+create table if not exists public.jp_members (
+  doc_id     text not null references public.jp_docs(doc_id) on delete cascade,
+  member_uid uuid not null references auth.users(id) on delete cascade,
+  role       text not null default 'writer' check (role in ('owner', 'writer')),
+  joined_at  timestamptz not null default now(),
+  primary key (doc_id, member_uid)
+);
+
+create index if not exists jp_members_uid_idx on public.jp_members (member_uid);
+
+-- ---------------------------------------------------------------------------
+-- jp_invitations : keyed by Writer ID text, not uid
+-- ---------------------------------------------------------------------------
+-- Deliberately text. public.writers is `auth.uid() = id`, so a writer cannot
+-- read anyone else's row and therefore CANNOT resolve a Writer ID to a uid from
+-- the client. The lookup has to happen server-side, in jp_invite() below.
+create table if not exists public.jp_invitations (
+  id         uuid primary key default gen_random_uuid(),
+  doc_id     text not null references public.jp_docs(doc_id) on delete cascade,
+  writer_id  text not null,
+  invited_by uuid not null references auth.users(id) on delete cascade,
+  status     text not null default 'open'
+               check (status in ('open', 'accepted', 'declined', 'revoked')),
+  created_at timestamptz not null default now(),
+  decided_at timestamptz
+);
+
+create unique index if not exists jp_invitations_open_idx
+  on public.jp_invitations (doc_id, writer_id) where status = 'open';
+create index if not exists jp_invitations_writer_idx
+  on public.jp_invitations (writer_id) where status = 'open';
+
+-- ---------------------------------------------------------------------------
+-- is_jp_member() / is_jp_owner() : membership read outside RLS
+-- ---------------------------------------------------------------------------
+-- THE RECURSION TRAP, and it is the same one my_role() exists to solve. The
+-- policy on jp_docs wants to ask "am I a member?", which reads jp_members,
+-- whose own policy wants to ask "can I see that doc?", which reads jp_docs.
+-- Postgres detects the loop and fails the query at run time.
+--
+-- These read with RLS bypassed and answer only about auth.uid(), so they hand
+-- out nothing the caller could not already establish about themselves.
+create or replace function public.is_jp_member(p_doc_id text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from public.jp_members
+                  where doc_id = p_doc_id and member_uid = auth.uid());
+$$;
+
+create or replace function public.is_jp_owner(p_doc_id text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from public.jp_docs
+                  where doc_id = p_doc_id and owner_uid = auth.uid());
+$$;
+
+grant execute on function public.is_jp_member(text) to authenticated;
+grant execute on function public.is_jp_owner(text)  to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Joint Posts RLS
+-- ---------------------------------------------------------------------------
+alter table public.jp_docs        enable row level security;
+alter table public.jp_members     enable row level security;
+alter table public.jp_invitations enable row level security;
+
+-- Read: owner or member. Anyone else gets nothing -- not a permission error on
+-- a doc they can see the shape of, but no row at all.
+drop policy if exists jp_docs_read on public.jp_docs;
+create policy jp_docs_read on public.jp_docs
+  for select using (owner_uid = auth.uid() or public.is_jp_member(doc_id));
+
+-- Create: you can only ever create a joint sim you own.
+drop policy if exists jp_docs_insert on public.jp_docs;
+create policy jp_docs_insert on public.jp_docs
+  for insert with check (owner_uid = auth.uid());
+
+-- Direct updates are NOT granted to members. Content changes go through
+-- jp_save(), which is where the lock and the version check live; letting a
+-- member PATCH the row would route straight past both. The owner keeps a direct
+-- update path for the things that are not content -- renaming, refiling.
+drop policy if exists jp_docs_update on public.jp_docs;
+create policy jp_docs_update on public.jp_docs
+  for update using (owner_uid = auth.uid()) with check (owner_uid = auth.uid());
+
+drop policy if exists jp_docs_delete on public.jp_docs;
+create policy jp_docs_delete on public.jp_docs
+  for delete using (owner_uid = auth.uid());
+
+-- Members: everyone on a sim can see who else is on it. Changing the roster is
+-- the owner's alone, and goes through the functions below -- except leaving,
+-- which anybody may do for themselves.
+drop policy if exists jp_members_read on public.jp_members;
+create policy jp_members_read on public.jp_members
+  for select using (member_uid = auth.uid() or public.is_jp_member(doc_id));
+
+drop policy if exists jp_members_leave on public.jp_members;
+create policy jp_members_leave on public.jp_members
+  for delete using (member_uid = auth.uid() and role <> 'owner');
+
+-- Invitations: you see the ones addressed to you, and the ones on a sim you
+-- own. Writing them is jp_invite()'s job only.
+drop policy if exists jp_invitations_read on public.jp_invitations;
+create policy jp_invitations_read on public.jp_invitations
+  for select using (
+    public.is_jp_owner(doc_id)
+    or writer_id = (select writer_id from public.writers where id = auth.uid())
+  );
+
+-- Table privileges are the outer gate, the policy the inner one -- the same
+-- discipline as pin_reset_requests. No direct insert on members or invitations
+-- from any role, so a mistake in a policy still cannot open a write path.
+revoke all on table public.jp_docs        from anon, authenticated;
+revoke all on table public.jp_members     from anon, authenticated;
+revoke all on table public.jp_invitations from anon, authenticated;
+grant select, insert, update, delete on table public.jp_docs to authenticated;
+grant select, delete                 on table public.jp_members to authenticated;
+grant select                         on table public.jp_invitations to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- The owner is a member of their own sim, always
+-- ---------------------------------------------------------------------------
+-- Written by a trigger rather than by the client, because jp_members has no
+-- insert privilege at all -- and because "owner exists in the roster" is an
+-- invariant the rest of this section leans on, not a step a caller can forget.
+create or replace function public.jp_add_owner_member()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.jp_members (doc_id, member_uid, role)
+       values (new.doc_id, new.owner_uid, 'owner')
+  on conflict (doc_id, member_uid) do update set role = 'owner';
+  return new;
+end $$;
+
+drop trigger if exists jp_docs_owner_member on public.jp_docs;
+create trigger jp_docs_owner_member after insert on public.jp_docs
+  for each row execute function public.jp_add_owner_member();
+
+-- ---------------------------------------------------------------------------
+-- jp_invite() : invite by Writer ID
+-- ---------------------------------------------------------------------------
+-- Must be security definer: the caller cannot read public.writers to turn a
+-- Writer ID into a uid, and should not be able to.
+--
+-- It borrows request_pin_reset()'s discipline about unknown IDs. An ID that
+-- holds no account is accepted silently and nothing is written, so this cannot
+-- be used to enumerate which Writer IDs have LCARS accounts. The cost is the
+-- same one: mistype a colleague's ID and you get a cheerful confirmation and no
+-- invitation, so the app says to check it. The owner can see the pending list,
+-- which is the honest way to notice a typo.
+create or replace function public.jp_invite(p_doc_id text, p_writer_id text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  wid    text := upper(regexp_replace(coalesce(p_writer_id, ''), '[^A-Za-z0-9]', '', 'g'));
+  target uuid;
+begin
+  if not public.is_jp_owner(p_doc_id) then
+    raise exception 'Only the owner of a joint sim can invite people to it.';
+  end if;
+  if wid = '' then
+    raise exception 'Please enter a Writer ID.';
+  end if;
+
+  select id into target from public.writers
+   where writer_id = wid and deleted_at is null;
+
+  -- Unknown, or already on the sim: say nothing, do nothing.
+  if target is null then return; end if;
+  if exists (select 1 from public.jp_members
+              where doc_id = p_doc_id and member_uid = target) then return; end if;
+
+  insert into public.jp_invitations (doc_id, writer_id, invited_by)
+       values (p_doc_id, wid, auth.uid())
+  on conflict do nothing;
+end $$;
+
+revoke all on function public.jp_invite(text, text) from public, anon;
+grant execute on function public.jp_invite(text, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- jp_accept_invite() / jp_decline_invite()
+-- ---------------------------------------------------------------------------
+-- Accepting is the only path that writes jp_members, which is why that table
+-- grants no insert to anybody. The invitation is matched on the caller's OWN
+-- Writer ID, read here rather than passed in, so an id from the client cannot
+-- be used to accept somebody else's invitation.
+create or replace function public.jp_accept_invite(p_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  me  text := (select writer_id from public.writers where id = auth.uid());
+  inv public.jp_invitations%rowtype;
+begin
+  select * into inv from public.jp_invitations
+   where id = p_id and writer_id = me and status = 'open';
+  if inv.id is null then
+    raise exception 'That invitation is no longer open.';
+  end if;
+
+  insert into public.jp_members (doc_id, member_uid, role)
+       values (inv.doc_id, auth.uid(), 'writer')
+  on conflict (doc_id, member_uid) do nothing;
+
+  update public.jp_invitations
+     set status = 'accepted', decided_at = now()
+   where id = p_id;
+
+  return inv.doc_id;
+end $$;
+
+create or replace function public.jp_decline_invite(p_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare me text := (select writer_id from public.writers where id = auth.uid());
+begin
+  update public.jp_invitations
+     set status = 'declined', decided_at = now()
+   where id = p_id and writer_id = me and status = 'open';
+end $$;
+
+revoke all on function public.jp_accept_invite(uuid)  from public, anon;
+revoke all on function public.jp_decline_invite(uuid) from public, anon;
+grant execute on function public.jp_accept_invite(uuid)  to authenticated;
+grant execute on function public.jp_decline_invite(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- jp_revoke_invite() / jp_remove_member() : the owner's side of the roster
+-- ---------------------------------------------------------------------------
+create or replace function public.jp_revoke_invite(p_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare d text;
+begin
+  select doc_id into d from public.jp_invitations where id = p_id;
+  if d is null or not public.is_jp_owner(d) then
+    raise exception 'Only the owner of a joint sim can withdraw its invitations.';
+  end if;
+  update public.jp_invitations
+     set status = 'revoked', decided_at = now()
+   where id = p_id and status = 'open';
+end $$;
+
+-- Removing the person who currently holds the lock also frees it, or the sim
+-- would be left locked by somebody who is no longer on it.
+create or replace function public.jp_remove_member(p_doc_id text, p_member uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_jp_owner(p_doc_id) then
+    raise exception 'Only the owner of a joint sim can remove people from it.';
+  end if;
+  if p_member = auth.uid() then
+    raise exception 'The owner cannot be removed from their own joint sim.';
+  end if;
+
+  delete from public.jp_members
+   where doc_id = p_doc_id and member_uid = p_member;
+
+  update public.jp_docs
+     set locked_by = null, locked_at = null
+   where doc_id = p_doc_id and locked_by = p_member;
+end $$;
+
+revoke all on function public.jp_revoke_invite(uuid)        from public, anon;
+revoke all on function public.jp_remove_member(text, uuid)  from public, anon;
+grant execute on function public.jp_revoke_invite(uuid)       to authenticated;
+grant execute on function public.jp_remove_member(text, uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- The lock
+-- ---------------------------------------------------------------------------
+-- Three things a naive lock gets wrong, all of them handled here rather than in
+-- the browser:
+--
+--   1. IT MUST EXPIRE. Somebody will close their laptop holding it. A lock
+--      older than jp_lock_minutes() is free for the taking. The expiry is
+--      evaluated HERE, against now() in the database -- a countdown running in
+--      a tab is not a lock, it is a wish.
+--      Five minutes reads short for a form of writing measured in hours, and it
+--      is only safe because saving RENEWS the turn (see jp_save) and the app
+--      autosaves a couple of seconds after a keystroke. So the clock measures
+--      genuine idleness, not thinking-while-typing. Someone who stares at the
+--      screen for six minutes without touching the keyboard can lose the turn --
+--      they take it back with one press, and nothing they typed is lost, because
+--      a stale save is refused rather than applied.
+--   2. IT MUST NOT BE THE ONLY GUARD. See jp_save(): a lapsed holder whose
+--      browser has not noticed is the actual danger, and only the version
+--      check catches that one.
+--   3. THE OWNER MUST BE ABLE TO BREAK IT. If a lock is stuck and the holder is
+--      asleep, waiting is not a plan.
+create or replace function public.jp_lock_minutes()
+returns integer language sql immutable as $$ select 5 $$;
+
+-- Returns the row as it stands after the attempt, so one round trip tells the
+-- app both whether it got the lock and who has it if not.
+create or replace function public.jp_take_lock(p_doc_id text)
+returns table (locked_by uuid, locked_at timestamptz, got boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare cur public.jp_docs%rowtype;
+begin
+  if not public.is_jp_member(p_doc_id) then
+    raise exception 'That joint sim is not one of yours.';
+  end if;
+
+  -- Row lock for the duration of the transaction, so two writers pressing the
+  -- button in the same instant cannot both read "free" and both take it.
+  select * into cur from public.jp_docs where doc_id = p_doc_id for update;
+  if cur.doc_id is null then
+    raise exception 'That joint sim no longer exists.';
+  end if;
+
+  if cur.locked_by is not null
+     and cur.locked_by <> auth.uid()
+     and cur.locked_at > now() - make_interval(mins => public.jp_lock_minutes()) then
+    return query select cur.locked_by, cur.locked_at, false;
+    return;
+  end if;
+
+  update public.jp_docs
+     set locked_by = auth.uid(), locked_at = now()
+   where doc_id = p_doc_id;
+
+  return query select auth.uid(), now()::timestamptz, true;
+end $$;
+
+create or replace function public.jp_release_lock(p_doc_id text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- The holder releases their own; the owner can break anybody's.
+  update public.jp_docs
+     set locked_by = null, locked_at = null
+   where doc_id = p_doc_id
+     and (locked_by = auth.uid() or owner_uid = auth.uid());
+end $$;
+
+revoke all on function public.jp_take_lock(text)    from public, anon;
+revoke all on function public.jp_release_lock(text) from public, anon;
+grant execute on function public.jp_take_lock(text)    to authenticated;
+grant execute on function public.jp_release_lock(text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- jp_save() : the only way content changes
+-- ---------------------------------------------------------------------------
+-- Refuses on THREE separate grounds, and each one catches a case the others
+-- miss:
+--
+--   * not a member         -- the ordinary access check;
+--   * lock held by someone else, unexpired -- the ordinary turn-taking check;
+--   * p_version is not the current version -- the one that matters. A writer
+--     whose lock lapsed while they were typing, and whose browser has not
+--     caught up, will pass the first two checks and still be about to
+--     obliterate the next holder's work. This is where they are stopped.
+--
+-- Returns the new version on success. Raises with a recognisable message on a
+-- stale write, so the app can offer a reload rather than a shrug.
+create or replace function public.jp_save(
+  p_doc_id  text,
+  p_version integer,
+  p_content text,
+  p_title   text,
+  p_status  text,
+  p_meta    jsonb
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare cur public.jp_docs%rowtype;
+begin
+  if not public.is_jp_member(p_doc_id) then
+    raise exception 'That joint sim is not one of yours.';
+  end if;
+
+  select * into cur from public.jp_docs where doc_id = p_doc_id for update;
+  if cur.doc_id is null then
+    raise exception 'That joint sim no longer exists.';
+  end if;
+
+  if cur.locked_by is not null
+     and cur.locked_by <> auth.uid()
+     and cur.locked_at > now() - make_interval(mins => public.jp_lock_minutes()) then
+    raise exception 'JP_LOCKED';
+  end if;
+
+  if cur.version <> p_version then
+    raise exception 'JP_STALE';
+  end if;
+
+  update public.jp_docs
+     set content = coalesce(p_content, content),
+         title   = coalesce(p_title, title),
+         status  = coalesce(p_status, status),
+         meta    = coalesce(p_meta, meta),
+         version = cur.version + 1,
+         -- Saving is proof you are still here, so it renews your turn.
+         locked_by = auth.uid(),
+         locked_at = now()
+   where doc_id = p_doc_id;
+
+  return cur.version + 1;
+end $$;
+
+revoke all on function public.jp_save(text, integer, text, text, text, jsonb) from public, anon;
+grant execute on function public.jp_save(text, integer, text, text, text, jsonb) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- jp_list() : every joint sim the caller is on, with presence
+-- ---------------------------------------------------------------------------
+-- One call feeds the dashboard AND the "X is writing..." line, which is why
+-- presence needs no WebSocket. The roadmap suggested Supabase Realtime; that is
+-- a Phoenix-channel protocol normally reached through supabase-js, and this
+-- project has no SDK, no bundler and no npm -- deliberately, because that is
+-- what keeps the one-file offline download working. Polling this every few
+-- seconds is twenty lines and no new failure mode, and PBEM is measured in
+-- hours. Do not add supabase-js to shave latency nobody is waiting on.
+--
+-- lock_holder is a Writer ID, resolved here: members cannot read each other's
+-- rows in public.writers, so the client could not turn the uid into a name.
+create or replace function public.jp_list()
+returns table (
+  doc_id      text,
+  owner_uid   uuid,
+  owner_wid   text,
+  title       text,
+  status      text,
+  post_type   text,
+  posted_at   timestamptz,
+  academy     boolean,
+  version     integer,
+  locked_by   uuid,
+  lock_wid    text,
+  lock_active boolean,
+  member_count integer,
+  updated_at  timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select d.doc_id, d.owner_uid, ow.writer_id, d.title, d.status, d.post_type,
+         d.posted_at, d.academy, d.version, d.locked_by, lw.writer_id,
+         (d.locked_by is not null
+           and d.locked_at > now() - make_interval(mins => public.jp_lock_minutes())),
+         (select count(*)::integer from public.jp_members m2 where m2.doc_id = d.doc_id),
+         d.updated_at
+    from public.jp_docs d
+    join public.jp_members m on m.doc_id = d.doc_id and m.member_uid = auth.uid()
+    left join public.writers ow on ow.id = d.owner_uid
+    left join public.writers lw on lw.id = d.locked_by
+   order by d.updated_at desc;
+$$;
+
+revoke all on function public.jp_list() from public, anon;
+grant execute on function public.jp_list() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- jp_doc() : one joint sim in full, for opening it
+-- ---------------------------------------------------------------------------
+create or replace function public.jp_doc(p_doc_id text)
+returns table (
+  doc_id text, owner_uid uuid, title text, content text, status text,
+  post_type text, posted_at timestamptz, academy boolean, format jsonb,
+  meta jsonb, version integer, locked_by uuid, lock_wid text,
+  lock_active boolean, updated_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select d.doc_id, d.owner_uid, d.title, d.content, d.status, d.post_type,
+         d.posted_at, d.academy, d.format, d.meta, d.version, d.locked_by,
+         lw.writer_id,
+         (d.locked_by is not null
+           and d.locked_at > now() - make_interval(mins => public.jp_lock_minutes())),
+         d.updated_at
+    from public.jp_docs d
+    left join public.writers lw on lw.id = d.locked_by
+   where d.doc_id = p_doc_id and public.is_jp_member(p_doc_id);
+$$;
+
+-- jp_roster() : who is on a sim, and who has been asked. Writer IDs again,
+-- because members cannot read each other's rows directly.
+create or replace function public.jp_roster(p_doc_id text)
+returns table (member_uid uuid, writer_id text, role text, joined_at timestamptz)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select m.member_uid, w.writer_id, m.role, m.joined_at
+    from public.jp_members m
+    left join public.writers w on w.id = m.member_uid
+   where m.doc_id = p_doc_id and public.is_jp_member(p_doc_id)
+   order by m.role desc, m.joined_at;
+$$;
+
+-- jp_my_invites() : open invitations addressed to the caller.
+create or replace function public.jp_my_invites()
+returns table (id uuid, doc_id text, title text, from_wid text, created_at timestamptz)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select i.id, i.doc_id, d.title, w.writer_id, i.created_at
+    from public.jp_invitations i
+    join public.jp_docs d on d.doc_id = i.doc_id
+    left join public.writers w on w.id = i.invited_by
+   where i.status = 'open'
+     and i.writer_id = (select writer_id from public.writers where id = auth.uid())
+   order by i.created_at;
+$$;
+
+revoke all on function public.jp_doc(text)    from public, anon;
+revoke all on function public.jp_roster(text) from public, anon;
+revoke all on function public.jp_my_invites() from public, anon;
+grant execute on function public.jp_doc(text)    to authenticated;
+grant execute on function public.jp_roster(text) to authenticated;
+grant execute on function public.jp_my_invites() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Account deletion must not take other people's writing with it
+-- ---------------------------------------------------------------------------
+-- jp_docs.owner_uid cascades from auth.users, so the DEFAULT behaviour of the
+-- 48-hour purge is that an owner leaving silently destroys every joint sim they
+-- started -- including the halves other people wrote. That is the worst
+-- available outcome and it is the one that happens if nobody says otherwise.
+--
+-- So: transfer, don't cascade. Ownership passes to the longest-standing
+-- remaining member. A joint sim with nobody else on it is a solo sim in all but
+-- name and goes with its owner, as expected.
+--
+-- The alternatives were weighed and rejected. Blocking deletion until the
+-- writer hands over would make account deletion refusable, and the recovery and
+-- deletion work is emphatic that leaving must always be honourable. Orphaning
+-- the sim (owner null, members keep access) destroys nothing but leaves an
+-- object nobody can invite to, remove from or delete -- permanently
+-- unmanageable, for no gain over transferring it.
+--
+-- KNOWN GAP: the new owner is not told. There is no notification surface in the
+-- app yet, and building one inside Joint Posts would be the tail wagging the
+-- dog. Tracked in ROADMAP.
+create or replace function public.jp_transfer_orphans(p_uid uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  d public.jp_docs%rowtype;
+  heir uuid;
+begin
+  for d in select * from public.jp_docs where owner_uid = p_uid loop
+    select member_uid into heir
+      from public.jp_members
+     where doc_id = d.doc_id and member_uid <> p_uid
+     order by joined_at
+     limit 1;
+
+    -- Nobody else on it: it is solo in all but name, let the cascade have it.
+    if heir is null then continue; end if;
+
+    update public.jp_docs set owner_uid = heir where doc_id = d.doc_id;
+    update public.jp_members set role = 'owner'
+     where doc_id = d.doc_id and member_uid = heir;
+    -- Their own membership row goes with the cascade; the lock must not linger.
+    update public.jp_docs set locked_by = null, locked_at = null
+     where doc_id = d.doc_id and locked_by = p_uid;
+  end loop;
+end $$;
+
+revoke all on function public.jp_transfer_orphans(uuid) from public, anon, authenticated;
+
+-- Re-stated with the transfer wired in. ORDER IS THE WHOLE POINT: the handover
+-- has to happen while the rows still exist, so it runs before the delete rather
+-- than after it.
+create or replace function public.purge_expired_deletions()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  purged integer;
+  victim uuid;
+begin
+  for victim in
+    select w.id from public.writers w
+     where w.deleted_at is not null
+       and w.deleted_at < now() - interval '48 hours'
+  loop
+    perform public.jp_transfer_orphans(victim);
+  end loop;
+
+  with gone as (
+    delete from auth.users u
+     using public.writers w
+     where w.id = u.id
+       and w.deleted_at is not null
+       and w.deleted_at < now() - interval '48 hours'
+    returning u.id
+  )
+  select count(*) into purged from gone;
+  return purged;
+end $$;
+
+revoke all on function public.purge_expired_deletions() from public, anon;
+grant execute on function public.purge_expired_deletions() to authenticated;
