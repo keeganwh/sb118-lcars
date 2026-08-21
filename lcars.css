@@ -379,6 +379,7 @@ body.hc #cp{border-left:3px solid var(--blue)}
 .set-danger-block{border:1px solid var(--red,#a44);border-radius:8px;padding:12px 13px;margin-top:16px}
 .set-danger-block .ml{margin-bottom:2px}
 /* Sim templates */
+.set-tmpl-actions{margin-top:10px}
 .set-tmpl-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .set-tmpl-row{background:var(--panel2,var(--bg));border:1px solid var(--border);border-radius:8px;
   display:flex;align-items:center;gap:10px;padding:0 10px 0 0}
