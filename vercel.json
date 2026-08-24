@@ -3,6 +3,7 @@
   "rewrites": [
     { "source": "/", "destination": "/LCARS.html" },
     { "source": "/settings", "destination": "/LCARS.html" },
+    { "source": "/characters", "destination": "/LCARS.html" },
     { "source": "/manifest", "destination": "/LCARS.html" },
     { "source": "/admin", "destination": "/LCARS.html" },
     { "source": "/s/:token", "destination": "/share.html" },

@@ -125,7 +125,7 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
   </button>
   <div class="hdr-right">
     <button class="btn btn-s btn-sm" id="btn-dash" onclick="goHome()" title="Command Dashboard"><svg class="ic" aria-hidden="true"><use href="#i-hexagon"/></svg> Dashboard</button>
-    <button class="btn btn-s btn-sm" id="btn-manifest-toggle" onclick="openManifest()"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg> Character Manifest</button>
+    <button class="btn btn-s btn-sm" id="btn-manifest-toggle" onclick="openManifest()"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg> Characters</button>
     <div class="tsep"></div>
     <div id="style-picker">
       <button class="btn btn-s btn-sm" id="btn-style" title="Style"
@@ -350,10 +350,10 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
 
 </div><!-- /workspace -->
 
-<!-- CHARACTER MANIFEST VIEW — a sibling of the workspace, so it wears the same
+<!-- CHARACTERS VIEW — a sibling of the workspace, so it wears the same
      app header as every other view and the open sim is left untouched behind
      it. -->
-<div id="view-manifest" class="view hidden">
+<div id="view-characters" class="view hidden">
   <!-- Narrow screens only: the character list folds away behind this so the
        profile you came to read gets the screen. -->
   <div id="cm-mobile-bar">
@@ -363,7 +363,7 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
   </div>
   <div id="cm-left">
     <div class="cm-hdr">
-      <span>MANIFEST</span>
+      <span>CHARACTERS</span>
       <button class="cm-add-btn" onclick="addNewCharacter()">+ Add</button>
       <button class="cm-hdr-btn" onclick="refreshManifest()" title="Refresh stats"><svg class="ic" aria-hidden="true"><use href="#i-rotate-ccw"/></svg></button>
     </div>

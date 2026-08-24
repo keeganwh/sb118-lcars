@@ -527,7 +527,7 @@ body.hc .contact-card-bar{color:#000}
 /* ── CHARACTER MANIFEST ── */
 /* A view like any other: it fills the space under the app header rather than
    covering the whole window, so the header stays reachable from inside it. */
-#view-manifest{display:flex;background:var(--bg)}
+#view-characters{display:flex;background:var(--bg)}
 #cm-mobile-bar{display:none;align-items:center;gap:10px;padding:7px 10px;background:var(--panel);
   border-bottom:1px solid var(--border);flex-shrink:0}
 #cm-current-name{flex:1;min-width:0;font-size:0.93rem;font-weight:bold;color:var(--text);
@@ -609,18 +609,9 @@ body.hc .contact-card-bar{color:#000}
 .cm-del-btn{width:100%;background:transparent;border:1px solid var(--red);color:var(--red);border-radius:4px;padding:5px 12px;font-family:inherit;font-size:0.8rem;cursor:pointer;margin-top:6px}
 .cm-del-btn:hover{background:rgba(255,68,68,.1)}
 /* Tab system */
-.cm-tabs{display:flex;gap:4px;padding:0 0 10px 0;border-bottom:1px solid var(--border);margin-bottom:12px}
-.cm-tab{background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:4px;padding:5px 14px;font-family:inherit;font-size:0.78rem;cursor:pointer;letter-spacing:.5px}
-.cm-tab:hover{border-color:var(--amber);color:var(--amber)}
-.cm-tab-active{background:var(--amber);border-color:var(--amber);color:#000;font-weight:bold}
-.cm-tab-active:hover{background:var(--amber);color:#000}
 /* Tab shared toolbar */
-.cm-tab-toolbar{display:flex;align-items:center;gap:6px;justify-content:flex-end;margin-bottom:10px}
 .cm-tab-action{background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:4px;padding:4px 10px;font-family:inherit;font-size:0.75rem;cursor:pointer}
 .cm-tab-action:hover{border-color:var(--amber);color:var(--amber)}
-.cm-tab-empty{color:var(--dim);font-size:0.8rem;padding:12px 0;line-height:1.5}
-.cm-tab-add-btn{background:transparent;border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 12px;font-family:inherit;font-size:0.78rem;cursor:pointer;margin-top:8px}
-.cm-tab-add-btn:hover{border-color:var(--amber);color:var(--amber)}
 /* Sims tab */
 .cm-sim-col-hdr{display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:0 6px 4px;font-size:0.67rem;letter-spacing:1px;color:var(--dim);border-bottom:1px solid var(--border);margin-bottom:6px}
 .cm-mission-group{margin-bottom:14px}
@@ -633,38 +624,6 @@ body.hc .contact-card-bar{color:#000}
 .cm-sim-title{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cm-sim-meta{color:var(--dim);font-size:0.72rem;white-space:nowrap}
 .cm-sim-wc{color:var(--dim);font-size:0.72rem;text-align:right;white-space:nowrap}
-/* Section titles inside tabs */
-.cm-section-title{font-size:0.67rem;letter-spacing:1.5px;color:var(--amber);font-weight:bold;margin:0 0 8px}
-/* Service Record tab */
-.cm-sr-table{width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:16px;border:1px solid var(--border)}
-.cm-sr-table th{font-size:0.67rem;letter-spacing:1px;color:var(--dim);text-align:left;padding:4px 8px 6px;border:1px solid var(--border);background:rgba(255,255,255,.03)}
-.cm-sr-table td{padding:5px 8px;border:1px solid var(--border);vertical-align:middle;text-align:center}
-.cm-sr-logo{height:24px;width:auto;vertical-align:middle;margin-right:4px;object-fit:contain}
-/* SR edit */
-.cm-sr-edit-list{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
-.cm-sr-edit-row{display:flex;gap:8px;align-items:flex-start;background:var(--hover);border-radius:6px;padding:8px}
-.cm-sr-edit-controls{display:flex;flex-direction:column;gap:3px}
-.cm-sr-edit-controls button{background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:3px;padding:2px 6px;font-size:0.75rem;cursor:pointer}
-.cm-sr-edit-controls button:hover:not(:disabled){border-color:var(--amber);color:var(--amber)}
-.cm-sr-edit-controls button:disabled{opacity:.35;cursor:default}
-.cm-sr-del{border-color:var(--red)!important;color:var(--red)!important}
-.cm-sr-del:hover{background:rgba(255,68,68,.1)!important}
-.cm-sr-edit-fields{flex:1;display:flex;flex-direction:column;gap:4px}
-.cm-sr-f{background:var(--input-bg,var(--bg));border:1px solid var(--border);color:var(--text);border-radius:3px;padding:4px 7px;font-family:inherit;font-size:0.78rem;width:100%;box-sizing:border-box}
-.cm-sr-f:focus{outline:none;border-color:var(--amber)}
-/* SR field-row with copy-above button */
-.cm-sr-field-row{display:flex;gap:4px;align-items:flex-start}
-.cm-sr-field-row .cm-sr-f{flex:1}
-.cm-sr-copy-btn{flex-shrink:0;background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:3px;padding:4px 6px;font-size:0.7rem;cursor:pointer;white-space:nowrap;align-self:flex-start}
-.cm-sr-copy-btn:hover{border-color:var(--amber);color:var(--amber)}
-/* Ribbon sort active */
-.cm-tab-sort-active{border-color:var(--amber)!important;color:var(--amber)!important}
-/* Ribbon category toggle buttons */
-.cm-rib-cat-label{font-size:0.67rem;letter-spacing:1px;color:var(--dim);margin-bottom:4px}
-.cm-rib-cat-btns{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
-.rib-cat-btn{background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:4px;padding:3px 9px;font-family:inherit;font-size:0.75rem;cursor:pointer}
-.rib-cat-btn:hover{border-color:var(--amber);color:var(--amber)}
-.rib-cat-active{background:var(--amber)!important;border-color:var(--amber)!important;color:#000!important}
 /* Mission log */
 .cm-mission-log{margin-top:18px;border-top:1px solid var(--border);padding-top:14px}
 .cm-mlog-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:10px}
@@ -676,32 +635,6 @@ body.hc .contact-card-bar{color:#000}
 .cm-mlog-count{font-size:0.7rem;color:var(--dim);margin-left:auto}
 .cm-mlog-note{width:100%;background:var(--hover);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:6px 8px;font-family:inherit;font-size:0.78rem;resize:vertical;box-sizing:border-box;min-height:48px}
 .cm-mlog-note:focus{outline:none;border-color:var(--amber)}
-/* Ribbons tab */
-.cm-ribbon-table{width:100%;border-collapse:collapse;font-size:0.82rem}
-.cm-ribbon-table th{font-size:0.67rem;letter-spacing:1px;color:var(--dim);text-align:left;padding:4px 8px 6px;border-bottom:1px solid var(--border)}
-.cm-ribbon-table td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:middle}
-.cm-rib-img-cell{width:48px;text-align:center}
-.cm-rib-img{height:40px;width:auto;object-fit:contain;display:block;margin:0 auto}
-.cm-rib-noimg{font-size:0.65rem;color:var(--dim);font-style:italic}
-/* Ribbons edit */
-.cm-rib-edit-list{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
-.cm-rib-edit-row{display:flex;gap:8px;align-items:flex-start;background:var(--hover);border-radius:6px;padding:8px}
-.cm-rib-edit-preview{width:52px;flex-shrink:0;text-align:center;padding-top:2px;overflow:hidden}
-.cm-rib-edit-preview .cm-rib-img{width:100%;height:auto;max-height:40px}
-.cm-rib-edit-fields{flex:1;display:flex;flex-direction:column;gap:4px}
-.cm-rib-edit-ctrl{display:flex;flex-direction:row;gap:3px;align-items:center}
-.cm-rib-edit-ctrl button{background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:3px;padding:2px 6px;font-size:0.75rem;cursor:pointer}
-.cm-rib-edit-ctrl button:hover:not(:disabled){border-color:var(--amber);color:var(--amber)}
-.cm-rib-edit-ctrl button:disabled{opacity:.35;cursor:default}
-.cm-rib-row-collapsed{align-items:center;padding:5px 8px;cursor:default}
-.cm-rib-add-form{background:var(--hover);border:1px solid var(--border);border-radius:6px;padding:12px}
-.cm-rib-add-title{font-size:0.67rem;letter-spacing:1.5px;color:var(--amber);font-weight:bold;margin-bottom:6px}
-.cm-rib-add-body{display:flex;gap:12px;align-items:flex-start}
-.cm-rib-add-fields{flex:1;display:flex;flex-direction:column;gap:5px}
-.cm-rib-add-side{width:80px;flex-shrink:0;text-align:center}
-.cm-rib-add-preview{display:flex;align-items:center;justify-content:center;min-height:44px}
-.cm-rib-add-preview .cm-rib-img{width:100%;height:auto;max-height:56px}
-.cm-rib-add-catname{font-size:0.72rem;color:var(--dim);margin-top:4px;word-break:break-word;text-align:center}
 /* Manifest right-pane header */
 #cm-profile{flex:1;overflow:hidden;display:flex;flex-direction:column;min-width:0}
 /* Toast */
@@ -761,7 +694,7 @@ body.hc .contact-card-bar{color:#000}
 /* Buttons that pair an icon with a label */
 .btn .ic,.tbb .ic,.panel-toggle .ic,.theme-opt .ic,.ci .ic,.sm-item .ic{margin-right:.34em}
 .btn .ic:only-child,.tbb .ic:only-child,.panel-toggle .ic:only-child,
-.cm-hdr-btn .ic:only-child,.cm-sr-del .ic:only-child{margin-right:0}
+.cm-hdr-btn .ic:only-child{margin-right:0}
 
 .hidden{display:none!important}
 
@@ -989,8 +922,6 @@ body.hc .contact-card-bar{color:#000}
 :root[data-skin="prime"] body .btn-p:not(.st-btn),
 :root[data-skin="prime"] body .modal-title,
 :root[data-skin="prime"] body .cmtc.on,
-:root[data-skin="prime"] body .cm-tab-active,
-:root[data-skin="prime"] body .cm-tab-active:hover,
 :root[data-skin="prime"] body .cm-new-sim-btn,
 :root[data-skin="prime"] body .cm-done-btn,
 :root[data-skin="prime"] body .ep-tab-mf{color:var(--on-ac)}
@@ -1158,7 +1089,6 @@ body.hc .contact-card-bar{color:#000}
 #btn-share.sh-on{border-color:var(--amber);color:var(--amber)}
 #sh-url{font-size:0.8rem}
 
-
 /* ── JOINT POSTS ──────────────────────────────────────────────────────────
    The turn bar sits above the editor and is the only place that says whose
    turn it is, so it has to read at a glance without being shouty. Colour
@@ -1221,7 +1151,6 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
 .tag.jp-shared{border-color:var(--amber);color:var(--amber);
   background:color-mix(in srgb,var(--amber) 14%,transparent)}
 
-
 /* The header mark is a way home, but it must not LOOK like a new control --
    it looked exactly as it did before this was true, and that is the point. No
    box, no padding, no hover fill; just the cursor and a focus ring for anyone
@@ -1231,7 +1160,6 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   color:inherit;font:inherit;text-align:left;cursor:pointer;
   height:100%}
 .hdr-home:focus-visible{outline:2px solid var(--amber);outline-offset:-2px}
-
 
 /* The reconcile prompt lists what is actually different now, so it needs room
    to do it without the dialog growing past the screen. */
@@ -1274,20 +1202,18 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
      columns fit. The profile becomes one scrolling column, and the character
      list folds away behind the bar so the character you are reading gets the
      screen instead of losing the top of it to a picker. */
-  #view-manifest{flex-direction:column;overflow-y:auto}
+  #view-characters{flex-direction:column;overflow-y:auto}
   #cm-mobile-bar{display:flex;position:sticky;top:0;z-index:20}
   #cm-left{display:none}
-  #view-manifest.cm-list-open #cm-left{display:flex;width:auto;max-height:60vh;
+  #view-characters.cm-list-open #cm-left{display:flex;width:auto;max-height:60vh;
     border-right:none;border-bottom:3px solid var(--amber);flex-shrink:0}
-  :root[data-skin="prime"] body #view-manifest.cm-list-open #cm-left{border-right:none;border-bottom:1px solid var(--border)}
-  #view-manifest.cm-list-open #cm-left .cm-hdr{display:none}   /* the bar already names the view */
+  :root[data-skin="prime"] body #view-characters.cm-list-open #cm-left{border-right:none;border-bottom:1px solid var(--border)}
+  #view-characters.cm-list-open #cm-left .cm-hdr{display:none}   /* the bar already names the view */
   #cm-right{flex:1 0 auto;overflow:visible}
   #cm-profile,#cm-profile-wrap{overflow:visible}
   #cm-profile-wrap{flex-direction:column}
   #cm-bio-col{width:auto;border-right:none;border-bottom:1px solid var(--border);overflow:visible;padding:16px 14px}
   #cm-sims-col{overflow:visible;padding:16px 14px}
-  .cm-rib-add-body{flex-direction:column}
-  .cm-rib-add-side{width:auto}
 }
 
 @media (prefers-reduced-motion:reduce){
