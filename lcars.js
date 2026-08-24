@@ -304,6 +304,7 @@ const VERSIONS = [
       'Changed: the Character Manifest is now called Characters, everywhere it is named, and lives at /characters. Old links and bookmarks to /manifest still work and quietly move you to the new address',
       'Removed: Service History and Ribbons. SB118 HQ already keeps your character record and your ribbons, and holding a second copy here meant two places to update and two places to disagree. Anything you had entered is cleared from LCARS on this update — your record on the wiki is untouched',
       'Changed: with Service History and Ribbons gone there is nothing left to tab between on a character, so the tab bar has gone too. The Mission Log, which used to sit at the foot of Service History, now sits under the sims list where you can see it without hunting for it',
+      'Changed: the alias editor now finds a row by where it actually is when you click it, rather than by the position it had when the panel was drawn. Nothing behaved wrongly before — adding or deleting an alias redrew the panel straight away, which kept the positions honest — but it only took one change elsewhere to make it act on the wrong alias, and a stray save now lands nowhere instead of on the wrong row',
     ],
   },
 ];
@@ -7309,10 +7310,17 @@ function renderEditMode(c, clr, initials) {
     ? `<img src="${c.pictureDataUrl}" alt="${esc(c.name)}">`
     : `<span>${initials}</span>`;
 
-  const aliasesHtml = (c.aliases||[]).map((a,i)=>`
+  // The handlers take the element, not a row number. The old baked-in indices
+  // were not actually reachable as a bug — addAlias and removeAlias both call
+  // renderCharProfile, which redraws the panel and refreshes every index before
+  // anything can act on a stale one. They were one careless change away from
+  // being wrong, though, and reading the row's live position costs nothing: a
+  // blur that arrives after the panel has been redrawn now resolves to -1 and
+  // is ignored, where before it would have written to whatever now sits there.
+  const aliasesHtml = (c.aliases||[]).map(a=>`
     <div class="cm-alias-row">
-      <input type="text" value="${esc(a)}" placeholder="Alias or alternate name…" onblur="saveAlias(${i},this.value)">
-      <button class="cm-alias-del" onclick="removeAlias(${i})" title="Remove alias">${ic('x','ic-sm')}</button>
+      <input type="text" value="${esc(a)}" placeholder="Alias or alternate name…" onblur="saveAlias(this)">
+      <button class="cm-alias-del" onclick="removeAlias(this)" title="Remove alias">${ic('x','ic-sm')}</button>
     </div>`).join('');
 
   return `<div id="cm-profile-wrap">
@@ -7597,11 +7605,21 @@ function saveCharDivision(value) {
   saveCharField('divisionColor', DIVISION_COLORS[value]||'');
 }
 
-function saveAlias(idx, value) {
+// Which alias row an element sits in, read from the live DOM at the moment the
+// handler fires rather than from a number baked in when the panel was drawn.
+function aliasRowIndex(el) {
+  const row = el && el.closest ? el.closest('.cm-alias-row') : null;
+  if (!row || !row.parentNode) return -1;
+  return [...row.parentNode.children].indexOf(row);
+}
+
+function saveAlias(el) {
   if (!_curCharId || !S.characters) return;
   const c = S.characters[_curCharId]; if (!c) return;
   if (!c.aliases) c.aliases = [];
-  c.aliases[idx] = value.trim();
+  const idx = aliasRowIndex(el);
+  if (idx < 0 || idx >= c.aliases.length) return;
+  c.aliases[idx] = el.value.trim();
   c.updatedAt = Date.now();
   persist();
   renderManifestList();
@@ -7621,9 +7639,11 @@ function addAlias() {
   },50);
 }
 
-function removeAlias(idx) {
+function removeAlias(el) {
   if (!_curCharId || !S.characters) return;
   const c = S.characters[_curCharId]; if (!c || !c.aliases) return;
+  const idx = aliasRowIndex(el);
+  if (idx < 0 || idx >= c.aliases.length) return;
   c.aliases.splice(idx, 1);
   c.updatedAt = Date.now();
   persist();
