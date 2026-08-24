@@ -306,7 +306,7 @@ const VERSIONS = [
       'Changed: with Service History and Ribbons gone there is nothing left to tab between on a character, so the tab bar has gone too',
       'Changed: the Mission Log is hidden for now. It lived at the foot of Service History, and what it is really for \u2014 writing a summary and exporting it, with your scenes and sims, as wikitext \u2014 only becomes useful once LCARS can work out where a posted sim lives online and link to it. Rather than leave it sitting there half-finished it is out of the way until that exists. Any notes you have written are kept and will come back with it',
       'Changed: the alias editor now finds a row by where it actually is when you click it, rather than by the position it had when the panel was drawn. Nothing behaved wrongly before — adding or deleting an alias redrew the panel straight away, which kept the positions honest — but it only took one change elsewhere to make it act on the wrong alias, and a stray save now lands nowhere instead of on the wrong row',
-      'Added: LCARS now works out who is in a sim from the title. Title a sim the usual way \u2014 the names, a dash, then the title \u2014 and everyone named is listed in the Characters panel straight away, before anybody has spoken, with your own ticked as yours. Ranks are fine, several characters are fine however you separate them, and any alias you have set up counts. If you have already chosen who is in a sim, nothing is changed',
+      'Added: LCARS now works out who is in a sim from the title. Title a sim the usual way \u2014 the names, a dash, then the title \u2014 and everyone named is listed in the Characters panel straight away, before anybody has spoken, and ticked as yours. Only characters you have added to your character list are recognised \u2014 a name you have not added is treated as somebody else\u2019s and left alone. Ranks are fine, several characters are fine however you separate them, and any alias you have set up counts. If you have already chosen who is in a sim, nothing is changed',
     ],
   },
 ];
@@ -3705,18 +3705,6 @@ function charsFromTitle(title) {
   return out;
 }
 
-// Whether a name is one of the writer's own. A title names everyone in the sim,
-// including other writers' characters, but only your own should be ticked as
-// yours -- myChars is what the Characters page counts your sims by, so claiming
-// someone else's would quietly skew those numbers. NPC is the one type that is
-// nobody's in particular.
-function isMyCharacter(name) {
-  const nl = String(name || '').toLowerCase();
-  if ((S.settings.myChars || []).some(n => n.toLowerCase() === nl)) return true;
-  const ch = findCharByAnyName(name);
-  return !!(ch && ch.charType && ch.charType !== 'NPC');
-}
-
 // The characters panel lists doc.chars, which is detected from dialogue tags --
 // so before anybody has spoken it is empty, and a sim opens with nobody in it
 // even though the title says who is there. Fold the title's characters in so the
@@ -3745,10 +3733,12 @@ function syncDocMyChars(doc) {
   let changed = false;
   // Only when nothing is selected yet: if you have unticked everyone on purpose,
   // the next save must not quietly put the title's characters back.
+  // Registering a character is the claim: charsFromTitle only ever returns names
+  // and aliases from your own character list, so anything it finds is yours by
+  // definition. A name you have not registered is a new character or somebody
+  // else's, and never appears here at all.
   if (!doc.myChars.length) {
-    charsFromTitle(doc.title).filter(isMyCharacter).forEach(n => {
-      doc.myChars.push(n); changed = true;
-    });
+    charsFromTitle(doc.title).forEach(n => { doc.myChars.push(n); changed = true; });
   }
   (doc.chars || []).forEach(name => {
     if (doc.myChars.includes(name)) return;
@@ -6234,11 +6224,12 @@ function showNewDoc(sceneId,missionId,preTagCharId){
     if(m==='__new_mission__'||m===''){alert('Please select or create a mission first.');return false;}
     const id=uid();
     const preChar = preTagCharId && S.characters ? S.characters[preTagCharId] : null;
-    // No character passed in? Take them from the title, so a sim titled the usual
-    // way opens with everyone in it listed and the writer's own already ticked.
+    // No character passed in? Take them from the title. Only registered names are
+    // found, and registering a character is what claims it as yours, so they are
+    // both listed and ticked.
     const titleChars = preChar ? [] : charsFromTitle(t);
     const initChars = preChar ? [preChar.name] : titleChars;
-    const initMyChars = preChar ? [preChar.name] : titleChars.filter(isMyCharacter);
+    const initMyChars = preChar ? [preChar.name] : titleChars.slice();
     if (preChar) {
       if (!S.settings.myChars) S.settings.myChars = [];
       if (!S.settings.myChars.includes(preChar.name)) S.settings.myChars.push(preChar.name);
