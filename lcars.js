@@ -303,7 +303,8 @@ const VERSIONS = [
       'Fixed: aliases you had set up were not picked up reliably. Only an alias containing a space or a full stop was ever really registered, so a one-word or lowercase alias, or one starting with punctuation, still went bold but was missed when LCARS worked out who was in a sim, which colour to give them and whether the sim was yours. Every alias now counts, matched whatever the capitalisation, and a longer alias wins over a shorter one inside it',
       'Changed: the Character Manifest is now called Characters, everywhere it is named, and lives at /characters. Old links and bookmarks to /manifest still work and quietly move you to the new address',
       'Removed: Service History and Ribbons. SB118 HQ already keeps your character record and your ribbons, and holding a second copy here meant two places to update and two places to disagree. Anything you had entered is cleared from LCARS on this update — your record on the wiki is untouched',
-      'Changed: with Service History and Ribbons gone there is nothing left to tab between on a character, so the tab bar has gone too. The Mission Log, which used to sit at the foot of Service History, now sits under the sims list where you can see it without hunting for it',
+      'Changed: with Service History and Ribbons gone there is nothing left to tab between on a character, so the tab bar has gone too',
+      'Changed: the Mission Log is hidden for now. It lived at the foot of Service History, and what it is really for \u2014 writing a summary and exporting it, with your scenes and sims, as wikitext \u2014 only becomes useful once LCARS can work out where a posted sim lives online and link to it. Rather than leave it sitting there half-finished it is out of the way until that exists. Any notes you have written are kept and will come back with it',
       'Changed: the alias editor now finds a row by where it actually is when you click it, rather than by the position it had when the panel was drawn. Nothing behaved wrongly before — adding or deleting an alias redrew the panel straight away, which kept the positions honest — but it only took one change elsewhere to make it act on the wrong alias, and a stray save now lands nowhere instead of on the wrong row',
       'Added: LCARS now works out whose sim it is from the title. Title a sim the usual way — your character\u2019s name, a dash, then the title — and that character is selected for you, on a new sim and on sims you already have. Ranks in front of the name are fine, and any alias you have set up counts. If you have already chosen who is in a sim, nothing is changed',
     ],
@@ -7530,7 +7531,17 @@ function renderSimsTab(c, myDocs) {
 
 // ── Mission Log ──
 
+// Super admins only, for now. The Mission Log's real value is exporting a
+// mission summary plus its scenes and sims as wikitext — and that is only worth
+// anything once a posted sim can be resolved to an archive URL to cite. Until
+// the sim-archive / Google Groups lookup exists there is nothing to link to, so
+// it stays out of everyone else's way rather than sitting there half-useful.
+//
+// Nothing is deleted: c.missionNotes and c.srMissionSortDesc are still stored
+// and still sync, so notes already written survive and come back with the
+// feature. See ROADMAP.md → New Components, "Mission Log".
 function renderMissionLog(c, myDocs) {
+  if (!isSuperAdmin()) return '';
   c.missionNotes = c.missionNotes || {};
   c.srMissionSortDesc = c.srMissionSortDesc !== false;
 

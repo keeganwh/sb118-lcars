@@ -294,6 +294,12 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
       Open previous sim(s) in the same scene alongside the editor, for reading and copy/paste of content.
       _Done when: a writer can read an earlier sim in the scene and copy from it without leaving the editor._
 
+- [ ] **[−1] Mission Log — bring it back, as its own tab.** → **needs the sim-archive link to exist.**
+      **Currently hidden — `renderMissionLog()` returns `''` unless `isSuperAdmin()`.** Shipped in Batch 1 under the sims list when the Service History tab it lived in was removed, then gated, because on its own it is half a feature: the value is writing a summary per mission and **exporting it as wikitext along with a list of that character's scenes and sims**, and there is nothing to cite until a posted sim resolves to an archive URL. Data is untouched — `c.missionNotes` and `c.srMissionSortDesc` are still stored and still sync, so notes already written come back with it.
+      **When it returns it wants to be a tab again, not a section under the sims list** — buried under a long sims list is why it was gated rather than left visible. If it is ever shown inline instead, the sims list needs a capped height with its own scroll and/or collapsible mission headers, or the log is unreachable in practice.
+      _Same gate as the quote export below, and the same reason. Do both in one session._
+      _Done when: a writer can write a mission summary and export it, with the scenes and sims it covers, as wikitext whose citations resolve to the archive._
+
 - [ ] **[−1] Wikitext quote export.** → **needs the sim-archive link to exist.**
       Select a portion of a sim and export it as a **formatted wikitext quote with a citation**, where the citation links to the sim in the archive.
       _Whole-sim wikitext export was considered and dropped: people should link to the sim archive rather than copying whole sims onto the wiki._
@@ -311,7 +317,7 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
       _Done when: the two tools agree on a format without either having to read the other's source._
 
 - [ ] **[−3] SB118 public sim archive / Google Groups lookup.**
-      The tool should be able to do some basic work to figure out how a posted sim can be found online. Prerequisite for the wikitext quote export above.
+      The tool should be able to do some basic work to figure out how a posted sim can be found online. Prerequisite for both the wikitext quote export and the Mission Log's return above.
       _Done when: a posted sim can be resolved to its archive URL from inside LCARS._
 
 ---
