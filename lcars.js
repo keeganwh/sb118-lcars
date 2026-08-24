@@ -307,6 +307,8 @@ const VERSIONS = [
       'Changed: the Mission Log is hidden for now. It lived at the foot of Service History, and what it is really for \u2014 writing a summary and exporting it, with your scenes and sims, as wikitext \u2014 only becomes useful once LCARS can work out where a posted sim lives online and link to it. Rather than leave it sitting there half-finished it is out of the way until that exists. Any notes you have written are kept and will come back with it',
       'Changed: the alias editor now finds a row by where it actually is when you click it, rather than by the position it had when the panel was drawn. Nothing behaved wrongly before — adding or deleting an alias redrew the panel straight away, which kept the positions honest — but it only took one change elsewhere to make it act on the wrong alias, and a stray save now lands nowhere instead of on the wrong row',
       'Added: LCARS now works out who is in a sim from the title. Title a sim the usual way \u2014 the names, a dash, then the title \u2014 and everyone named is listed in the Characters panel straight away, before anybody has spoken, and ticked as yours. Only characters you have added to your character list are recognised \u2014 a name you have not added is treated as somebody else\u2019s and left alone. Ranks are fine, several characters are fine however you separate them, and any alias you have set up counts. If you have already chosen who is in a sim, nothing is changed',
+      'Fixed: on a joint sim, which characters are marked as yours was stored once for the whole sim rather than once per writer. Everyone on the sim shared one list, so another writer marking their character marked it on your copy too, and unticking it only lasted until the next refresh brought theirs back. Your selection is now your own. The first time you open a joint sim after this update it is worked out fresh from the title and your character list',
+      'Fixed: a character taken from the sim title showed up unticked beside their own dialogue when the title and the sim spelled them differently \u2014 \u201cCommander Robin Hopper\u201d in the title, \u201cHopper:\u201d in the sim. LCARS now matches the character rather than the spelling, so ticking, unticking and your sim counts all follow the person',
     ],
   },
 ];
@@ -3711,15 +3713,22 @@ function charsFromTitle(title) {
 // panel is populated from the moment the sim is created. This also keeps them
 // alive through the save-time prune, which drops any myChars entry not present
 // in doc.chars.
+// Two names for the same person? The sim body and the title rarely spell a
+// character the same way -- a dialogue tag says "Hopper" where the title says
+// "Commander Robin Hopper" -- so anywhere the two lists meet has to compare
+// characters, not strings. Comparing strings is why a character taken from the
+// title showed up unticked next to their own dialogue.
+function sameCharName(a, b) {
+  if (!a || !b) return false;
+  if (String(a).toLowerCase() === String(b).toLowerCase()) return true;
+  const ca = findCharByAnyName(a), cb = findCharByAnyName(b);
+  return !!(ca && cb && ca.id === cb.id);
+}
+
 function withTitleChars(chars, title) {
   const out = (chars || []).slice();
-  const sameChar = (a, b) => {
-    if (a.toLowerCase() === b.toLowerCase()) return true;
-    const ca = findCharByAnyName(a), cb = findCharByAnyName(b);
-    return !!(ca && cb && ca.id === cb.id);
-  };
   charsFromTitle(title).forEach(n => {
-    if (!out.some(x => sameChar(x, n))) out.push(n);
+    if (!out.some(x => sameCharName(x, n))) out.push(n);
   });
   return out;
 }
@@ -3741,7 +3750,7 @@ function syncDocMyChars(doc) {
     charsFromTitle(doc.title).forEach(n => { doc.myChars.push(n); changed = true; });
   }
   (doc.chars || []).forEach(name => {
-    if (doc.myChars.includes(name)) return;
+    if (doc.myChars.some(m => sameCharName(m, name))) return;
     // Direct match in global myChars
     if ((S.settings.myChars || []).includes(name)) {
       doc.myChars.push(name); changed = true; return;
@@ -3758,6 +3767,11 @@ function syncDocMyChars(doc) {
       }
     }
   });
+  // A joint sim keeps this writer's own selection locally, so remember it as
+  // soon as it is derived -- not only when the sim is next saved. syncDocMyChars
+  // runs on open too, and without this the next poll from the server would find
+  // no record and reset the panel to empty.
+  if (changed) jpRememberMyChars(doc);
   return changed;
 }
 
@@ -3984,9 +3998,12 @@ function flushSave() {
   doc.postType = document.getElementById('doc-posttype').value||null;
   doc.updatedAt = Date.now();
   doc.chars = withTitleChars(detectChars(ed.innerText||''), doc.title);
-  // Prune myChars: remove names no longer detected in this sim (prevents ghost characters)
-  doc.myChars = (doc.myChars||[]).filter(n => (doc.chars||[]).includes(n));
+  // Prune myChars: remove names no longer detected in this sim (prevents ghost
+  // characters). By character, not by spelling -- doc.chars carries whichever
+  // spelling won, and an exact match would drop a character who is plainly there.
+  doc.myChars = (doc.myChars||[]).filter(n => (doc.chars||[]).some(c => sameCharName(c, n)));
   syncDocMyChars(doc);   // re-add any that belong via alias chain
+  jpRememberMyChars(doc); // a joint sim keeps this writer's own selection locally
   persist();
   // A joint sim goes to its own row, with the version check that stops a
   // lapsed writer overwriting the next one. It must NOT go through schedSync(),
@@ -4346,7 +4363,8 @@ function updateCharsPanel(doc) {
   });
   list.innerHTML = deduped.map((n, i) => {
     _charList.push(n);
-    const mine = (doc.myChars||[]).includes(n)||S.settings.myChars.includes(n);
+    const mine = (doc.myChars||[]).some(m => sameCharName(m, n))
+      || (S.settings.myChars||[]).some(m => sameCharName(m, n));
     const similar = findSimilarChar(n, corpus);
     const showWarn = similar && !isPairConfirmed(n, similar);
     if (showWarn) _charWarns[i] = similar;
@@ -4368,8 +4386,11 @@ function toggleMyChar(i) {
   const doc = S.docs[curId]; if (!doc) return;
   if (!doc.myChars) doc.myChars=[];
   if (!S.settings.myChars) S.settings.myChars=[];
-  const di = doc.myChars.indexOf(name);
-  const gi = S.settings.myChars.indexOf(name);
+  // Match on the character, not the spelling: the panel may show "Hopper" while
+  // the stored entry says "Robin Hopper", and an exact-match untick would leave
+  // the stored one behind and put the tick straight back.
+  const di = doc.myChars.findIndex(m => sameCharName(m, name));
+  const gi = S.settings.myChars.findIndex(m => sameCharName(m, name));
   if (di>=0) {
     doc.myChars.splice(di,1);
     if (gi>=0) S.settings.myChars.splice(gi,1);
@@ -4377,6 +4398,7 @@ function toggleMyChar(i) {
     doc.myChars.push(name);
     if (gi<0) S.settings.myChars.push(name);
   }
+  jpRememberMyChars(doc);
   persist(); updateCharsPanel(doc);
   // Keep manifest stats live if it's open
   if (_routeView === 'characters') refreshManifest();
@@ -8334,8 +8356,12 @@ function jpApplyRow(row, keepContent) {
   });
   if (!keepContent && row.content != null) { doc.content = row.content; doc.jpSavedContent = row.content; }
   if (row.meta) {
+    // chars and charColors are shared -- who is in the sim, and what colour they
+    // are, is the same for everybody. myChars is NOT: it is this writer's own,
+    // and reading it from the shared row is what let one writer's selection
+    // overwrite another's. row.meta.myChars is ignored, including the copy older
+    // clients still write.
     doc.chars = row.meta.chars || [];
-    doc.myChars = row.meta.myChars || [];
     doc.charColors = row.meta.charColors || {};
   }
   if (!doc.chars) doc.chars = [];
@@ -8346,6 +8372,7 @@ function jpApplyRow(row, keepContent) {
   // and offer the owner's as a starting point the first time they see it.
   if (row.mission_name) doc._jpHint = { mission: row.mission_name, scene: row.scene_name || null };
   jpRestoreFiling(doc);
+  jpRestoreMyChars(doc);
   // IN PLACE, never a replacement. jpApplyRow used to build a new object and
   // put it in S.docs, which orphaned every reference anything else was holding
   // -- an open dialog, a function part-way through an await. That is what made
@@ -8484,7 +8511,8 @@ async function jpSaveNow(doc, quiet) {
       p_content: doc.content || '',
       p_title: doc.title || '',
       p_status: doc.status || 'active',
-      p_meta: { chars: doc.chars || [], myChars: doc.myChars || [], charColors: doc.charColors || {} },
+      // No myChars: it is per writer and lives in S.jpMyChars, not in the row.
+      p_meta: { chars: doc.chars || [], charColors: doc.charColors || {} },
     });
     doc.jpVersion = v;
     doc.jpSavedContent = doc.content || '';     // the server now has this exactly
@@ -8680,7 +8708,8 @@ async function jpMakeJoint(id) {
       scene_name: (S.scenes[doc.sceneId] || {}).name || null,
       academy: isAcademyDoc(doc),
       format: { boldLoc: !!S.settings.boldLoc, italOOC: !!S.settings.italOOC, italThoughts: !!S.settings.italThoughts },
-      meta: { chars: doc.chars || [], myChars: doc.myChars || [], charColors: doc.charColors || {} },
+      // No myChars: per writer, kept in S.jpMyChars -- see jpRestoreMyChars.
+      meta: { chars: doc.chars || [], charColors: doc.charColors || {} },
     })
   });
   if (!r.ok) {
@@ -8694,6 +8723,7 @@ async function jpMakeJoint(id) {
   const row = rows && rows[0];
   doc.docType = 'joint';
   jpRememberFiling(doc);     // it is filed somewhere already; keep it there
+  jpRememberMyChars(doc);    // and whoever is already marked as yours stays yours
   doc.jpOwner = a.uid;
   doc.jpVersion = row ? row.version : 1;
   doc.jpMembers = 1;
@@ -8992,6 +9022,32 @@ function jpCanCreate() { return isCloud() && isSuperAdmin(); }
 function jpFiling() {
   if (!S.jpFiling) S.jpFiling = {};
   return S.jpFiling;
+}
+
+// Which characters in a joint sim are THIS writer's own. Per writer, exactly
+// like the filing above and for the same reason: it is a fact about the writer,
+// not about the sim. It used to travel in the shared row's meta, so every writer
+// on a joint sim overwrote everyone else's -- tick your character and the next
+// poll handed it to the others; untick somebody else's and theirs came straight
+// back. See jpApplyRow.
+function jpMyChars() {
+  if (!S.jpMyChars) S.jpMyChars = {};
+  return S.jpMyChars;
+}
+
+function jpRememberMyChars(doc) {
+  if (!isJointDoc(doc)) return;
+  jpMyChars()[doc.id] = (doc.myChars || []).slice();
+}
+
+// Put this writer's own selection back after a refresh from the server. With no
+// record yet -- a sim you have just been invited to, or one saved before this
+// was per-writer -- start empty and let syncDocMyChars derive it from the title
+// and your own character list. Keeping whatever arrived would carry another
+// writer's selection in with it, which is the bug this exists to stop.
+function jpRestoreMyChars(doc) {
+  const mine = jpMyChars()[doc.id];
+  doc.myChars = mine ? mine.slice() : [];
 }
 
 function jpRememberFiling(doc) {
