@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LCARS v4.23</title>
+<title>LCARS v4.24</title>
 <!-- The icon is inlined rather than linked, like the CSS and JS: /api/download
      rebuilds the app as one file, and a linked image would be a second file the
      offline copy could not find. Source of truth is icon.png in the repo;
@@ -205,7 +205,7 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
       </div>
       <!-- Row 2: copy | clear | src | ¶ | B I S link | indent | insert | Auto Format ▾ | Visual Aids ▾ -->
       <div class="dh-r2">
-        <button class="btn btn-s btn-sm" id="btn-copy" onclick="copyPost()" title="Copy sim to clipboard"><svg class="ic" aria-hidden="true"><use href="#i-clipboard"/></svg></button>
+        <button class="btn btn-s btn-sm" id="btn-copy" onclick="copyPost()" title="Copy sim to clipboard"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg></button>
         <button class="tbb tbb-names" id="tbb-cf" onclick="removeFormatting()" title="Remove manual formatting (bold, italic, strikethrough, links) — auto-formatting (bold names, locations, etc.) remains active" style="padding:2px 5px"><svg class="ic" aria-hidden="true"><use href="#i-eraser"/></svg></button>
         <button class="tbb tbb-names" id="tbb-src" onclick="toggleSourceView()" title="View / edit raw HTML source of this sim">&lt;/&gt;</button>
         <button class="tbb tbb-names" id="tbb-pil" onclick="togglePilcrows()" title="Show paragraph markers (¶) — reveals paragraph boundaries and blank lines">¶</button>
