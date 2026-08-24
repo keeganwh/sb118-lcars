@@ -305,6 +305,7 @@ const VERSIONS = [
       'Removed: Service History and Ribbons. SB118 HQ already keeps your character record and your ribbons, and holding a second copy here meant two places to update and two places to disagree. Anything you had entered is cleared from LCARS on this update — your record on the wiki is untouched',
       'Changed: with Service History and Ribbons gone there is nothing left to tab between on a character, so the tab bar has gone too. The Mission Log, which used to sit at the foot of Service History, now sits under the sims list where you can see it without hunting for it',
       'Changed: the alias editor now finds a row by where it actually is when you click it, rather than by the position it had when the panel was drawn. Nothing behaved wrongly before — adding or deleting an alias redrew the panel straight away, which kept the positions honest — but it only took one change elsewhere to make it act on the wrong alias, and a stray save now lands nowhere instead of on the wrong row',
+      'Added: LCARS now works out whose sim it is from the title. Title a sim the usual way — your character\u2019s name, a dash, then the title — and that character is selected for you, on a new sim and on sims you already have. Ranks in front of the name are fine, and any alias you have set up counts. If you have already chosen who is in a sim, nothing is changed',
     ],
   },
 ];
@@ -3666,12 +3667,37 @@ function detectChars(text) {
   return [...s];
 }
 
+// SB118 titles are conventionally "<your character> - <the title>", so the name
+// in front of the dash names the writer's character. Returns the registered name
+// or alias it matches, longest first, or '' if the title names nobody we know.
+//
+// The head usually carries a rank ("Lt. JG R. Hopper - The Briefing"), so the
+// name is matched anywhere inside it on a word boundary rather than having to be
+// the whole of it. This reads the same registered list as the detection passes,
+// so an alias only has to be set up once to work here too.
+function charFromTitle(title) {
+  const head = String(title || '').split(/\s[-–—]\s/)[0].trim();
+  if (!head) return '';
+  for (const alias of getRegisteredAliases()) {
+    if (head.toLowerCase() === alias.toLowerCase()) return alias;
+    const esc2 = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp('(^|\\W)' + esc2 + '($|\\W)', 'i').test(head)) return alias;
+  }
+  return '';
+}
+
 // Auto-populate doc.myChars from detected names via the manifest alias chain.
 // Called on save and on openDoc so the manifest always reflects reality without
 // requiring the user to manually untick/retick every character.
 function syncDocMyChars(doc) {
   if (!doc.myChars) doc.myChars = [];
   let changed = false;
+  // Only when nothing is selected yet: if you have unticked everyone on purpose,
+  // the next save must not quietly put the title's character back.
+  if (!doc.myChars.length) {
+    const fromTitle = charFromTitle(doc.title);
+    if (fromTitle) { doc.myChars.push(fromTitle); changed = true; }
+  }
   (doc.chars || []).forEach(name => {
     if (doc.myChars.includes(name)) return;
     // Direct match in global myChars
@@ -6156,7 +6182,10 @@ function showNewDoc(sceneId,missionId,preTagCharId){
     if(m==='__new_mission__'||m===''){alert('Please select or create a mission first.');return false;}
     const id=uid();
     const preChar = preTagCharId && S.characters ? S.characters[preTagCharId] : null;
-    const initMyChars = preChar ? [preChar.name] : [];
+    // No character passed in? Take it from the title, so a sim titled the usual
+    // way opens with its writer's character already selected.
+    const titleChar = preChar ? '' : charFromTitle(t);
+    const initMyChars = preChar ? [preChar.name] : (titleChar ? [titleChar] : []);
     if (preChar) {
       if (!S.settings.myChars) S.settings.myChars = [];
       if (!S.settings.myChars.includes(preChar.name)) S.settings.myChars.push(preChar.name);
