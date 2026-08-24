@@ -102,6 +102,10 @@
 - Fixed: a joint sim could not be deleted. Deleting it removed it from this browser only, so it stayed on the Command Dashboard and came back on the next refresh — a joint sim is stored separately from your other sims and the shared copy was never touched
 - Changed: deleting a joint sim you started now warns that it removes the sim for everyone on it, and says how many other writers that is. If you are not the one who started it, LCARS offers to take you off the sim instead, and the others keep it
 - Fixed: deleting an ordinary sim did not push the deletion to your account straight away, so it could reappear from the server later
+- Fixed: the Copy button lost its icon after you used it, leaving an empty button until the page was reloaded. It looked intermittent because it only happened once you had pressed Copy
+- Changed: the Copy button now uses the two-pages copy symbol. The clipboard one was indistinct at the size the toolbar draws it
+- Fixed: the left sidebar opened collapsed on every load, however many times you opened it. Opening or closing a side panel was saved on the device but never to your account, and LCARS takes your account’s copy on load — so the old setting kept winning. Both side panels now follow your account, and change straight away when a different device updates them
+- Fixed: the browser tab still read v4.23
 
 ## v4.23 — 2026-08-15
 

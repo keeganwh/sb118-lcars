@@ -290,6 +290,10 @@ const VERSIONS = [
       'Fixed: a joint sim could not be deleted. Deleting it removed it from this browser only, so it stayed on the Command Dashboard and came back on the next refresh \u2014 a joint sim is stored separately from your other sims and the shared copy was never touched',
       'Changed: deleting a joint sim you started now warns that it removes the sim for everyone on it, and says how many other writers that is. If you are not the one who started it, LCARS offers to take you off the sim instead, and the others keep it',
       'Fixed: deleting an ordinary sim did not push the deletion to your account straight away, so it could reappear from the server later',
+      'Fixed: the Copy button lost its icon after you used it, leaving an empty button until the page was reloaded. It looked intermittent because it only happened once you had pressed Copy',
+      'Changed: the Copy button now uses the two-pages copy symbol. The clipboard one was indistinct at the size the toolbar draws it',
+      'Fixed: the left sidebar opened collapsed on every load, however many times you opened it. Opening or closing a side panel was saved on the device but never to your account, and LCARS takes your account\u2019s copy on load \u2014 so the old setting kept winning. Both side panels now follow your account, and change straight away when a different device updates them',
+      'Fixed: the browser tab still read v4.23',
     ],
   },
 ];
@@ -1993,7 +1997,7 @@ function adoptCloudState(remote) {
   persist();
   curId = null; curView = null; curViewId = null;
   setTheme(S.settings.theme || 'dark', true);
-  applyStyle(); applyPrefs(); renderNav(); showDashboard();
+  applyStyle(); applyPrefs(); applyPanelStates(); renderNav(); showDashboard();
 }
 
 // ================================================================
@@ -2821,10 +2825,17 @@ function copyPost() {
   document.execCommand('selectAll');
   document.execCommand('copy');
   const btn = document.getElementById('btn-copy');
-  const prev = btn.textContent;
+  // innerHTML both ways. The button's whole content is an <svg> icon, so
+  // textContent reads as the empty string -- restoring from it wiped the icon
+  // and left an empty shell behind, permanently, until the page was reloaded.
+  // That is why the icon went missing only sometimes: only after a copy.
+  if (btn._restore) clearTimeout(btn._restore);
+  const prev = btn._prevHtml || (btn._prevHtml = btn.innerHTML);
   btn.innerHTML = ic('check') + ' Copied!';
   btn.style.color = 'var(--green)';
-  setTimeout(() => { btn.textContent = prev; btn.style.color = ''; }, 1500);
+  btn._restore = setTimeout(() => {
+    btn.innerHTML = prev; btn.style.color = ''; btn._restore = null;
+  }, 1500);
 }
 function removeFormatting() {
   const ed = document.getElementById('editor');
@@ -5601,12 +5612,18 @@ function toggleSidebar() {
   sb.classList.toggle('collapsed', !S.settings.sidebarOpen);
   document.getElementById('sb-toggle').innerHTML = ic(S.settings.sidebarOpen ? 'chevron-left' : 'chevron-right');
   persist();
+  // MUST SYNC. adoptCloudState() replaces S.settings from the account, so a
+  // preference that only ever persisted locally was overwritten by whatever the
+  // server still held -- the sidebar came back collapsed on every load no
+  // matter how often it was opened.
+  schedSync();
 }
 function toggleSidebarDetail() {
   S.settings.sidebarDetail = !S.settings.sidebarDetail;
   document.getElementById('sidebar').classList.toggle('sidebar-detail', !!S.settings.sidebarDetail);
   document.getElementById('sb-detail-btn').innerHTML = ic('list') + ' Details';
   persist();
+  schedSync();          // see toggleSidebar: a local-only preference loses to the account
 }
 
 const SORT_OPTIONS = [
@@ -5653,6 +5670,7 @@ function toggleCharsPanel() {
   cp.classList.toggle('collapsed', !S.settings.charsOpen);
   document.getElementById('cp-toggle').innerHTML = ic(S.settings.charsOpen ? 'chevron-right' : 'chevron-left');
   persist();
+  schedSync();          // see toggleSidebar: a local-only preference loses to the account
 }
 
 function startResize(e, side) {
@@ -8647,17 +8665,10 @@ document.addEventListener('DOMContentLoaded',()=>{
     if (e.key === 'Escape') { closeStyleMenu(); document.getElementById('btn-style').focus(); }
   });
 
-  // Sidebar states
-  if (S.settings.sidebarOpen === false) {
-    document.getElementById('sidebar').classList.add('collapsed');
-    document.getElementById('sb-toggle').innerHTML=ic('chevron-right');
-  }
-  if (S.settings.charsOpen === false) {
-    document.getElementById('cp').classList.add('collapsed');
-    document.getElementById('cp-toggle').innerHTML=ic('chevron-left');
-  }
+  // Sidebar states -- one function, shared with adoptCloudState(), so boot and
+  // an account adopt cannot drift apart.
+  applyPanelStates();
   if (S.settings.sidebarDetail) {
-    document.getElementById('sidebar').classList.add('sidebar-detail');
     document.getElementById('sb-detail-btn').innerHTML=ic('list') + ' Details';
   }
 
@@ -9725,4 +9736,23 @@ function jpAskWhereToFile(id) {
       if (sc && ssel) ssel.value = sc.id;
     }
   }, 60);
+}
+
+// The open/closed state of the two side panels, applied from S.settings.
+// Boot used to be the only place this happened, so adopting an account copy
+// mid-session left the flags and the classes disagreeing until a reload.
+function applyPanelStates() {
+  const sb = document.getElementById('sidebar');
+  const sbT = document.getElementById('sb-toggle');
+  if (sb && sbT) {
+    sb.classList.toggle('collapsed', S.settings.sidebarOpen === false);
+    sbT.innerHTML = ic(S.settings.sidebarOpen === false ? 'chevron-right' : 'chevron-left');
+    sb.classList.toggle('sidebar-detail', !!S.settings.sidebarDetail);
+  }
+  const cp = document.getElementById('cp');
+  const cpT = document.getElementById('cp-toggle');
+  if (cp && cpT) {
+    cp.classList.toggle('collapsed', S.settings.charsOpen === false);
+    cpT.innerHTML = ic(S.settings.charsOpen === false ? 'chevron-left' : 'chevron-right');
+  }
 }
