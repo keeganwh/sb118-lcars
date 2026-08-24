@@ -296,6 +296,13 @@ const VERSIONS = [
       'Fixed: the browser tab still read v4.23',
     ],
   },
+  {
+    version: 'pending',
+    date: '2026-08-24',
+    changes: [
+      'Fixed: aliases you had set up were not picked up reliably. Only an alias containing a space or a full stop was ever really registered, so a one-word or lowercase alias, or one starting with punctuation, still went bold but was missed when LCARS worked out who was in a sim, which colour to give them and whether the sim was yours. Every alias now counts, matched whatever the capitalisation, and a longer alias wins over a shorter one inside it',
+    ],
+  },
 ];
 function loadState() {
   try { const r = localStorage.getItem(SKEY); if (r) return JSON.parse(r); } catch(e){}
@@ -3594,26 +3601,57 @@ function doOutdent() {
 // CHAR DETECTION
 // ================================================================
 const CREX = /^([A-Z][A-Za-zÀ-ɏ'''\-]{1,}(?:\/[A-Z][A-Za-zÀ-ɏ'''\-]{1,})*):/gm;
+// Every name and alias registered in the character list, longest first.
+//
+// This is deliberately ONE list shared by detectChars and boldNames(). They
+// used to build it separately and both filtered it to `/[\s.]/` — aliases
+// containing a space or a full stop — which silently dropped every single-word,
+// lowercase, digit-bearing or punctuation-leading alias. Those fell through to
+// CREX, which matches any capitalised word before a colon, so they still looked
+// bold while attribution, colouring and myChars quietly missed them. If you add
+// a third place that needs alias matching, call this rather than rebuilding it.
+//
+// Longest first matters: with both "Hopper" and "R. Hopper" registered, the
+// short one would otherwise win and bold only half the name.
+function getRegisteredAliases() {
+  const seen = new Set(); const out = [];
+  Object.values(S.characters || {}).forEach(c => {
+    getAllNamesForChar(c).forEach(alias => {
+      const a = (alias || '').trim();
+      if (!a) return;
+      const key = a.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key); out.push(a);
+    });
+  });
+  return out.sort((a, b) => b.length - a.length);
+}
+
+// Anchored, case-insensitive "Alias:" matcher for one registered alias.
+function aliasPrefixRe(alias) {
+  return new RegExp('^(' + alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')(:\\s?)', 'i');
+}
+
 function detectChars(text) {
   const s = new Set(); let m; CREX.lastIndex = 0;
   while ((m = CREX.exec(text)) !== null) m[1].split('/').forEach(n => s.add(n.trim()));
 
-  // Second pass: manifest aliases with periods/spaces/initials (e.g. "R. Hopper:")
-  // that the single-word regex above can't match.
-  const specialAliases = [];
-  Object.values(S.characters || {}).forEach(c => {
-    getAllNamesForChar(c).forEach(alias => {
-      if (alias && /[\s.]/.test(alias)) specialAliases.push(alias);
-    });
-  });
-  if (specialAliases.length) {
+  // Second pass: every registered name and alias, matched case-insensitively.
+  // Catches what CREX above cannot: lowercase nicknames, names starting with
+  // punctuation or a digit, and multi-word aliases.
+  const registered = getRegisteredAliases();
+  if (registered.length) {
     const lines = text.split(/\r?\n/);
     for (const line of lines) {
       const trimmed = line.trimStart();
-      for (const alias of specialAliases) {
-        if (trimmed.toLowerCase().startsWith((alias + ':').toLowerCase())) {
-          s.add(alias);
-        }
+      const lower = trimmed.toLowerCase();
+      for (const alias of registered) {
+        if (!lower.startsWith(alias.toLowerCase() + ':')) continue;
+        // CREX may already have recorded this line under the spelling used in
+        // the sim. Don't add a second entry for the same character; do add the
+        // registered spelling when the sim's differs (e.g. "hopper:").
+        if (!s.has(trimmed.slice(0, alias.length))) s.add(alias);
+        break; // longest match wins
       }
     }
   }
@@ -4564,13 +4602,7 @@ function boldNames() {
   const CREX_RE = new RegExp(`^((${N_PAT})(?:\\/${N_PAT})*)(:\\s?)`);
   const INIT_RE = /^([A-Z]\. [A-Z][A-Za-zÀ-ɏ'''\-]+(?:\/[A-Z]\. [A-Z][A-Za-zÀ-ɏ'''\-]+)*)(:\s?)/;
 
-  // Build alias list (manifest aliases containing spaces or dots)
-  const specialAliases = [];
-  Object.values(S.characters || {}).forEach(c => {
-    getAllNamesForChar(c).forEach(alias => {
-      if (alias && /[\s.]/.test(alias)) specialAliases.push(alias);
-    });
-  });
+  const registered = getRegisteredAliases();
 
   // Only process direct children of the editor — prevents outer wrapper divs
   // from having their entire innerHTML stripped, and stops nested narration
@@ -4584,24 +4616,28 @@ function boldNames() {
   blocks.forEach(bl => {
     const txt = (bl.textContent || '');
 
-    // Pass 1: standard CREX-style names (Hopper:, Name1/Name2:)
+    // Pass 1: registered names and aliases, longest first. These run BEFORE the
+    // generic patterns so a registered alias always wins with its full extent —
+    // "T'Lara Vex:" bolds whole rather than stopping at the space.
+    let matched = false;
+    for (const alias of registered) {
+      const aliasRe = aliasPrefixRe(alias);
+      if (aliasRe.test(txt)) {
+        applyBoldToBlock(bl, aliasRe);
+        matched = true;
+        break;
+      }
+    }
+    if (matched) return; // one pattern per block
+    // Pass 2: standard CREX-style names (Hopper:, Name1/Name2:)
     if (CREX_RE.test(txt)) {
       applyBoldToBlock(bl, CREX_RE);
-      return; // one pattern per block
+      return;
     }
-    // Pass 2: initial-dot-space names (R. Hopper:, B. Richards:)
+    // Pass 3: initial-dot-space names (R. Hopper:, B. Richards:)
     if (INIT_RE.test(txt)) {
       applyBoldToBlock(bl, INIT_RE);
       return;
-    }
-    // Pass 3: manifest aliases with spaces/dots
-    for (const alias of specialAliases) {
-      const esc2 = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const aliasRe = new RegExp(`^(${esc2})(:\\s?)`, 'i');
-      if (aliasRe.test(txt.trimStart())) {
-        applyBoldToBlock(bl, aliasRe);
-        break;
-      }
     }
   });
 
