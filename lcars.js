@@ -306,7 +306,7 @@ const VERSIONS = [
       'Changed: with Service History and Ribbons gone there is nothing left to tab between on a character, so the tab bar has gone too',
       'Changed: the Mission Log is hidden for now. It lived at the foot of Service History, and what it is really for \u2014 writing a summary and exporting it, with your scenes and sims, as wikitext \u2014 only becomes useful once LCARS can work out where a posted sim lives online and link to it. Rather than leave it sitting there half-finished it is out of the way until that exists. Any notes you have written are kept and will come back with it',
       'Changed: the alias editor now finds a row by where it actually is when you click it, rather than by the position it had when the panel was drawn. Nothing behaved wrongly before — adding or deleting an alias redrew the panel straight away, which kept the positions honest — but it only took one change elsewhere to make it act on the wrong alias, and a stray save now lands nowhere instead of on the wrong row',
-      'Added: LCARS now works out whose sim it is from the title. Title a sim the usual way — your character\u2019s name, a dash, then the title — and that character is selected for you, on a new sim and on sims you already have. Ranks in front of the name are fine, and any alias you have set up counts. If you have already chosen who is in a sim, nothing is changed',
+      'Added: LCARS now works out who is in a sim from the title. Title a sim the usual way \u2014 the names, a dash, then the title \u2014 and everyone named is listed in the Characters panel straight away, before anybody has spoken, with your own ticked as yours. Ranks are fine, several characters are fine however you separate them, and any alias you have set up counts. If you have already chosen who is in a sim, nothing is changed',
     ],
   },
 ];
@@ -3668,24 +3668,74 @@ function detectChars(text) {
   return [...s];
 }
 
-// SB118 titles are conventionally "<your character> - <the title>", so the name
-// in front of the dash names the writer's character. Returns the registered name
-// or alias it matches, longest first, or '' if the title names nobody we know.
+// SB118 titles are conventionally "<who is in it> - <the title>", so the head of
+// the title names the characters. Returns every registered name or alias found
+// there, in the order they appear, one entry per character.
 //
-// The head usually carries a rank ("Lt. JG R. Hopper - The Briefing"), so the
-// name is matched anywhere inside it on a word boundary rather than having to be
-// the whole of it. This reads the same registered list as the detection passes,
-// so an alias only has to be set up once to work here too.
-function charFromTitle(title) {
+// It scans the whole head for known names rather than splitting on separators,
+// so "&", "and", a comma and a slash all work without being enumerated, and a
+// rank in front of a name is fine. Matches are blanked out as they are found,
+// longest first, so a short alias sitting inside a longer one ("Vex" inside
+// "T'Lara Vex") is not counted a second time. This reads the same registered
+// list as the detection passes, so an alias only has to be set up once.
+function charsFromTitle(title) {
   const head = String(title || '').split(/\s[-–—]\s/)[0].trim();
-  if (!head) return '';
+  if (!head) return [];
+  let masked = head;
+  const hits = [];
   for (const alias of getRegisteredAliases()) {
-    if (head.toLowerCase() === alias.toLowerCase()) return alias;
     const esc2 = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (new RegExp('(^|\\W)' + esc2 + '($|\\W)', 'i').test(head)) return alias;
+    const re = new RegExp('(^|\\W)(' + esc2 + ')($|\\W)', 'gi');
+    let m;
+    while ((m = re.exec(masked)) !== null) {
+      const at = m.index + m[1].length;
+      hits.push({ at, alias });
+      masked = masked.slice(0, at) + '\u0000'.repeat(alias.length) + masked.slice(at + alias.length);
+      re.lastIndex = at + alias.length;
+    }
   }
-  return '';
+  hits.sort((a, b) => a.at - b.at);
+  const seen = new Set(); const out = [];
+  for (const h of hits) {
+    const ch = findCharByAnyName(h.alias);
+    const key = ch ? ch.id : h.alias.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key); out.push(h.alias);
+  }
+  return out;
 }
+
+// Whether a name is one of the writer's own. A title names everyone in the sim,
+// including other writers' characters, but only your own should be ticked as
+// yours -- myChars is what the Characters page counts your sims by, so claiming
+// someone else's would quietly skew those numbers. NPC is the one type that is
+// nobody's in particular.
+function isMyCharacter(name) {
+  const nl = String(name || '').toLowerCase();
+  if ((S.settings.myChars || []).some(n => n.toLowerCase() === nl)) return true;
+  const ch = findCharByAnyName(name);
+  return !!(ch && ch.charType && ch.charType !== 'NPC');
+}
+
+// The characters panel lists doc.chars, which is detected from dialogue tags --
+// so before anybody has spoken it is empty, and a sim opens with nobody in it
+// even though the title says who is there. Fold the title's characters in so the
+// panel is populated from the moment the sim is created. This also keeps them
+// alive through the save-time prune, which drops any myChars entry not present
+// in doc.chars.
+function withTitleChars(chars, title) {
+  const out = (chars || []).slice();
+  const sameChar = (a, b) => {
+    if (a.toLowerCase() === b.toLowerCase()) return true;
+    const ca = findCharByAnyName(a), cb = findCharByAnyName(b);
+    return !!(ca && cb && ca.id === cb.id);
+  };
+  charsFromTitle(title).forEach(n => {
+    if (!out.some(x => sameChar(x, n))) out.push(n);
+  });
+  return out;
+}
+
 
 // Auto-populate doc.myChars from detected names via the manifest alias chain.
 // Called on save and on openDoc so the manifest always reflects reality without
@@ -3694,10 +3744,11 @@ function syncDocMyChars(doc) {
   if (!doc.myChars) doc.myChars = [];
   let changed = false;
   // Only when nothing is selected yet: if you have unticked everyone on purpose,
-  // the next save must not quietly put the title's character back.
+  // the next save must not quietly put the title's characters back.
   if (!doc.myChars.length) {
-    const fromTitle = charFromTitle(doc.title);
-    if (fromTitle) { doc.myChars.push(fromTitle); changed = true; }
+    charsFromTitle(doc.title).filter(isMyCharacter).forEach(n => {
+      doc.myChars.push(n); changed = true;
+    });
   }
   (doc.chars || []).forEach(name => {
     if (doc.myChars.includes(name)) return;
@@ -3771,7 +3822,7 @@ function replaceCharName(from, to) {
     if (di>=0) { doc.myChars.splice(di,1); if (!doc.myChars.includes(to)) doc.myChars.push(to); }
     const gi = S.settings.myChars.indexOf(from);
     if (gi>=0) { S.settings.myChars.splice(gi,1); if (!S.settings.myChars.includes(to)) S.settings.myChars.push(to); }
-    doc.chars = detectChars(ed.innerText||'');
+    doc.chars = withTitleChars(detectChars(ed.innerText||''), doc.title);
   }
   schedSave();
   if (doc) updateCharsPanel(doc);
@@ -3942,7 +3993,7 @@ function flushSave() {
   else if (doc.status !== 'complete') doc.completedAt = null;
   doc.postType = document.getElementById('doc-posttype').value||null;
   doc.updatedAt = Date.now();
-  doc.chars = detectChars(ed.innerText||'');
+  doc.chars = withTitleChars(detectChars(ed.innerText||''), doc.title);
   // Prune myChars: remove names no longer detected in this sim (prevents ghost characters)
   doc.myChars = (doc.myChars||[]).filter(n => (doc.chars||[]).includes(n));
   syncDocMyChars(doc);   // re-add any that belong via alias chain
@@ -6183,16 +6234,17 @@ function showNewDoc(sceneId,missionId,preTagCharId){
     if(m==='__new_mission__'||m===''){alert('Please select or create a mission first.');return false;}
     const id=uid();
     const preChar = preTagCharId && S.characters ? S.characters[preTagCharId] : null;
-    // No character passed in? Take it from the title, so a sim titled the usual
-    // way opens with its writer's character already selected.
-    const titleChar = preChar ? '' : charFromTitle(t);
-    const initMyChars = preChar ? [preChar.name] : (titleChar ? [titleChar] : []);
+    // No character passed in? Take them from the title, so a sim titled the usual
+    // way opens with everyone in it listed and the writer's own already ticked.
+    const titleChars = preChar ? [] : charsFromTitle(t);
+    const initChars = preChar ? [preChar.name] : titleChars;
+    const initMyChars = preChar ? [preChar.name] : titleChars.filter(isMyCharacter);
     if (preChar) {
       if (!S.settings.myChars) S.settings.myChars = [];
       if (!S.settings.myChars.includes(preChar.name)) S.settings.myChars.push(preChar.name);
     }
     S.docs[id]={id,title:t,content:tmpl?tmpl.content:'',missionId:m||null,sceneId:(sc&&sc!=='__new_scene__')?sc:null,
-      chars:[],myChars:initMyChars,charColors:{},status:'active',postType:pt||null,postedAt:null,
+      chars:initChars.slice(),myChars:initMyChars,charColors:{},status:'active',postType:pt||null,postedAt:null,
       snapshots:[],createdAt:Date.now(),updatedAt:Date.now()};
     persist(); renderNav(); openDoc(id);
   });
