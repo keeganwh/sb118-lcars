@@ -164,11 +164,13 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 
 ---
 
-# BATCH 6 — Move every doc out of the payload blob
+# BATCH 6 — Move data out of the payload blob
 
 **Score [+5]. Category: Component Revision. Almost certainly several sessions.**
 
 **Why alone:** the largest correctness risk on the board, and it gates the Google Groups extension. The staging exists so each step is independently reversible — that is the whole point.
+
+**The picture item below is the exception and can be taken on its own, well before the big one.** It is the same argument — bytes that do not belong in the payload blob — at a fraction of the risk: no correctness question, no offline outbox, and the bucket it needs already exists. It is a fair rehearsal for the reasoning in the main item, and it is small enough to close in one short session.
 
 - [ ] **[+5] Docs out of the blob.**
       **Why it is worth doing.** `saveToCloud()` POSTs the *entire* payload every few seconds while you type, so the cost of saving one sentence scales with how much you have ever written — and it gets worse every month. It also means two tabs of your *own* account clobber each other, and it is the reason a share link has to be a snapshot copy rather than a live view (a policy on the blob row is all-or-nothing).
@@ -180,6 +182,14 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
       _The hard part is offline: per-doc means a real outbox — dirty flags, a replay queue, and a decision about a queued edit that conflicts with a newer server version. That is the piece most likely to go wrong._
       _`jp_docs`, the membership helpers and the two-accessor discipline from Joint Posts are what this builds on._
       _Done when: saving a sentence uploads one sim, not the archive._
+
+- [ ] **[+4] Character pictures into the storage bucket the schema already made for them.** _Small, standalone — take it before the item above, not with it._
+      `supabase/schema.sql` creates a public `character-pics` bucket with four RLS policies, commented *"replaces base64 pictureDataUrl"*. **The app never calls it** — there is no reference to `character-pics` or `/storage/v1` anywhere in `lcars.js`. Pictures are still resized to 200×200, JPEG'd at 0.82 and base64'd into `c.pictureDataUrl` (`onCharPicFile`, `loadCharPicFromUrl`, `resizePicture` ~line 7909), which puts them **inside the payload blob**.
+      **Why it matters more than its size suggests.** Base64 inflates a picture by a third, and the payload is uploaded whole on every save and downloaded whole on every load — so a writer with eight characters carries ~150 KB of image data in every sync, forever, against the 500 MB database quota, while the 1 GB file-storage quota created for exactly this sits at zero. It is a cost paid repeatedly where it should be paid once. Measured 2026-08-26: 34 MB of database and 92 MB of egress across 17 writers, so this is not urgent — but egress is the quota with a shape to it, and this is the cheapest thing that flattens it.
+      **No migration needed** — the bucket and its policies are already applied. Upload on set, store a URL, and let the browser cache it.
+      **Handle the orphans in the same pass, not after:** deleting a character, replacing its picture, and deleting an account must all delete the file, or the bucket fills with things nothing points at. Account deletion in particular already has a grace period and a `security definer` path — check what it does with storage.
+      **Existing pictures need a one-time migration** out of `pictureDataUrl` and into the bucket, on a signed-in boot, in the manner of `backfillSnapshots`. Offline-only writers keep the data URL and must keep working: `isCloud()` gates it, like everything else that touches the network.
+      _Done when: setting a character picture uploads a file and stores a URL, existing pictures are migrated once, removing a picture or a character removes the file, and an offline-only writer is unaffected._
 
 ---
 
