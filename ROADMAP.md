@@ -116,9 +116,8 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
       - **Only the writer who published could see the share.** `shared_docs_own` asked `auth.uid() = owner_uid`, so every other member's dialog said the sim was not shared — and publishing it upserted onto a row they were not allowed to update, failing with nothing they could act on. The policy now also accepts `is_jp_member(doc_id)`, redefined below the JP section because that is where `is_jp_member()` exists. Solo sims are unaffected.
       **The schema change is not applied yet — deploy the app first, then run `schema.sql`.** Four checks in `supabase/test/run.sh`, four in `test/jp_browser.js`.
 
-- [ ] **[0] Test: deleting an account while the server is unreachable.** _Testing._
-      Covered by `account-check.js offline`, never done by hand. Folded in here because it is the same offline-path headspace as the freeze.
-      _Done when: the flow has been walked through by hand with the network off._
+- [x] **[0] Test: deleting an account while the server is unreachable.** _Done 2026-08-26 — no fault found._
+      Walked through in a browser with the Supabase route aborted, as `test/account_offline_browser.js`, which is now the repeatable version of "by hand". `deleteAccount()` refuses outright rather than half-deleting: the writer is told nothing was deleted, their sims stay, they stay signed in, and no deletion notice is left to greet them on the next load. Reconnected, the same action stamps `deleted_at` as it should. Eight checks.
 
 ---
 
