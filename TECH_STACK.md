@@ -32,7 +32,7 @@ Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same 
 | **Snapshots** | Own Supabase table | Fetched on demand rather than carried in the synced payload, capped at ten per sim on both sides. |
 | **Offline** | First-class mode | The first-run gate offers an account or offline-only. Every network call is gated on `isCloud()`. |
 | **Hosting** | Vercel | `vercel.json` rewrites `/`, `/settings`, `/manifest` to `LCARS.html` and `/guide` to the guide, and sets no-cache headers on the three app files. |
-| **Serverless** | `api/download.js` | Re-inlines the app files into one self-contained `LCARS.html` on demand. **Frozen at v4.24 — do not extend, and do not add a fourth inline.** |
+| **Serverless** | `api/download.js` | Re-inlines the app files into one self-contained `LCARS.html` on demand. **Frozen at v4.24 — do not extend, and do not add a fourth inline.** Refuses to build if a new shared file lands, rather than silently shipping a copy missing it. |
 | **Styling / UI** | Hand-written CSS | LCARS-inspired. Classic skin (Dark / Light / High-contrast) plus the Delta Prime skin, via CSS variables. Resizable sidebar panels. |
 | **Fonts** | Google Fonts | Droid Sans preloaded. UI and editor fonts user-selectable from ~56 families, loaded dynamically by injecting a `<link>`. |
 | **Auth secrets** | Anon key only | The Supabase anon key is embedded in the page and safe there — RLS protects the data. The `service_role` key must never appear in this repo or the app. |

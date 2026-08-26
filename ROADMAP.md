@@ -95,6 +95,7 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 - [x] **[+5] Freeze the offline download.** _Done 2026-08-26._
       **Frozen at v4.24.** Verified booting clean from `file://` at `21d8aec` first — v4.24 plus the changes pending for the next version — so the version being frozen at is one that actually works.
       The freeze is recorded in `api/download.js` (a header saying it is finished and must not grow a fourth inline), `CLAUDE.md`, `TECH_STACK.md`, and the Settings copy, which now tells a writer the offline copy is frozen and that Joint Posts, share links, accounts, syncing and anything HQ are not in it.
+      **The route now refuses to build rather than breaking quietly.** It only ever knew about three files, so a fourth shared file would have built cleanly and shipped an offline copy silently missing it — no error, the feature just absent. A check now rejects any leftover relative `src`/`href` (absolute font URLs and the `data:` favicon are fine). Verified both ways: current `main` builds, a simulated fourth file is refused.
       `OFFLINE_FROZEN_VERSION` at the top of `lcars.js` is the stated version — it deliberately does **not** follow `APP_VERSION`.
       **This unblocks the build-step question that was gating real-time writing** (Batch 7) — a bundler no longer costs the one-file copy, because the one-file copy is frozen.
 
@@ -117,10 +118,15 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
       Covered by `account-check.js offline`, never done by hand. Folded in here because it is the same offline-path headspace as the freeze.
       _Done when: the flow has been walked through by hand with the network off._
 
-- [ ] **[—] "LCARS Lite" — a later decision, not a design.** _Flagged 2026-08-26 by the freeze above. Do not start it._
-      The frozen download will eventually drift far enough behind LCARS online to be worth replacing. When that happens the agreed answer is a **purpose-built, deliberately simplified offline app** — one that decides up front what a writer actually needs with no connection, and is built to that — **not a bigger inliner**.
-      **This is a flag, not a brief.** Nothing about it is designed: not what it includes, not whether it shares code with the app, not whether it exists at all. Raising it is a decision for the user to make when the drift is real, and it should get its own session.
-      _Trigger to revisit: the frozen copy is missing something a writer offline genuinely needs, or someone asks for it._
+- [ ] **[—] "LCARS Lite" — direction settled 2026-08-26, not yet designed.** _Its own session. Do not start it inside another batch._
+      **The user has decided this is the answer**, rather than leaving it open: a **purpose-built, deliberately pared-back offline app** replaces the inlined download in time. Not a bigger inliner.
+      What is settled:
+      - **Still browser-based** — an HTML file you open, same as today. Not a native app, not a build step, "for now".
+      - **Deliberately fewer bells and whistles.** It decides up front what a writer actually needs with no connection and is built to that, rather than being the full app with pieces disabled.
+      - **Strip what cannot apply offline** — account settings, sign-in, syncing, share links, Joint Posts, anything HQ. Not hidden behind a guard: absent.
+      What is **not** decided, and should not be assumed: what stays in, whether it shares source with the main app or is its own file, how a writer moves work between the two beyond the backup file, and when it gets built.
+      _Trigger to start: the user asks, or `/api/download` begins refusing (see below) — whichever comes first._
+      _Note: the frozen route now refuses to build if a new shared file lands, rather than silently shipping a copy missing it. **That refusal is the alarm clock for this item.**_
 
 ---
 

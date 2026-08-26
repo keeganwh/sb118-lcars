@@ -18,11 +18,12 @@
 //   * Anything that needs the server is deliberately absent from the offline
 //     copy — Joint Posts, share links, accounts, anything SB118 HQ.
 //   * A new shared file is NOT to be added to the inline list below. If one
-//     lands, this route keeps serving what it can and the offline copy simply
-//     stops gaining features; it does not grow a fourth inline.
-//   * If the tags it looks for stop matching, it fails loudly rather than
-//     emitting a broken app. That is the intended end state, not a bug to fix
-//     by growing this file.
+//     lands, this route REFUSES rather than growing a fourth inline. The
+//     check at the end is what enforces that: without it the build succeeds
+//     and silently ships an offline copy missing the new file, which is the
+//     one failure nobody would notice.
+//   * Failing is the intended end state, not a bug to fix by growing this
+//     file. When it starts refusing, that is the signal to build LCARS Lite.
 //
 // If a genuinely offline LCARS is wanted later, the agreed answer is a
 // purpose-built, deliberately simplified "LCARS Lite" — not a bigger inliner.
@@ -64,6 +65,19 @@ module.exports = async (req, res) => {
       .replace(LINK_TAG, () => `<style>\n${css}</style>`)
       .replace(RENDER_TAG, () => `<script>\n${render}</script>`)
       .replace(SCRIPT_TAG, () => `<script>\n${js}</script>`);
+
+    // Nothing may be left pointing at a file that will not be next to the
+    // download. Absolute URLs are fine (the fonts, which are meant to be
+    // absent offline) and so is the data: favicon; a relative path is not.
+    const dangling = [...out.matchAll(/<(?:script[^>]*\ssrc|link[^>]*\shref)=["']([^"']+)["']/gi)]
+      .map(m => m[1])
+      .filter(u => !/^(https?:)?\/\//i.test(u) && !/^data:/i.test(u));
+    if (dangling.length) {
+      throw new Error(
+        'the offline copy would be missing ' + dangling.join(', ') + '. ' +
+        'This route is frozen and does not grow a new inline — see the note at the top of this file.'
+      );
+    }
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="LCARS.html"');
