@@ -30,6 +30,7 @@ const SIM = [
   '<p><span style="font-weight:700">Bold run pasted from Docs.</span></p>',
   '<p></p>',
   '<p>A second pasted paragraph, after an empty one.</p>',
+  '<ul><li>bullet one</li><li>bullet two</li></ul>',
   '<div>Doe: A closing line.</div>',
 ].join('');
 
@@ -130,9 +131,16 @@ const SIM = [
 
   // 6. Indentation survives as margin-left in both.
   ok(has(res.copyHtml, /margin-left:\s*4em/), 'copy-out turns ind-2 into margin-left:4em');
+  ok(/<ul[^>]*style="[^"]*margin-top:\s*0/.test(res.copyHtml),
+     'copy-out states a zero margin on a list, so mail clients do not add a gap');
   notes.push('reading pass keeps ind-2 as: ' +
     (/class="ind-2"/.test(res.reading) ? 'class="ind-2"'
       : /margin-left/.test(res.reading) ? 'margin-left' : 'NOTHING — indent lost'));
+
+  // 6b. Lists must state their own margin, since a mail client's default
+  // stylesheet puts a gap above and below one and LCARS's does not.
+  const ul = /<ul[^>]*>/.exec(res.copyHtml);
+  notes.push('copy-out <ul> tag: ' + (ul ? ul[0] : 'none in this sim'));
 
   // 7. Empty lines: one blank line per empty block, no more, no fewer.
   const blanks = (res.copyText.match(/\n\s*\n/g)||[]).length;

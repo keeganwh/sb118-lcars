@@ -311,6 +311,7 @@ const VERSIONS = [
       'Fixed: a character taken from the sim title showed up unticked beside their own dialogue when the title and the sim spelled them differently \u2014 \u201cCommander Robin Hopper\u201d in the title, \u201cHopper:\u201d in the sim. LCARS now matches the character rather than the spelling, so ticking, unticking and your sim counts all follow the person',
       'Fixed: pasting a sim in from Google Docs turned the whole pasted section bold, and lost the words you had actually bolded or italicised there. Google Docs wraps whatever you copy in a bold tag that it then switches off again, and LCARS was keeping the tag and throwing away the switch-off. Bold and italic pasted from Docs, Word or Outlook now come through as themselves, and the rest of the paste stays plain',
       'Fixed: sims you had already pasted in from Google Docs are repaired on this update. They were stored with the whole pasted section bold, so they looked bold here and on a share link, and came out un-bold in the group. The stray bold is removed once, on the next time LCARS opens, and any bold you applied yourself inside it is left alone',
+      'Fixed: a bulleted list copied into Gmail or Google Groups arrived with an extra gap above and below it. Mail clients put a margin around a list of their own, which LCARS turns off in its own styling but could not turn off in somebody else\u2019s. The copy now says so outright, so a list sits tight against the lines around it, the way it does while you are writing',
     ],
   },
 ];
@@ -3374,6 +3375,23 @@ function installCopyHandler() {
           el.removeAttribute(attr.name);
         }
       });
+    });
+
+    // Gmail, Groups and most mail clients give <ul>/<ol> a default block margin
+    // of their own (typically 1em top and bottom), so a bulleted list arrived
+    // with a gap above and below it that is not there in the editor. LCARS zeroes
+    // that margin in its own stylesheet; a paste target never sees that
+    // stylesheet, so it has to be stated inline. This is the one deliberate
+    // exception to "keep margin-left and nothing else" -- and it runs after the
+    // attribute strip above, which would otherwise remove it again.
+    tmp.querySelectorAll('ul,ol').forEach(list => {
+      list.style.marginTop = '0';
+      list.style.marginBottom = '0';
+      list.style.paddingLeft = '2.5em';
+    });
+    tmp.querySelectorAll('li').forEach(li => {
+      li.style.marginTop = '0';
+      li.style.marginBottom = '0';
     });
 
     // The first line of a contenteditable is often bare inline/text nodes with no
