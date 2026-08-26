@@ -15,6 +15,8 @@ const VERSIONS = [
       'Changed: the sign-in screen is shorter on a phone, so the Learn more prompt below it is on screen without scrolling. Discord and Google share a row, and the note about this being a work in progress fits on one line',
       'Changed: clearer wording on the create-account screen about what a Writer ID and a PIN are for, and about linking Google or Discord afterwards \u2014 which is optional, and is both a second way in and how you reset your own PIN',
       'Fixed: the Storage and Usage report in the Admin panel showed nothing but an error on every account. It now opens with bars showing how much of the space is gone and what is filling it',
+      'Fixed: on a joint sim, restoring an old revision worked even when somebody else had the sim. It put the old version on screen and over your copy of the sim, while the save it needed could never go through \u2014 so the writing came back on the next refresh and the restore had done nothing but alarm you. Restoring now asks for the sim first, the same as writing does',
+      'Changed: the Revision Snapshots window on a joint sim now says the revisions are your own. Each writer keeps their own history of a shared sim, which is deliberate \u2014 they are the points you would want to come back to \u2014 but nothing said so',
     ],
   },
   {
@@ -6201,13 +6203,19 @@ async function showHistory() {
       <tr><th>SAVED</th><th>WORDS</th><th></th></tr>
       ${rows}
     </table>
-    <p style="font-size:0.73rem;color:var(--dim);margin-top:10px">Up to 10 snapshots stored. Oldest removed when limit is reached.${isCloud() ? ' Saved to your account, so they follow you between devices.' : ''}</p>
+    <p style="font-size:0.73rem;color:var(--dim);margin-top:10px">Up to 10 snapshots stored. Oldest removed when limit is reached.${isCloud() ? ' Saved to your account, so they follow you between devices.' : ''}${isJointDoc(doc) ? ' On a joint sim these are your own revisions — each writer keeps their own, and restoring one needs the sim.' : ''}</p>
   `, null);
 }
 
 function restoreSnapshot(i) {
   if (!curId) return;
   const doc = S.docs[curId]; if (!doc) return;
+  // Restoring is writing, and it is the fourth editing path -- the toolbar, the
+  // commands and the keyboard were guarded, this was not. On a joint sim you do
+  // not hold, it used to replace the sim on screen AND doc.content with an old
+  // revision, while the save it depends on could never go through. Ask the same
+  // question every other editing path asks.
+  if (jpEditBlocked()) { closeModal(); return; }
   const snap = _histList[i]; if (!snap) return;   // indexes the list showHistory built
   const date = new Date(snap.savedAt).toLocaleString();
   if (!confirm(`Restore this snapshot?\n\n${date} — ${snap.wordCount} words\n\nThis will replace the current editor content.`)) return;
