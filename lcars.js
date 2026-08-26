@@ -312,6 +312,7 @@ const VERSIONS = [
       'Fixed: pasting a sim in from Google Docs turned the whole pasted section bold, and lost the words you had actually bolded or italicised there. Google Docs wraps whatever you copy in a bold tag that it then switches off again, and LCARS was keeping the tag and throwing away the switch-off. Bold and italic pasted from Docs, Word or Outlook now come through as themselves, and the rest of the paste stays plain',
       'Fixed: sims you had already pasted in from Google Docs are repaired on this update. They were stored with the whole pasted section bold, so they looked bold here and on a share link, and came out un-bold in the group. The stray bold is removed once, on the next time LCARS opens, and any bold you applied yourself inside it is left alone',
       'Fixed: a bulleted list copied into Gmail or Google Groups arrived with an extra gap above and below it. Mail clients put a margin around a list of their own, which LCARS turns off in its own styling but could not turn off in somebody else\u2019s. The copy now says so outright, so a list sits tight against the lines around it, the way it does while you are writing',
+      'Fixed: turning a sim into a joint sim saved the wrong record of your Bold locations, Italic OOC and Italic thoughts settings alongside it \u2014 always as if all three were switched off. Nothing reads that record yet, so nothing has looked wrong, but it would have done the moment something did',
     ],
   },
 ];
@@ -8830,6 +8831,7 @@ async function jpMakeJoint(id) {
   if (!isCloud()) { showToast('Joint sims need an account — sign in first.'); return; }
   flushSave();
   const a = getAuth();
+  const _p = getPrefs();
   const r = await supaFetch('/rest/v1/jp_docs', {
     method: 'POST',
     headers: { 'Prefer': 'return=representation' },
@@ -8842,7 +8844,14 @@ async function jpMakeJoint(id) {
       mission_name: (S.missions[doc.missionId] || {}).name || null,
       scene_name: (S.scenes[doc.sceneId] || {}).name || null,
       academy: isAcademyDoc(doc),
-      format: { boldLoc: !!S.settings.boldLoc, italOOC: !!S.settings.italOOC, italThoughts: !!S.settings.italThoughts },
+      // The formatting a READER should see, in the same shape sharePayload()
+      // uses. These were three setting names that do not exist anywhere in the
+      // app -- the real ones live in prefs -- so every joint sim published its
+      // format as all-off. Nothing reads jp_docs.format yet, which is the only
+      // reason it never showed.
+      format: { boldLocations: !!_p.boldLocations,
+                italicOOC:     !!_p.italicOOC,
+                thoughtItalic: !!_p.thoughtItalic },
       // No myChars: per writer, kept in S.jpMyChars -- see jpRestoreMyChars.
       meta: { chars: doc.chars || [], charColors: doc.charColors || {} },
     })
