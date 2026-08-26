@@ -127,7 +127,7 @@ const SIM = [
 
   // 5. <p> normalisation — copy-out must not ship <p>, which double-spaces.
   ok(!has(res.copyHtml, /<p[\s>]/i), 'copy-out contains no <p> (they double-space everywhere else)');
-  notes.push('reading pass <p> count: ' + (res.reading.match(/<p[\s>]/gi)||[]).length);
+  ok(!has(res.reading, /<p[\s>]/i), 'the reading pass contains no <p> either');
 
   // 6. Indentation survives as margin-left in both.
   ok(has(res.copyHtml, /margin-left:\s*4em/), 'copy-out turns ind-2 into margin-left:4em');
@@ -149,9 +149,7 @@ const SIM = [
 
   // 8. Pasted-from-Docs styling must not survive into a reader's copy.
   ok(!has(res.copyHtml, /font-family/i), 'copy-out drops pasted font-family');
-  notes.push('reading pass pasted styling: ' +
-    (/font-family/i.test(res.reading) ? 'font-family SURVIVES' : 'dropped') + ', ' +
-    (/color\s*:/i.test(res.reading) ? 'colour SURVIVES' : 'colour dropped'));
+  ok(!has(res.reading, /font-family/i), 'the reading pass drops pasted font-family');
 
 
   // ---- Google Docs paste round trip ---------------------------------

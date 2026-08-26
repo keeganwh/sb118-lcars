@@ -168,6 +168,38 @@ function lrToReadingHtml(html, opts) {
     sp.parentNode.removeChild(sp);
   });
 
+  // Everything below here is copy-out's own tidy-up, done here too so this
+  // function keeps its promise on its own. share.html sanitises before calling
+  // it and styles <p> itself, so it was covered -- but the promise was being
+  // kept by the caller rather than by the function, and the next surface to use
+  // this would not have either safeguard.
+
+  // Colour of every kind goes, along with fonts and anything else a writer's
+  // paste dragged in. margin-left is the one survivor, exactly as copy-out has
+  // it: indentation is structure, not decoration.
+  tmp.querySelectorAll('[style]').forEach(el => {
+    const ml = el.style.marginLeft;
+    el.removeAttribute('style');
+    if (ml) el.style.marginLeft = ml;
+  });
+
+  // <p> carries a default margin everywhere except inside #editor, which is why
+  // a sim pasted from Google Docs copies out double spaced unless it is turned
+  // into a <div> first. Same reasoning, same answer, so the two passes agree on
+  // content that has been pasted as well as content that was typed.
+  tmp.querySelectorAll('p').forEach(para => {
+    const d = document.createElement('div');
+    [...para.attributes].forEach(a => d.setAttribute(a.name, a.value));
+    while (para.firstChild) d.appendChild(para.firstChild);
+    para.parentNode.replaceChild(d, para);
+  });
+
+  // ind-1..4 are deliberately left as classes rather than turned into inline
+  // margins the way copy-out does. A page rendering this can scale the indents
+  // down on a narrow screen, which share.html does; an inline margin could not
+  // be overridden. Any consumer that cannot carry a stylesheet -- an export, a
+  // parser -- maps them as 2em per level.
+
   return tmp.innerHTML;
 }
 
