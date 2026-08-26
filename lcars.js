@@ -313,6 +313,7 @@ const VERSIONS = [
       'Fixed: sims you had already pasted in from Google Docs are repaired on this update. They were stored with the whole pasted section bold, so they looked bold here and on a share link, and came out un-bold in the group. The stray bold is removed once, on the next time LCARS opens, and any bold you applied yourself inside it is left alone',
       'Fixed: a bulleted list copied into Gmail or Google Groups arrived with an extra gap above and below it. Mail clients put a margin around a list of their own, which LCARS turns off in its own styling but could not turn off in somebody else\u2019s. The copy now says so outright, so a list sits tight against the lines around it, the way it does while you are writing',
       'Fixed: turning a sim into a joint sim saved the wrong record of your Bold locations, Italic OOC and Italic thoughts settings alongside it \u2014 always as if all three were switched off. Nothing reads that record yet, so nothing has looked wrong, but it would have done the moment something did',
+      'Changed: anyone with an account can now start a joint sim, or turn a sim they are writing into one. Starting one was held back to admins while the feature was being tried out; joining, taking turns and writing were open all along, and now the whole of it is',
     ],
   },
 ];
@@ -9128,7 +9129,7 @@ function jpNudge() {
 function jpConfirmMakeJoint(id) {
   const doc = S.docs[id];
   if (!doc || isJointDoc(doc)) return;
-  if (!jpCanCreate()) { showToast('Joint sims are still being tested.'); return; }
+  if (!jpCanCreate()) { showToast('Sign in to make a sim joint — a shared sim needs an account.'); return; }
   openModal('Make this a joint sim?',
     '<div style="font-size:0.9rem;line-height:1.6">' +
     '<p><strong>' + esc(doc.title || 'This sim') + '</strong> moves out of your own storage and into ' +
@@ -9140,16 +9141,17 @@ function jpConfirmMakeJoint(id) {
     { ok: 'Make it joint' });
 }
 
-// ── Rollout gate ──────────────────────────────────────────────────────────
-// TEMPORARY, and meant to be deleted. Joint Posts goes to production before it
-// has been exercised against the real Supabase by real people, so STARTING a
-// joint sim is held back to super admins for now. Everything else is open:
-// anybody invited to a joint sim can accept it, take turns and write, which is
-// what makes it testable with a second account at all.
+// ── Who can start a joint sim ─────────────────────────────────────────────
+// Everyone with an account. The super-admin rollout gate that used to live here
+// was temporary, for the rounds before Joint Posts had been exercised against
+// the real Supabase; it has been, so it is gone.
 //
-// To open it to everyone: make this return true, and drop the paragraph in the
-// roadmap that describes the gate. Nothing else keys off it.
-function jpCanCreate() { return isCloud() && isSuperAdmin(); }
+// An account is the only requirement, and it is a real one rather than a
+// policy: a joint sim lives on a shared row, so there is nowhere to put one
+// when you are signed out. The server has never keyed off role here -- the
+// jp_docs insert policy asks only that you own what you create, and jp_invite()
+// asks only that you own the sim -- so this is the whole of the change.
+function jpCanCreate() { return isCloud(); }
 
 // ── Where a joint sim is filed ────────────────────────────────────────────
 // A joint sim is filed PER WRITER, and the filing lives in that writer's own

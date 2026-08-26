@@ -99,9 +99,9 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
       _This is also what unblocks the build-step question that has been gating real-time writing — a bundler no longer costs the one-file copy, because the one-file copy is frozen._
       _Done when: the download is documented as frozen at a stated version, and the app says so where a writer downloads it._
 
-- [ ] **[+4] Open Joint Posts to everyone.**
-      `jpCanCreate()` at `lcars.js:9486` is `return isCloud() && isSuperAdmin();` — only a super admin can **start** a joint sim or convert a solo one. Anyone invited can already join, take turns and write. Change it to `return isCloud();` and verify all three call sites: the convert path (~4183), button visibility (~9334) and the create guard (~9465, which currently toasts "Joint sims are still being tested.").
-      _Done when: any signed-in writer can start a joint sim._
+- [x] **[+4] Open Joint Posts to everyone.** _Done 2026-08-26._
+      `jpCanCreate()` is `return isCloud();`. All three call sites verified — the convert path in `onPostTypeChange`, the "make this joint" button in `jpPaint`, and the guard in `jpConfirmMakeJoint`, whose "still being tested" toast is now a sign-in prompt (an account, not a role, is the one real requirement: a joint sim lives on a shared row).
+      The server never keyed off role: `jp_docs_insert` asks only that you own what you create, and `jp_invite()` only that you own the sim — so no schema change was needed. `test/jp_browser.js` covers it with three checks, run as an ordinary writer.
 
 - [ ] **[+4] Joint Posts follow-ups — review, don't assume.**
       Some of these may already work. Verify each, then fix or delete:

@@ -157,6 +157,20 @@ async function ctxFor(browser, who, errors) {
   await a.p.waitForTimeout(200);
   const docId = await a.p.evaluate(() => curId);
   await a.p.evaluate(() => { document.getElementById('editor').innerHTML = '<div>A writes the opening.</div>'; flushSave(); });
+
+  // The rollout gate is gone. The mock answers my_role() with 'writer', so this
+  // context is an ordinary writer -- who used to be refused with a "still being
+  // tested" toast and shown no button at all.
+  await a.p.evaluate(() => jpPaint());
+  ok(await a.p.evaluate(() => jpCanCreate() === true), 'an ordinary writer can start a joint sim');
+  ok(await a.p.evaluate(() => !document.getElementById('jp-make-row').classList.contains('hidden')),
+     'and is offered "make this joint" on a solo sim');
+  await a.p.evaluate(() => jpConfirmMakeJoint(curId));
+  await a.p.waitForTimeout(200);
+  ok(await a.p.evaluate(() => /joint sim/i.test(document.getElementById('mo-title').textContent)),
+     'and gets the confirm dialog rather than a refusal');
+  await a.p.evaluate(() => { const m = document.getElementById('mo'); if (m) m.classList.add('hidden'); });
+
   await a.p.evaluate(id => jpMakeJoint(id), docId);
   await a.p.waitForTimeout(400);
   ok(!!DB.docs[docId], 'the sim reaches jp_docs when made joint');
