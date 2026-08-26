@@ -314,6 +314,8 @@ const VERSIONS = [
       'Fixed: a bulleted list copied into Gmail or Google Groups arrived with an extra gap above and below it. Mail clients put a margin around a list of their own, which LCARS turns off in its own styling but could not turn off in somebody else\u2019s. The copy now says so outright, so a list sits tight against the lines around it, the way it does while you are writing',
       'Fixed: turning a sim into a joint sim saved the wrong record of your Bold locations, Italic OOC and Italic thoughts settings alongside it \u2014 always as if all three were switched off. Nothing reads that record yet, so nothing has looked wrong, but it would have done the moment something did',
       'Changed: anyone with an account can now start a joint sim, or turn a sim they are writing into one. Starting one was held back to admins while the feature was being tried out; joining, taking turns and writing were open all along, and now the whole of it is',
+      'Fixed: on a joint sim, restoring an old revision worked even when somebody else had the sim. It put the old version on screen and over your copy of the sim, while the save it needed could never go through \u2014 so the writing came back on the next refresh and the restore had done nothing but alarm you. Restoring now asks for the sim first, the same as writing does',
+      'Changed: the Revision Snapshots window on a joint sim now says the revisions are your own. Each writer keeps their own history of a shared sim, which is deliberate \u2014 they are the points you would want to come back to \u2014 but nothing said so',
     ],
   },
 ];
@@ -4315,13 +4317,19 @@ async function showHistory() {
       <tr><th>SAVED</th><th>WORDS</th><th></th></tr>
       ${rows}
     </table>
-    <p style="font-size:0.73rem;color:var(--dim);margin-top:10px">Up to 10 snapshots stored. Oldest removed when limit is reached.${isCloud() ? ' Saved to your account, so they follow you between devices.' : ''}</p>
+    <p style="font-size:0.73rem;color:var(--dim);margin-top:10px">Up to 10 snapshots stored. Oldest removed when limit is reached.${isCloud() ? ' Saved to your account, so they follow you between devices.' : ''}${isJointDoc(doc) ? ' On a joint sim these are your own revisions — each writer keeps their own, and restoring one needs the sim.' : ''}</p>
   `, null);
 }
 
 function restoreSnapshot(i) {
   if (!curId) return;
   const doc = S.docs[curId]; if (!doc) return;
+  // Restoring is writing, and it is the fourth editing path -- the toolbar, the
+  // commands and the keyboard were guarded, this was not. On a joint sim you do
+  // not hold, it used to replace the sim on screen AND doc.content with an old
+  // revision, while the save it depends on could never go through. Ask the same
+  // question every other editing path asks.
+  if (jpEditBlocked()) { closeModal(); return; }
   const snap = _histList[i]; if (!snap) return;   // indexes the list showHistory built
   const date = new Date(snap.savedAt).toLocaleString();
   if (!confirm(`Restore this snapshot?\n\n${date} — ${snap.wordCount} words\n\nThis will replace the current editor content.`)) return;
