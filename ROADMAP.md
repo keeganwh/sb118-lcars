@@ -1,6 +1,6 @@
 # LCARS SB118 Writing Tool — Roadmap
 
-_Outstanding work only. Current version: **4.24**, released 2026-08-21. No pending changelog entries — `VERSIONS` and `CHANGELOG.md` are both cut clean._
+_Outstanding work only. Current version: **4.24**, released 2026-08-21. **Batches 1 and 2 have shipped to `main` but are not yet in a released version** — their changelog entries are pending in `VERSIONS`, and `CHANGELOG.md` will not carry them until the next bump. That is why they are ticked here rather than deleted._
 
 Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same `main` with a moving notice.
 
@@ -41,23 +41,23 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 
 **Why these together:** all four touch the same two things — the character data model (`S.characters`, `getAllNamesForChar`) and the detection passes that read it (`detectChars` ~line 3601, `applyNameBold` ~line 4567). Fixing alias matching while also deleting half the character record is one coherent job; splitting them means loading the same code twice and risking the removal undoing the fix.
 
-- [ ] **[+7] Fix alias detection.** _Broken now._
+- [x] **[+7] Fix alias detection.** _Broken now._
       Both detection sites build their alias list as `if (alias && /[\s.]/.test(alias))` — **only aliases containing a space or a period are registered.** A single-word alias never enters that pass. It falls through to `CREX`, which matches any capitalised word followed by a colon, so it usually *bolds* — which is why the bug looks like it isn't there — but it is matched as a generic name rather than as your character, so attribution, colouring and `myChars` can miss it. Anything not starting `[A-Z]` (`d'Ihnn`, a lowercase nickname) or containing a digit fails every pass.
       Fix once, in a shared helper both call sites use.
       _Done when: a single-word alias, a lowercase alias and a multi-word alias all attribute to the right character in a real sim — bolding, colour and `myChars` alike._
 
-- [ ] **[+6] Characters rework.** _Removing + revision + foundational._
+- [x] **[+6] Characters rework.** _Removing + revision + foundational._
       - Rename **Manifest → Characters** — the view, the route (`/manifest` → `/characters`), the header link and the labels.
       - **Remove Service History and Ribbons entirely** — tabs, data, UI, and `RIBBON_CATALOG`, `buildRibbonLookup`, `copySRWikitext`, `copyRibbonsWikitext`, `copyMissionLogWikitext`, `moveRibbon`.
       - **Keep aliases.**
       _Why the removal: SB118 HQ already tracks character data, and duplicating it now creates redundancy that makes a later integration harder. This is the first decision made on HQ's behalf — see the HQ note in Batch 9._
       _Done when: the view is called Characters, has its own route, holds only identity, colour and aliases, and nothing in the app references ribbons or the service record._
 
-- [ ] **[+6, part of the above] Fix the alias editor's index-addressing.**
+- [x] **[+6, part of the above] Fix the alias editor's index-addressing.**
       `removeAlias(i)` / `updateAlias(i)` (~lines 8217–8230, 7392–7425) address rows by array index in inline handlers despite rows carrying stable `id`s.
       _Done when: adding, editing and removing aliases is correct with the list in any order._
 
-- [ ] **[+2] Detect the author character from the sim title.** _New Component._
+- [x] **[+2] Detect the author character from the sim title.** _New Component._
       Infer which character is writing from the title and select them automatically. Depends on the alias fix landing first.
       _Done when: opening or creating a sim whose title names a character selects that character without being asked._
 
@@ -71,9 +71,18 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 
 **Why alone:** this is the product's core promise, and it touches `lrToReadingHtml()` in `lcars-render.js`, the editor's `copy` handler, and the `<p>`/`<div>` normalisation — a region where a subtle regression is invisible until a sim lands wrong in a real group. It needs undivided attention and a genuine round-trip test.
 
-- [ ] **[+7] Sim editor formatting — accuracy of output to Google Groups and Gmail.** _Standing item; re-run whenever reports come in._
+- [x] **[+7] Sim editor formatting — accuracy of output to Google Groups and Gmail.** _Standing item; re-run whenever reports come in._
       Priority is that what a writer sees is what arrives in the group. The known trap is documented: `<p>` and `<div>` look identical while writing and copy out double-spaced, which the copy handler normalises on the way *out* rather than at paste time.
       _Done when: a sim containing locations, dialogue tags, OOC, thoughts, markers, indentation and pasted-from-Docs content copies into both Gmail and a Google Groups compose window looking exactly as it did in the editor._
+
+      **Last run 2026-08-26 — passed.** Verified by the user in Gmail, Google Groups and a share link. Five fixes shipped:
+      1. **Google Docs pastes came in entirely bold and lost their own bold and italic.** Docs wraps a copied selection in `<b id="docs-internal-guid-…" style="font-weight:normal">` and marks real bold as `<span style="font-weight:700">`; `cleanPasteHTML` kept the tag, dropped the style that neutralised it, and unwrapped the spans. Weight and slant are now read off the **style**, not only off the tag.
+      2. **A one-shot repair** (`_docsWrapV1`) unwraps that stored wrapper in existing sims and templates, on the signature that it contains whole paragraphs — real bold never wraps a `<div>`.
+      3. **Bulleted lists arrived with a gap** above and below in Gmail and Groups. Mail clients give `ul`/`ol` a margin LCARS zeroes in its own stylesheet, which a paste target never sees; copy-out states it inline now.
+      4. **`lrToReadingHtml()` was not keeping its own promise** — inline colour, fonts and `<p>` passed straight through. `/s/<token>` was never wrong because `share.js` sanitises first, but the guarantee lived in the caller.
+      5. **`jpMakeJoint` published `format` from three setting names that do not exist**, so every joint sim stored it as all-off. Unread so far; fixed before anything reads it.
+
+      **The harness is `test/fidelity_browser.js`** — it drives one sim through all three passes and compares them, 24 checks. **The hand-run half is `test/OUTPUT-FIDELITY-TEST.md`** — the sample sim, the Google Doc to paste from, and thirteen things to check in Gmail and Groups. Re-run both when this item comes round again.
 
 ---
 
