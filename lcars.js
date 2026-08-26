@@ -310,6 +310,7 @@ const VERSIONS = [
       'Fixed: on a joint sim, which characters are marked as yours was stored once for the whole sim rather than once per writer. Everyone on the sim shared one list, so another writer marking their character marked it on your copy too, and unticking it only lasted until the next refresh brought theirs back. Your selection is now your own. The first time you open a joint sim after this update it is worked out fresh from the title and your character list',
       'Fixed: a character taken from the sim title showed up unticked beside their own dialogue when the title and the sim spelled them differently \u2014 \u201cCommander Robin Hopper\u201d in the title, \u201cHopper:\u201d in the sim. LCARS now matches the character rather than the spelling, so ticking, unticking and your sim counts all follow the person',
       'Fixed: pasting a sim in from Google Docs turned the whole pasted section bold, and lost the words you had actually bolded or italicised there. Google Docs wraps whatever you copy in a bold tag that it then switches off again, and LCARS was keeping the tag and throwing away the switch-off. Bold and italic pasted from Docs, Word or Outlook now come through as themselves, and the rest of the paste stays plain',
+      'Fixed: sims you had already pasted in from Google Docs are repaired on this update. They were stored with the whole pasted section bold, so they looked bold here and on a share link, and came out un-bold in the group. The stray bold is removed once, on the next time LCARS opens, and any bold you applied yourself inside it is left alone',
     ],
   },
 ];
@@ -357,6 +358,36 @@ if (!S._pasteCleanV1) {
       });
   });
   S._pasteCleanV1 = true;
+}
+// One-time repair: sims pasted in from Google Docs before the paste handler
+// learned to read weight off the style. Docs wraps a copied selection in a bold
+// tag it then switches off with a style; the old handler kept the tag and threw
+// the style away, so the whole pasted section was stored bold. A bold or italic
+// tag that WRAPS WHOLE PARAGRAPHS is that wrapper and nothing else -- real bold
+// applied by a writer never contains a <div> or a <p> -- so it is safe to
+// unwrap on that signature alone. Bold the writer applied inside it is left
+// exactly where it is.
+if (!S._docsWrapV1) {
+  const _unwrapDocsBold = html => {
+    if (!html || !/<(b|strong|i|em)\b/i.test(html)) return html;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    let found = false;
+    tmp.querySelectorAll('b,strong,i,em').forEach(el => {
+      if (!el.querySelector('div,p,li,blockquote,h1,h2,h3,h4')) return;
+      found = true;
+      while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+      el.parentNode.removeChild(el);
+    });
+    return found ? tmp.innerHTML : html;
+  };
+  Object.values(S.docs || {}).forEach(doc => {
+    if (doc.content) doc.content = _unwrapDocsBold(doc.content);
+  });
+  (S.templates || []).forEach(t => {
+    if (t && t.content) t.content = _unwrapDocsBold(t.content);
+  });
+  S._docsWrapV1 = true;
 }
 // Inline SVG icon reference — see the sprite at the top of <body>.
 // `extra` takes size modifiers such as 'ic-sm' / 'ic-lg'.
