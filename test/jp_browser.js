@@ -219,6 +219,22 @@ async function ctxFor(browser, who, errors) {
   ok(await b.p.evaluate(() => /A111 is writing/.test(document.getElementById('jp-bar').textContent)),
      'and is told who has it — by Writer ID when they have set no display name');
 
+  // Restoring a snapshot is writing, and it was the one editing path with no
+  // guard on it: it used to replace the sim on screen and doc.content with an
+  // old revision on a sim this writer did not hold.
+  const restored = await b.p.evaluate(id => {
+    const d = S.docs[id];
+    const before = d.content;
+    _histList = [{ content:'<div>An older revision.</div>', savedAt: Date.now()-1000, wordCount: 3 }];
+    const c = window.confirm; window.confirm = () => true;
+    restoreSnapshot(0);
+    window.confirm = c;
+    return { changed: d.content !== before,
+             editor: /An older revision/.test(document.getElementById('editor').innerText) };
+  }, docId);
+  ok(!restored.changed, 'a writer without the sim cannot restore an old revision over it');
+  ok(!restored.editor, 'and the sim on screen is left alone');
+
   // A writes and saves.
   await a.p.evaluate(() => {
     document.getElementById('editor').innerHTML = '<div>A writes the opening.</div><div>And a second beat.</div>';
