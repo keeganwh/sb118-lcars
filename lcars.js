@@ -296,6 +296,25 @@ const VERSIONS = [
       'Fixed: the browser tab still read v4.23',
     ],
   },
+  {
+    version: 'pending',
+    date: '2026-08-24',
+    changes: [
+      'Fixed: aliases you had set up were not picked up reliably. Only an alias containing a space or a full stop was ever really registered, so a one-word or lowercase alias, or one starting with punctuation, still went bold but was missed when LCARS worked out who was in a sim, which colour to give them and whether the sim was yours. Every alias now counts, matched whatever the capitalisation, and a longer alias wins over a shorter one inside it',
+      'Changed: the Character Manifest is now called Characters, everywhere it is named, and lives at /characters. Old links and bookmarks to /manifest still work and quietly move you to the new address',
+      'Removed: Service History and Ribbons. SB118 HQ already keeps your character record and your ribbons, and holding a second copy here meant two places to update and two places to disagree. Anything you had entered is cleared from LCARS on this update — your record on the wiki is untouched',
+      'Changed: with Service History and Ribbons gone there is nothing left to tab between on a character, so the tab bar has gone too',
+      'Changed: the Mission Log is hidden for now. It lived at the foot of Service History, and what it is really for \u2014 writing a summary and exporting it, with your scenes and sims, as wikitext \u2014 only becomes useful once LCARS can work out where a posted sim lives online and link to it. Rather than leave it sitting there half-finished it is out of the way until that exists. Any notes you have written are kept and will come back with it',
+      'Changed: the alias editor now finds a row by where it actually is when you click it, rather than by the position it had when the panel was drawn. Nothing behaved wrongly before — adding or deleting an alias redrew the panel straight away, which kept the positions honest — but it only took one change elsewhere to make it act on the wrong alias, and a stray save now lands nowhere instead of on the wrong row',
+      'Added: LCARS now works out who is in a sim from the title. Title a sim the usual way \u2014 the names, a dash, then the title \u2014 and everyone named is listed in the Characters panel straight away, before anybody has spoken, and ticked as yours. Only characters you have added to your character list are recognised \u2014 a name you have not added is treated as somebody else\u2019s and left alone. Ranks are fine, several characters are fine however you separate them, and any alias you have set up counts. If you have already chosen who is in a sim, nothing is changed',
+      'Fixed: on a joint sim, which characters are marked as yours was stored once for the whole sim rather than once per writer. Everyone on the sim shared one list, so another writer marking their character marked it on your copy too, and unticking it only lasted until the next refresh brought theirs back. Your selection is now your own. The first time you open a joint sim after this update it is worked out fresh from the title and your character list',
+      'Fixed: a character taken from the sim title showed up unticked beside their own dialogue when the title and the sim spelled them differently \u2014 \u201cCommander Robin Hopper\u201d in the title, \u201cHopper:\u201d in the sim. LCARS now matches the character rather than the spelling, so ticking, unticking and your sim counts all follow the person',
+      'Fixed: pasting a sim in from Google Docs turned the whole pasted section bold, and lost the words you had actually bolded or italicised there. Google Docs wraps whatever you copy in a bold tag that it then switches off again, and LCARS was keeping the tag and throwing away the switch-off. Bold and italic pasted from Docs, Word or Outlook now come through as themselves, and the rest of the paste stays plain',
+      'Fixed: sims you had already pasted in from Google Docs are repaired on this update. They were stored with the whole pasted section bold, so they looked bold here and on a share link, and came out un-bold in the group. The stray bold is removed once, on the next time LCARS opens, and any bold you applied yourself inside it is left alone',
+      'Fixed: a bulleted list copied into Gmail or Google Groups arrived with an extra gap above and below it. Mail clients put a margin around a list of their own, which LCARS turns off in its own styling but could not turn off in somebody else\u2019s. The copy now says so outright, so a list sits tight against the lines around it, the way it does while you are writing',
+      'Fixed: turning a sim into a joint sim saved the wrong record of your Bold locations, Italic OOC and Italic thoughts settings alongside it \u2014 always as if all three were switched off. Nothing reads that record yet, so nothing has looked wrong, but it would have done the moment something did',
+    ],
+  },
 ];
 function loadState() {
   try { const r = localStorage.getItem(SKEY); if (r) return JSON.parse(r); } catch(e){}
@@ -314,7 +333,14 @@ if (!S.characters) S.characters = {};
 Object.values(S.characters).forEach(c => {
   if (!c.aliases) c.aliases = [];
   if (c.charType === undefined) c.charType = '';
+  // Service History and Ribbons were removed — SB118 HQ owns that data and
+  // duplicating it here made a later integration harder. Drop the stored
+  // fields so they stop being synced to the account and back.
+  delete c.serviceRecord;
+  delete c.ribbons;
+  delete c.ribbonSortOrder;
 });
+delete S.settings.ribbonFileOverrides;
 // Migrate existing docs to new fields
 Object.values(S.docs || {}).forEach(d => {
   if (!d.charColors) d.charColors = {};
@@ -334,6 +360,36 @@ if (!S._pasteCleanV1) {
       });
   });
   S._pasteCleanV1 = true;
+}
+// One-time repair: sims pasted in from Google Docs before the paste handler
+// learned to read weight off the style. Docs wraps a copied selection in a bold
+// tag it then switches off with a style; the old handler kept the tag and threw
+// the style away, so the whole pasted section was stored bold. A bold or italic
+// tag that WRAPS WHOLE PARAGRAPHS is that wrapper and nothing else -- real bold
+// applied by a writer never contains a <div> or a <p> -- so it is safe to
+// unwrap on that signature alone. Bold the writer applied inside it is left
+// exactly where it is.
+if (!S._docsWrapV1) {
+  const _unwrapDocsBold = html => {
+    if (!html || !/<(b|strong|i|em)\b/i.test(html)) return html;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    let found = false;
+    tmp.querySelectorAll('b,strong,i,em').forEach(el => {
+      if (!el.querySelector('div,p,li,blockquote,h1,h2,h3,h4')) return;
+      found = true;
+      while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+      el.parentNode.removeChild(el);
+    });
+    return found ? tmp.innerHTML : html;
+  };
+  Object.values(S.docs || {}).forEach(doc => {
+    if (doc.content) doc.content = _unwrapDocsBold(doc.content);
+  });
+  (S.templates || []).forEach(t => {
+    if (t && t.content) t.content = _unwrapDocsBold(t.content);
+  });
+  S._docsWrapV1 = true;
 }
 // Inline SVG icon reference — see the sprite at the top of <body>.
 // `extra` takes size modifiers such as 'ic-sm' / 'ic-lg'.
@@ -364,13 +420,8 @@ let searchActive = false;
 let searchTimer = null;
 let _manifestSort = 'type';
 let _manifestTypeFilter = '';
-let _manifestActiveTab = 'sims'; // 'sims' | 'service' | 'ribbons' | 'edit'
-let _srEditMode = false;
-let _ribbonEditMode = false;
-let _expandedRibbonIdx = -1;
+let _manifestActiveTab = 'sims'; // 'sims' | 'edit'
 let _curCharId = null;
-let _activeRibbonCats = new Set(); // empty = all categories
-let _ribbonAddFormOpen = false;
 let _sourceMode = false;
 
 // ================================================================
@@ -562,7 +613,7 @@ function showStyleIntro() {
 
 function maybeShowStyleIntro() {
   if ((S.settings.prefs || {}).seenStyleIntro === STYLE_VERSION) return;
-  // Deferred, so re-check on fire: a direct hit on /settings or /manifest opens
+  // Deferred, so re-check on fire: a direct hit on /settings or /characters opens
   // its view in between, and the intro must not steal the modal from under it.
   // The same goes for anything already on screen. Boot raises prompts that must
   // be answered -- the reconcile question, a pending deletion, a temporary PIN
@@ -2797,7 +2848,7 @@ function renderDashboard() {
       </button>
       <button class="dash-action" onclick="openManifest()">
         <div class="da-icon">${ic('user')}</div>
-        <div class="da-label">Character Manifest</div>
+        <div class="da-label">Characters</div>
         <div class="da-hint">View and manage your characters</div>
       </button>
     </div>
@@ -2958,13 +3009,6 @@ function showToast(msg, dur=2200) {
   t._timer = setTimeout(()=>{ t.className=''; }, dur);
 }
 
-// Allows <b> <i> <s> <u> <br> through; escapes everything else.
-function sanitizeSRHtml(str) {
-  if (!str) return '';
-  return str
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/&lt;(\/?(b|i|s|u|br)\s*\/?)&gt;/gi,'<$1>');
-}
 
 // Converts [[Article]] and [[Article|Label]] to <a> links; safe for display.
 function renderWikiLinks(rawText) {
@@ -3032,32 +3076,117 @@ function levenshtein(a, b) {
 // ================================================================
 // CLEAN COPY
 // ================================================================
-// ── PASTE HANDLER: strip colors/fonts from pasted content ──
+// -- PASTE HANDLER: strip colors/fonts from pasted content --
+//
+// Bold and italic have to be read off the STYLE, not just off the tag, or a
+// paste from Google Docs comes out backwards. Docs wraps the whole selection in
+//   <b id="docs-internal-guid-..." style="font-weight:normal">
+// -- a bold tag that its own style switches back off -- and marks the words that
+// are really bold as <span style="font-weight:700">. Keeping the <b> and
+// dropping the <span>s bolded the entire pasted sim in the editor and lost the
+// bold the writer had actually applied. Word and Outlook do the same thing with
+// their own <span style="font-weight:bold">.
+//
+// So: a bold or italic tag whose style says otherwise is unwrapped, and any
+// element whose style says bold or italic becomes a real <strong>/<em> before
+// it is unwrapped. What is stored is plain <strong>/<em>, which is what copy-out
+// and the reading pass already understand.
+const PASTE_KEEP = ['strong','b','em','i','s','strike','del','a',
+                    'div','p','br','ul','ol','li','blockquote','h1','h2','h3','h4'];
+
+// What an element's own inline style says about weight/slant/strike.
+// Returns true, false or null -- null meaning "says nothing, inherit".
+function _pasteStyleSays(node) {
+  const st = node.getAttribute && node.getAttribute('style');
+  const out = { bold: null, italic: null, strike: null };
+  if (!st) return out;
+  const weight = /font-weight\s*:\s*([^;]+)/i.exec(st);
+  if (weight) {
+    const v = weight[1].trim().toLowerCase();
+    if (/^\d+$/.test(v)) out.bold = +v >= 600;
+    else if (v === 'bold' || v === 'bolder') out.bold = true;
+    else if (v === 'normal' || v === 'lighter') out.bold = false;
+  }
+  const slant = /font-style\s*:\s*([^;]+)/i.exec(st);
+  if (slant) {
+    const v = slant[1].trim().toLowerCase();
+    if (v === 'italic' || v === 'oblique') out.italic = true;
+    else if (v === 'normal') out.italic = false;
+  }
+  const deco = /text-decoration(?:-line)?\s*:\s*([^;]+)/i.exec(st);
+  if (deco) out.strike = /line-through/i.test(deco[1]);
+  return out;
+}
+
 function cleanPasteHTML(html) {
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
+
+  // Wrap an element's children in <strong>/<em>/<s>, then unwrap the element.
+  function unwrapAs(node, tags) {
+    let target = node;
+    tags.forEach(t => {
+      const w = document.createElement(t);
+      while (target.firstChild) w.appendChild(target.firstChild);
+      target.appendChild(w);
+      target = w;
+    });
+    while (node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+    node.parentNode.removeChild(node);
+  }
 
   // Recursively unwrap or clean each element
   function processNode(node) {
     if (node.nodeType === 8) { node.parentNode.removeChild(node); return; } // drop comment nodes (StartFragment/EndFragment)
     if (node.nodeType !== 1) return; // text nodes pass through
     const tag = node.tagName.toLowerCase();
-    const keep = ['strong','b','em','i','s','strike','del','a',
-                  'div','p','br','ul','ol','li','blockquote','h1','h2','h3','h4'];
-    if (!keep.includes(tag)) {
-      // Unwrap: replace element with its children
+    const says = _pasteStyleSays(node);
+
+    // Recurse FIRST: the children carry their own styles, and this element is
+    // about to be rewritten or unwrapped underneath them.
+    [...node.childNodes].forEach(processNode);
+
+    // A bold/italic tag that its own style switches off is a wrapper, not
+    // formatting -- this is the Google Docs case. Drop the tag, keep the words.
+    const tagIsBold   = tag === 'b' || tag === 'strong';
+    const tagIsItalic = tag === 'i' || tag === 'em';
+    if ((tagIsBold && says.bold === false) || (tagIsItalic && says.italic === false)) {
       while (node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
       node.parentNode.removeChild(node);
       return;
     }
+
+    if (!PASTE_KEEP.includes(tag)) {
+      // Unwrap -- but carry any real formatting its style was expressing.
+      const wrap = [];
+      if (says.bold)   wrap.push('strong');
+      if (says.italic) wrap.push('em');
+      if (says.strike) wrap.push('s');
+      unwrapAs(node, wrap);
+      return;
+    }
+
+    // A kept tag can still be carrying styled formatting of its own (a <div>
+    // that Docs made bold, say). Put that inside it before the style is lost.
+    const inner = [];
+    if (says.bold && !tagIsBold)     inner.push('strong');
+    if (says.italic && !tagIsItalic) inner.push('em');
+    if (inner.length) {
+      let target = node;
+      inner.forEach(t => {
+        const w = document.createElement(t);
+        while (target.firstChild) w.appendChild(target.firstChild);
+        target.appendChild(w);
+        target = w;
+      });
+    }
+
     // For kept elements, strip all styles/classes/ids except href on anchors
     [...node.attributes].forEach(attr => {
       if (tag === 'a' && attr.name === 'href') return;
       if (tag === 'a' && attr.name === 'target') return;
       node.removeAttribute(attr.name);
     });
-    // Recurse into children (iterate copy since we may mutate)
-    [...node.childNodes].forEach(processNode);
   }
 
   [...tmp.childNodes].forEach(processNode);
@@ -3247,6 +3376,23 @@ function installCopyHandler() {
           el.removeAttribute(attr.name);
         }
       });
+    });
+
+    // Gmail, Groups and most mail clients give <ul>/<ol> a default block margin
+    // of their own (typically 1em top and bottom), so a bulleted list arrived
+    // with a gap above and below it that is not there in the editor. LCARS zeroes
+    // that margin in its own stylesheet; a paste target never sees that
+    // stylesheet, so it has to be stated inline. This is the one deliberate
+    // exception to "keep margin-left and nothing else" -- and it runs after the
+    // attribute strip above, which would otherwise remove it again.
+    tmp.querySelectorAll('ul,ol').forEach(list => {
+      list.style.marginTop = '0';
+      list.style.marginBottom = '0';
+      list.style.paddingLeft = '2.5em';
+    });
+    tmp.querySelectorAll('li').forEach(li => {
+      li.style.marginTop = '0';
+      li.style.marginBottom = '0';
     });
 
     // The first line of a contenteditable is often bare inline/text nodes with no
@@ -3594,26 +3740,57 @@ function doOutdent() {
 // CHAR DETECTION
 // ================================================================
 const CREX = /^([A-Z][A-Za-zÀ-ɏ'''\-]{1,}(?:\/[A-Z][A-Za-zÀ-ɏ'''\-]{1,})*):/gm;
+// Every name and alias registered in the character list, longest first.
+//
+// This is deliberately ONE list shared by detectChars and boldNames(). They
+// used to build it separately and both filtered it to `/[\s.]/` — aliases
+// containing a space or a full stop — which silently dropped every single-word,
+// lowercase, digit-bearing or punctuation-leading alias. Those fell through to
+// CREX, which matches any capitalised word before a colon, so they still looked
+// bold while attribution, colouring and myChars quietly missed them. If you add
+// a third place that needs alias matching, call this rather than rebuilding it.
+//
+// Longest first matters: with both "Hopper" and "R. Hopper" registered, the
+// short one would otherwise win and bold only half the name.
+function getRegisteredAliases() {
+  const seen = new Set(); const out = [];
+  Object.values(S.characters || {}).forEach(c => {
+    getAllNamesForChar(c).forEach(alias => {
+      const a = (alias || '').trim();
+      if (!a) return;
+      const key = a.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key); out.push(a);
+    });
+  });
+  return out.sort((a, b) => b.length - a.length);
+}
+
+// Anchored, case-insensitive "Alias:" matcher for one registered alias.
+function aliasPrefixRe(alias) {
+  return new RegExp('^(' + alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')(:\\s?)', 'i');
+}
+
 function detectChars(text) {
   const s = new Set(); let m; CREX.lastIndex = 0;
   while ((m = CREX.exec(text)) !== null) m[1].split('/').forEach(n => s.add(n.trim()));
 
-  // Second pass: manifest aliases with periods/spaces/initials (e.g. "R. Hopper:")
-  // that the single-word regex above can't match.
-  const specialAliases = [];
-  Object.values(S.characters || {}).forEach(c => {
-    getAllNamesForChar(c).forEach(alias => {
-      if (alias && /[\s.]/.test(alias)) specialAliases.push(alias);
-    });
-  });
-  if (specialAliases.length) {
+  // Second pass: every registered name and alias, matched case-insensitively.
+  // Catches what CREX above cannot: lowercase nicknames, names starting with
+  // punctuation or a digit, and multi-word aliases.
+  const registered = getRegisteredAliases();
+  if (registered.length) {
     const lines = text.split(/\r?\n/);
     for (const line of lines) {
       const trimmed = line.trimStart();
-      for (const alias of specialAliases) {
-        if (trimmed.toLowerCase().startsWith((alias + ':').toLowerCase())) {
-          s.add(alias);
-        }
+      const lower = trimmed.toLowerCase();
+      for (const alias of registered) {
+        if (!lower.startsWith(alias.toLowerCase() + ':')) continue;
+        // CREX may already have recorded this line under the spelling used in
+        // the sim. Don't add a second entry for the same character; do add the
+        // registered spelling when the sim's differs (e.g. "hopper:").
+        if (!s.has(trimmed.slice(0, alias.length))) s.add(alias);
+        break; // longest match wins
       }
     }
   }
@@ -3629,14 +3806,87 @@ function detectChars(text) {
   return [...s];
 }
 
+// SB118 titles are conventionally "<who is in it> - <the title>", so the head of
+// the title names the characters. Returns every registered name or alias found
+// there, in the order they appear, one entry per character.
+//
+// It scans the whole head for known names rather than splitting on separators,
+// so "&", "and", a comma and a slash all work without being enumerated, and a
+// rank in front of a name is fine. Matches are blanked out as they are found,
+// longest first, so a short alias sitting inside a longer one ("Vex" inside
+// "T'Lara Vex") is not counted a second time. This reads the same registered
+// list as the detection passes, so an alias only has to be set up once.
+function charsFromTitle(title) {
+  const head = String(title || '').split(/\s[-–—]\s/)[0].trim();
+  if (!head) return [];
+  let masked = head;
+  const hits = [];
+  for (const alias of getRegisteredAliases()) {
+    const esc2 = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('(^|\\W)(' + esc2 + ')($|\\W)', 'gi');
+    let m;
+    while ((m = re.exec(masked)) !== null) {
+      const at = m.index + m[1].length;
+      hits.push({ at, alias });
+      masked = masked.slice(0, at) + '\u0000'.repeat(alias.length) + masked.slice(at + alias.length);
+      re.lastIndex = at + alias.length;
+    }
+  }
+  hits.sort((a, b) => a.at - b.at);
+  const seen = new Set(); const out = [];
+  for (const h of hits) {
+    const ch = findCharByAnyName(h.alias);
+    const key = ch ? ch.id : h.alias.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key); out.push(h.alias);
+  }
+  return out;
+}
+
+// The characters panel lists doc.chars, which is detected from dialogue tags --
+// so before anybody has spoken it is empty, and a sim opens with nobody in it
+// even though the title says who is there. Fold the title's characters in so the
+// panel is populated from the moment the sim is created. This also keeps them
+// alive through the save-time prune, which drops any myChars entry not present
+// in doc.chars.
+// Two names for the same person? The sim body and the title rarely spell a
+// character the same way -- a dialogue tag says "Hopper" where the title says
+// "Commander Robin Hopper" -- so anywhere the two lists meet has to compare
+// characters, not strings. Comparing strings is why a character taken from the
+// title showed up unticked next to their own dialogue.
+function sameCharName(a, b) {
+  if (!a || !b) return false;
+  if (String(a).toLowerCase() === String(b).toLowerCase()) return true;
+  const ca = findCharByAnyName(a), cb = findCharByAnyName(b);
+  return !!(ca && cb && ca.id === cb.id);
+}
+
+function withTitleChars(chars, title) {
+  const out = (chars || []).slice();
+  charsFromTitle(title).forEach(n => {
+    if (!out.some(x => sameCharName(x, n))) out.push(n);
+  });
+  return out;
+}
+
+
 // Auto-populate doc.myChars from detected names via the manifest alias chain.
 // Called on save and on openDoc so the manifest always reflects reality without
 // requiring the user to manually untick/retick every character.
 function syncDocMyChars(doc) {
   if (!doc.myChars) doc.myChars = [];
   let changed = false;
+  // Only when nothing is selected yet: if you have unticked everyone on purpose,
+  // the next save must not quietly put the title's characters back.
+  // Registering a character is the claim: charsFromTitle only ever returns names
+  // and aliases from your own character list, so anything it finds is yours by
+  // definition. A name you have not registered is a new character or somebody
+  // else's, and never appears here at all.
+  if (!doc.myChars.length) {
+    charsFromTitle(doc.title).forEach(n => { doc.myChars.push(n); changed = true; });
+  }
   (doc.chars || []).forEach(name => {
-    if (doc.myChars.includes(name)) return;
+    if (doc.myChars.some(m => sameCharName(m, name))) return;
     // Direct match in global myChars
     if ((S.settings.myChars || []).includes(name)) {
       doc.myChars.push(name); changed = true; return;
@@ -3653,6 +3903,11 @@ function syncDocMyChars(doc) {
       }
     }
   });
+  // A joint sim keeps this writer's own selection locally, so remember it as
+  // soon as it is derived -- not only when the sim is next saved. syncDocMyChars
+  // runs on open too, and without this the next poll from the server would find
+  // no record and reset the panel to empty.
+  if (changed) jpRememberMyChars(doc);
   return changed;
 }
 
@@ -3707,7 +3962,7 @@ function replaceCharName(from, to) {
     if (di>=0) { doc.myChars.splice(di,1); if (!doc.myChars.includes(to)) doc.myChars.push(to); }
     const gi = S.settings.myChars.indexOf(from);
     if (gi>=0) { S.settings.myChars.splice(gi,1); if (!S.settings.myChars.includes(to)) S.settings.myChars.push(to); }
-    doc.chars = detectChars(ed.innerText||'');
+    doc.chars = withTitleChars(detectChars(ed.innerText||''), doc.title);
   }
   schedSave();
   if (doc) updateCharsPanel(doc);
@@ -3878,10 +4133,13 @@ function flushSave() {
   else if (doc.status !== 'complete') doc.completedAt = null;
   doc.postType = document.getElementById('doc-posttype').value||null;
   doc.updatedAt = Date.now();
-  doc.chars = detectChars(ed.innerText||'');
-  // Prune myChars: remove names no longer detected in this sim (prevents ghost characters)
-  doc.myChars = (doc.myChars||[]).filter(n => (doc.chars||[]).includes(n));
+  doc.chars = withTitleChars(detectChars(ed.innerText||''), doc.title);
+  // Prune myChars: remove names no longer detected in this sim (prevents ghost
+  // characters). By character, not by spelling -- doc.chars carries whichever
+  // spelling won, and an exact match would drop a character who is plainly there.
+  doc.myChars = (doc.myChars||[]).filter(n => (doc.chars||[]).some(c => sameCharName(c, n)));
   syncDocMyChars(doc);   // re-add any that belong via alias chain
+  jpRememberMyChars(doc); // a joint sim keeps this writer's own selection locally
   persist();
   // A joint sim goes to its own row, with the version check that stops a
   // lapsed writer overwriting the next one. It must NOT go through schedSync(),
@@ -3892,7 +4150,7 @@ function flushSave() {
   updateCharsPanel(doc);
   renderNav();
   // Keep manifest stats live if it's open
-  if (_routeView === 'manifest') refreshManifest();
+  if (_routeView === 'characters') refreshManifest();
 }
 
 function schedSave() {
@@ -4241,7 +4499,8 @@ function updateCharsPanel(doc) {
   });
   list.innerHTML = deduped.map((n, i) => {
     _charList.push(n);
-    const mine = (doc.myChars||[]).includes(n)||S.settings.myChars.includes(n);
+    const mine = (doc.myChars||[]).some(m => sameCharName(m, n))
+      || (S.settings.myChars||[]).some(m => sameCharName(m, n));
     const similar = findSimilarChar(n, corpus);
     const showWarn = similar && !isPairConfirmed(n, similar);
     if (showWarn) _charWarns[i] = similar;
@@ -4263,8 +4522,11 @@ function toggleMyChar(i) {
   const doc = S.docs[curId]; if (!doc) return;
   if (!doc.myChars) doc.myChars=[];
   if (!S.settings.myChars) S.settings.myChars=[];
-  const di = doc.myChars.indexOf(name);
-  const gi = S.settings.myChars.indexOf(name);
+  // Match on the character, not the spelling: the panel may show "Hopper" while
+  // the stored entry says "Robin Hopper", and an exact-match untick would leave
+  // the stored one behind and put the tick straight back.
+  const di = doc.myChars.findIndex(m => sameCharName(m, name));
+  const gi = S.settings.myChars.findIndex(m => sameCharName(m, name));
   if (di>=0) {
     doc.myChars.splice(di,1);
     if (gi>=0) S.settings.myChars.splice(gi,1);
@@ -4272,9 +4534,10 @@ function toggleMyChar(i) {
     doc.myChars.push(name);
     if (gi<0) S.settings.myChars.push(name);
   }
+  jpRememberMyChars(doc);
   persist(); updateCharsPanel(doc);
   // Keep manifest stats live if it's open
-  if (_routeView === 'manifest') refreshManifest();
+  if (_routeView === 'characters') refreshManifest();
 }
 
 function openCharWarn(i) {
@@ -4326,7 +4589,7 @@ function charCtx(e, i) {
     const manifestChar = findCharByAnyName(name);
     if (manifestChar) {
       items.push('-');
-      items.push({label:ic('circle-dot') + ' View in manifest', fn:`openManifestToChar('${manifestChar.id}')`});
+      items.push({label:ic('circle-dot') + ' View in Characters', fn:`openManifestToChar('${manifestChar.id}')`});
     }
   }
 
@@ -4564,13 +4827,7 @@ function boldNames() {
   const CREX_RE = new RegExp(`^((${N_PAT})(?:\\/${N_PAT})*)(:\\s?)`);
   const INIT_RE = /^([A-Z]\. [A-Z][A-Za-zÀ-ɏ'''\-]+(?:\/[A-Z]\. [A-Z][A-Za-zÀ-ɏ'''\-]+)*)(:\s?)/;
 
-  // Build alias list (manifest aliases containing spaces or dots)
-  const specialAliases = [];
-  Object.values(S.characters || {}).forEach(c => {
-    getAllNamesForChar(c).forEach(alias => {
-      if (alias && /[\s.]/.test(alias)) specialAliases.push(alias);
-    });
-  });
+  const registered = getRegisteredAliases();
 
   // Only process direct children of the editor — prevents outer wrapper divs
   // from having their entire innerHTML stripped, and stops nested narration
@@ -4584,24 +4841,28 @@ function boldNames() {
   blocks.forEach(bl => {
     const txt = (bl.textContent || '');
 
-    // Pass 1: standard CREX-style names (Hopper:, Name1/Name2:)
+    // Pass 1: registered names and aliases, longest first. These run BEFORE the
+    // generic patterns so a registered alias always wins with its full extent —
+    // "T'Lara Vex:" bolds whole rather than stopping at the space.
+    let matched = false;
+    for (const alias of registered) {
+      const aliasRe = aliasPrefixRe(alias);
+      if (aliasRe.test(txt)) {
+        applyBoldToBlock(bl, aliasRe);
+        matched = true;
+        break;
+      }
+    }
+    if (matched) return; // one pattern per block
+    // Pass 2: standard CREX-style names (Hopper:, Name1/Name2:)
     if (CREX_RE.test(txt)) {
       applyBoldToBlock(bl, CREX_RE);
-      return; // one pattern per block
+      return;
     }
-    // Pass 2: initial-dot-space names (R. Hopper:, B. Richards:)
+    // Pass 3: initial-dot-space names (R. Hopper:, B. Richards:)
     if (INIT_RE.test(txt)) {
       applyBoldToBlock(bl, INIT_RE);
       return;
-    }
-    // Pass 3: manifest aliases with spaces/dots
-    for (const alias of specialAliases) {
-      const esc2 = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const aliasRe = new RegExp(`^(${esc2})(:\\s?)`, 'i');
-      if (aliasRe.test(txt.trimStart())) {
-        applyBoldToBlock(bl, aliasRe);
-        break;
-      }
     }
   });
 
@@ -5983,7 +6244,7 @@ function jpDeleteOrLeave(id) {
 // MODAL
 // ================================================================
 function openModal(title, body, cb, opts={}) {
-  // Modals no longer carry routes of their own — Settings and the Manifest are
+  // Modals no longer carry routes of their own — Settings and Characters are
   // real views — so a confirm raised from either leaves the URL where it is.
   document.getElementById('mo-title').textContent = title;
   document.getElementById('mo-body').innerHTML = body;
@@ -6121,13 +6382,18 @@ function showNewDoc(sceneId,missionId,preTagCharId){
     if(m==='__new_mission__'||m===''){alert('Please select or create a mission first.');return false;}
     const id=uid();
     const preChar = preTagCharId && S.characters ? S.characters[preTagCharId] : null;
-    const initMyChars = preChar ? [preChar.name] : [];
+    // No character passed in? Take them from the title. Only registered names are
+    // found, and registering a character is what claims it as yours, so they are
+    // both listed and ticked.
+    const titleChars = preChar ? [] : charsFromTitle(t);
+    const initChars = preChar ? [preChar.name] : titleChars;
+    const initMyChars = preChar ? [preChar.name] : titleChars.slice();
     if (preChar) {
       if (!S.settings.myChars) S.settings.myChars = [];
       if (!S.settings.myChars.includes(preChar.name)) S.settings.myChars.push(preChar.name);
     }
     S.docs[id]={id,title:t,content:tmpl?tmpl.content:'',missionId:m||null,sceneId:(sc&&sc!=='__new_scene__')?sc:null,
-      chars:[],myChars:initMyChars,charColors:{},status:'active',postType:pt||null,postedAt:null,
+      chars:initChars.slice(),myChars:initMyChars,charColors:{},status:'active',postType:pt||null,postedAt:null,
       snapshots:[],createdAt:Date.now(),updatedAt:Date.now()};
     persist(); renderNav(); openDoc(id);
   });
@@ -6182,19 +6448,19 @@ function downloadOfflineCopy() {
 // ================================================================
 // VIEWS
 // ================================================================
-// The dashboard/editor workspace, Settings and the Character Manifest are
+// The dashboard/editor workspace, Settings and Characters are
 // sibling views under the one app header. Switching between them swaps which
 // is on screen and nothing else — the editor is never torn down, so an open
 // sim and its unsaved keystrokes survive a trip to Settings and back.
 //
 // Every view change goes through showView, which is also what keeps the URL
 // honest: it is the one place syncRoute is called from.
-const VIEW_IDS = { dash: 'workspace', settings: 'view-settings', manifest: 'view-manifest', admin: 'view-admin' };
+const VIEW_IDS = { dash: 'workspace', settings: 'view-settings', characters: 'view-characters', admin: 'view-admin' };
 
 function showView(view, fromRoute) {
   if (!VIEW_IDS[view]) view = 'dash';
   if (view === 'settings') renderSettingsView();
-  else if (view === 'manifest') prepManifest();
+  else if (view === 'characters') prepManifest();
   else if (view === 'admin') renderAdminView();
 
   // Hiding a view leaves it mounted — the editor and its unsaved keystrokes
@@ -6210,14 +6476,14 @@ function showView(view, fromRoute) {
   if (view === 'settings') { const sc = document.getElementById('set-scroll'); if (sc) sc.scrollTop = 0; }
 }
 
-// Header buttons double as the view indicator: the manifest button flips to
-// "Sim Editor" while the manifest is up, and Settings shows as active.
+// Header buttons double as the view indicator: the Characters button flips to
+// "Sim Editor" while Characters is up, and Settings shows as active.
 function updateViewButtons() {
   const mb = document.getElementById('btn-manifest-toggle');
   if (mb) {
-    const on = _routeView === 'manifest';
-    mb.innerHTML = on ? ic('pencil') + ' Sim Editor' : ic('user') + ' Character Manifest';
-    mb.onclick = () => showView(on ? 'dash' : 'manifest');
+    const on = _routeView === 'characters';
+    mb.innerHTML = on ? ic('pencil') + ' Sim Editor' : ic('user') + ' Characters';
+    mb.onclick = () => showView(on ? 'dash' : 'characters');
   }
   const ab = document.getElementById('btn-admin');
   if (ab) {
@@ -6964,115 +7230,6 @@ const DIVISION_COLORS = {
   'Marines':'#3cb521','Other':'#667788'
 };
 
-const RIBBON_CATALOG = {
-  'General': [
-    {name:'Purple Heart',img:'Awards ServiceRibbons PurpleHeart 2011.jpg'},
-    {name:'Prisoner of War Ribbon',img:'Awards ServiceRibbons POW 2011.jpg'},
-    {name:"Captain's Commendation",img:'Awards ServiceRibbons Commendation.jpg'},
-    {name:"Explorer's Ribbon",img:'Awards ServiceRibbons Explorers 2011.jpg'},
-    {name:'Scientific Discovery Ribbon',img:'Scientific Discovery Ribbon.png'},
-    {name:'Medical Science Ribbon',img:'Awards ServiceRibbons medicalscience 2013.jpg'},
-    {name:'Diplomacy Ribbon',img:'Awards ServiceRibbons diplomacyribbon 2014.jpg'},
-    {name:'Innovation Ribbon',img:'Awards ServiceRibbons Innovationribbon 2014.jpg'},
-    {name:'Leadership Excellence Ribbon',img:'Leadership Excellence Ribbon.png'},
-    {name:'Defense of Temporal Flow Ribbon',img:'Awards ServiceRibbons TemporalFlow 2011.jpg'},
-    {name:'Joint Meritorious Unit Award',img:'Awards ServiceRibbons JointMeritoriousUnit 2011.jpg'},
-    {name:'First Contact Ribbon',img:'Awards ServiceRibbons FirstContact 2011.jpg'},
-    {name:'Extended Service Ribbon',img:'Awards ServiceRibbons ExtendedService 2011.jpg'},
-    {name:'Peacekeeper Service Ribbon',img:'Awards ServiceRibbons Peacekeeper 2011.jpg'},
-    {name:'Intelligence Star',img:'Intelligence Star.png'},
-    {name:'Recovery Ribbon',img:'Ribbon-Recovery Ribbon.png'},
-    {name:'Unity Ribbon',img:'Unity Ribbon.png'},
-    {name:'Starfleet Investigation Ribbon',img:'Starfleet Investigation Ribbon.png'},
-    {name:'Superior Support Ribbon',img:'Superior Support Ribbon.png'},
-    {name:'Excellence In Adaptability Ribbon',img:'Excellence In Adaptability Ribbon.png'},
-    {name:'Spliced Mainbrace Distinction',img:'Spliced Mainbrace Distinction.png'},
-    {name:'Wilderness Deployment Ribbon',img:'Wilderness Deployment Ribbon.png'},
-    {name:'Caretaker of the Prime Directive Ribbon',img:'Caretaker of the Prime Directive Ribbon.png'},
-    {name:'Cultural Harmony Ribbon',img:'Cultural Harmony Ribbon.png'},
-  ],
-  'Service Milestones': [
-    {name:'Starfleet Academy Graduate Ribbon',img:'Awards ServiceRibbons Graduate.jpg'},
-    {name:'Maiden Voyage Ribbon',img:'Maiden Voyage Ribbon.png'},
-    {name:'Legacy Ribbon',img:'Legacy Ribbon.png'},
-    {name:'Department Chief Ribbon',img:'Awards ServiceRibbons DepartmentChief.jpg'},
-    {name:'First Officer Ribbon',img:'First Officer Ribbon.png'},
-    {name:'Starship Commander Ribbon',img:'Awards ServiceRibbons Starship Commander.jpg'},
-  ],
-  'Gallantry & Heroism': [
-    {name:'Federation Cross',img:'Awards ServiceRibbons FederationCross 2011.jpg'},
-    {name:'Starfleet Medal of Valour',img:'Starfleet Medal of Valour.png'},
-    {name:'Distinguished Service Ribbon',img:'Awards ServiceRibbons DistinguishedService 2011.jpg'},
-    {name:'Starfleet Medal of Commendation',img:'Starfleet Medal of Commendation.png'},
-    {name:'Silver Star',img:'Awards ServiceRibbons SilverStar 2011.jpg'},
-    {name:'Good Conduct Ribbon',img:'Awards ServiceRibbons GoodConduct 2011.jpg'},
-    {name:'Legion of Merit',img:'Awards ServiceRibbons LegionOfMerit 2011.jpg'},
-    {name:'UFP Medal of Freedom',img:'Awards ServiceRibbons MedalOfFreedom 2011.jpg'},
-  ],
-  'Lifesaving': [
-    {name:'Gold Lifesaving Ribbon',img:'Awards ServiceRibbons LifesavingGold 2011.jpg'},
-    {name:'Silver Lifesaving Ribbon',img:'Awards ServiceRibbons LifesavingSilver 2011.jpg'},
-    {name:'Lifesaving Ribbon',img:'Awards ServiceRibbons LifesavingBasic 2011.jpg'},
-    {name:'Trauma Support Advocate',img:'Ribbon-Trauma Support Advocate.png'},
-  ],
-  'Campaign': [
-    {name:'Quantum Reality Service Ribbon',img:'Quantum Reality Service Ribbon.png'},
-    {name:'Galactic War with the Borg Service Medal',img:'Awards ServiceRibbons WarWithBorg 2011.jpg'},
-    {name:'Changeling Campaign Ribbon',img:'Changeling Campaign Ribbon.png'},
-    {name:'Frontier Day Ribbon',img:'Frontier Day Ribbon.png'},
-    {name:'Ithassa Region Campaign Medal',img:'Awards ServiceRibbons Ithassa 2011.jpg'},
-    {name:'Romulan Campaign Medal',img:'Awards ServiceRibbons RomulanCampaign 2011.jpg'},
-    {name:'Tholian Campaign Ribbon',img:'Tholian Campaign Ribbon.png'},
-    {name:'Gorn Campaign Ribbon',img:'Awards ServiceRibbons GornCampaign 2011.jpg'},
-    {name:'Maquis Reborn Service Medal',img:'Awards ServiceRibbons Maquis Reborn.jpg'},
-    {name:'Orion Syndicate Service Medal',img:'Orion Syndicate Service Medal.png'},
-    {name:'Operation Safe Harbor Service Medal',img:'Operation Safe Harbor Service Medal.png'},
-    {name:"Par'tha Expanse Colonization Ribbon",img:"Par'tha Expanse Colonization Ribbon.png"},
-    {name:'Defense of The Isles',img:'Defense of The Isles.png'},
-    {name:'Vaadwaur Invasion Campaign Ribbon',img:'Awards-ServiceRibbon-VaadwaurInvasion.jpg'},
-    {name:'Hobus Heroism Ribbon',img:'Awards ServiceRibbons HobusHeroism 2011.jpg'},
-    {name:'Klingon Invasion Ribbon',img:'KlingonInvasion.jpg'},
-    {name:'Prometheus Ribbon',img:'Awards ServiceRibbons Prometheus Incident 2014.jpg'},
-    {name:'War of Shadows Ribbon',img:'Awards ServiceRibbons War of Shadows 2016.png'},
-    {name:'Warp XV Drive Pioneer',img:'Warp XV Drive Pioneer.png'},
-    {name:'Denali Invitational Ribbon',img:'Denali Invitational Ribbon.png'},
-    {name:'Gorn Invasion Ribbon',img:'GornInvasion.jpg'},
-    {name:'Grendellai Operations Ribbon',img:'GrendellaiRibbon.jpg'},
-    {name:'Bajoran Campaign Ribbon',img:'Awards ServiceRibbons battleforbajor 2011.jpg'},
-    {name:'Gateway Ribbon',img:'Gateway.jpg'},
-    {name:'Project Capstone Ribbon',img:'Project Capstone Ribbon.png'},
-  ],
-};
-const RIBBON_IMG_BASE = 'https://wiki.starbase118.net/wiki/Special:FilePath/';
-const SR_RANKS = [
-  '','Cadet, 4th Class','Cadet, 3rd Class','Cadet, 2nd Class','Cadet, 1st Class',
-  'Crewman','Petty Officer','Chief Petty Officer',
-  'Ensign','Lieutenant JG','Lieutenant','Lt. Commander',
-  'Commander','Captain','Fleet Captain','Commodore',
-  'Rear Admiral','Vice Admiral','Admiral','Fleet Admiral','Civilian'
-];
-const SR_DIVISIONS = ['Black','Blue','Gold','Green','Red','Silver','Teal'];
-const SR_RANK_CODE = {
-  'Cadet, 4th Class':'cadet1','Cadet, 3rd Class':'cadet2',
-  'Cadet, 2nd Class':'cadet3','Cadet, 1st Class':'cadet4',
-  'Crewman':'crew1','Petty Officer':'po1','Chief Petty Officer':'cpo',
-  'Ensign':'ens','Lieutenant JG':'ltjg','Lieutenant':'lt',
-  'Lt. Commander':'ltcmdr','Commander':'cmdr','Captain':'cpt',
-  'Fleet Captain':'fcpt','Commodore':'cdore',
-  'Rear Admiral':'radm','Vice Admiral':'vadm',
-  'Admiral':'adm','Fleet Admiral':'fadm',
-};
-function srRankImgFile(rank, division) {
-  const code = SR_RANK_CODE[rank];
-  if (!code) return '';
-  return `PICstyle-${code}_${(division || 'Red').toLowerCase()}.png`;
-}
-const SR_INSIGNIA_MAP = {
-  'Cadet, 4th Class':'Cadet Fourth Class','Cadet, 3rd Class':'Cadet Third Class',
-  'Cadet, 2nd Class':'Cadet Second Class','Cadet, 1st Class':'Cadet First Class',
-  'Lt. Commander':'Lieutenant Commander','Fleet Admiral':'Fleet Admiral',
-};
-function srInsigniaName(rank) { return SR_INSIGNIA_MAP[rank] || rank; }
 
 const RANK_PIPS = {
   'Civilian':[],'Cadet':[],
@@ -7123,8 +7280,6 @@ function prepManifest() {
   });
   persist();
   _manifestActiveTab = 'sims';
-  _srEditMode = false;
-  _ribbonEditMode = false;
   renderManifestList();
   // Auto-open the alphabetically first Primary character
   const firstPrimary = Object.values(S.characters)
@@ -7135,16 +7290,14 @@ function prepManifest() {
   updateManifestBar();
 }
 
-function openManifest(fromRoute) { showView('manifest', fromRoute); }
-function closeManifest() { if (_routeView === 'manifest') showView('dash'); }
+function openManifest(fromRoute) { showView('characters', fromRoute); }
+function closeManifest() { if (_routeView === 'characters') showView('dash'); }
 
 function openManifestToChar(charId) {
   openManifest();
   if (S.characters && S.characters[charId]) {
     _curCharId = charId;
     _manifestActiveTab = 'sims';
-    _srEditMode = false;
-    _ribbonEditMode = false;
     renderManifestList();  // re-render to show active state
     renderCharProfile(charId);
   }
@@ -7302,8 +7455,6 @@ function renderManifestList() {
 function selectCharacter(id) {
   _curCharId = id;
   if (_manifestActiveTab === 'edit') _manifestActiveTab = 'sims';
-  _srEditMode = false;
-  _ribbonEditMode = false;
   renderManifestList();
   renderCharProfile(id);
   // On a phone the list is a drop-down over the profile; picking from it is
@@ -7316,14 +7467,14 @@ function selectCharacter(id) {
 // Desktop keeps the list permanently beside the profile; below the breakpoint
 // it collapses behind this bar so the character being read has the screen.
 function setManifestList(open) {
-  const v = document.getElementById('view-manifest');
+  const v = document.getElementById('view-characters');
   if (v) v.classList.toggle('cm-list-open', open);
   const b = document.getElementById('cm-list-btn');
   if (b) b.classList.toggle('btn-p', open);
 }
 
 function toggleManifestList() {
-  const v = document.getElementById('view-manifest');
+  const v = document.getElementById('view-characters');
   if (!v) return;
   const opening = !v.classList.contains('cm-list-open');
   setManifestList(opening);
@@ -7366,11 +7517,12 @@ function renderCharProfile(id) {
     right.innerHTML = renderEditMode(c, clr, initials);
   } else {
     const bioHtml = renderBioCol(c, clr, initials, myDocs, allDocCount, avgW, lastDoc, typeCss);
-    let tabContent = '';
-    if (_manifestActiveTab === 'service') tabContent = renderServiceTab(c, myDocs);
-    else if (_manifestActiveTab === 'ribbons') tabContent = renderRibbonsTab(c);
-    else tabContent = renderSimsTab(c, myDocs);
-    right.innerHTML = `<div id="cm-profile-wrap">${bioHtml}<div id="cm-sims-col">${renderTabBar()}${tabContent}</div></div>`;
+    // Service History and Ribbons were removed in favour of SB118 HQ, which owns
+    // that data. With only the sims list left there is nothing to tab between,
+    // so the tab bar went with them and the Mission Log — which used to sit at
+    // the foot of the Service History tab — moved under the sims list.
+    const tabContent = renderSimsTab(c, myDocs) + renderMissionLog(c, myDocs);
+    right.innerHTML = `<div id="cm-profile-wrap">${bioHtml}<div id="cm-sims-col">${tabContent}</div></div>`;
   }
 }
 
@@ -7389,10 +7541,17 @@ function renderEditMode(c, clr, initials) {
     ? `<img src="${c.pictureDataUrl}" alt="${esc(c.name)}">`
     : `<span>${initials}</span>`;
 
-  const aliasesHtml = (c.aliases||[]).map((a,i)=>`
+  // The handlers take the element, not a row number. The old baked-in indices
+  // were not actually reachable as a bug — addAlias and removeAlias both call
+  // renderCharProfile, which redraws the panel and refreshes every index before
+  // anything can act on a stale one. They were one careless change away from
+  // being wrong, though, and reading the row's live position costs nothing: a
+  // blur that arrives after the panel has been redrawn now resolves to -1 and
+  // is ignored, where before it would have written to whatever now sits there.
+  const aliasesHtml = (c.aliases||[]).map(a=>`
     <div class="cm-alias-row">
-      <input type="text" value="${esc(a)}" placeholder="Alias or alternate name…" onblur="saveAlias(${i},this.value)">
-      <button class="cm-alias-del" onclick="removeAlias(${i})" title="Remove alias">${ic('x','ic-sm')}</button>
+      <input type="text" value="${esc(a)}" placeholder="Alias or alternate name…" onblur="saveAlias(this)">
+      <button class="cm-alias-del" onclick="removeAlias(this)" title="Remove alias">${ic('x','ic-sm')}</button>
     </div>`).join('');
 
   return `<div id="cm-profile-wrap">
@@ -7457,19 +7616,7 @@ function _rerenderKeepScroll(charId) {
 
 function switchManifestTab(tab) {
   _manifestActiveTab = tab;
-  _srEditMode = false;
-  _ribbonEditMode = false;
-  _ribbonAddFormOpen = false;
-  _expandedRibbonIdx = -1;
-  _activeRibbonCats.clear();
   if (_curCharId) renderCharProfile(_curCharId);
-}
-
-// ── Tab bar ──
-
-function renderTabBar() {
-  const tabs = [['sims','Sims'],['service','Service History'],['ribbons','Ribbons']];
-  return `<div class="cm-tabs">${tabs.map(([t,lbl])=>`<button class="cm-tab${_manifestActiveTab===t?' cm-tab-active':''}" onclick="switchManifestTab('${t}')">${lbl}</button>`).join('')}</div>`;
 }
 
 // ── Bio column (shared across all view tabs) ──
@@ -7583,186 +7730,19 @@ function renderSimsTab(c, myDocs) {
   return html;
 }
 
-// ── Service Record tab ──
+// ── Mission Log ──
 
-function renderServiceTab(c, myDocs) {
-  c.serviceRecord = c.serviceRecord || [];
-  c.missionNotes = c.missionNotes || {};
-  c.srMissionSortDesc = c.srMissionSortDesc !== false;
-
-  const topBar = `<div class="cm-tab-toolbar">
-    <span class="cm-section-title" style="margin:0;margin-right:auto">SERVICE RECORD</span>
-    <button class="cm-tab-action" onclick="copySRWikitext('${c.id}')">${ic('copy')} Copy Wikitext</button>
-    <button class="cm-tab-action" onclick="toggleSREditMode('${c.id}')">${_srEditMode?ic('check') + ' Done Editing':ic('pencil') + ' Edit'}</button>
-  </div>`;
-
-  let srSection = '';
-  if (_srEditMode) {
-    srSection = renderSREditTable(c);
-  } else {
-    if (!c.serviceRecord.length) {
-      srSection = `<div class="cm-tab-empty">No service record entries yet. Click <strong>Edit</strong> to add rows.</div>`;
-    } else {
-      const sr = c.serviceRecord;
-      const rankSpans    = computeSpans(sr, 'rank');
-      const postingSpans = computeSpans(sr, 'posting');
-      const assignSpans  = computeSpans(sr, 'assignment');
-      const rows = sr.map((r,i) => {
-        const rs = rankSpans[i], ps = postingSpans[i], as_ = assignSpans[i];
-        const rankImgFile = rs !== null ? srRankImgFile(r.rank, r.division) : '';
-        const rankImg = rankImgFile ? `<img src="${RIBBON_IMG_BASE}${rankImgFile}" style="height:28px;width:auto;display:block;margin:0 auto 3px" alt="" onerror="this.style.display='none'">` : '';
-        return `<tr>
-          ${rs!==null ? `<td${rs>1?` rowspan="${rs}"`:''}>${rankImg}<div style="font-size:0.78rem">${esc(r.rank||'')}</div></td>` : ''}
-          <td style="white-space:nowrap;font-size:0.73rem;color:var(--dim)">${esc(r.startDate||'')}${r.endDate?' – '+esc(r.endDate):''}</td>
-          ${ps!==null ? `<td${ps>1?` rowspan="${ps}"`:''} class="cm-sr-posting">${r.postingLogoFile?`<img src="${RIBBON_IMG_BASE}${r.postingLogoFile}" class="cm-sr-logo" alt="" onerror="this.style.display='none'"><br>`:''}${esc(r.posting||'')}</td>` : ''}
-          ${as_!==null ? `<td${as_>1?` rowspan="${as_}"`:''} class="cm-sr-assign">${sanitizeSRHtml(r.assignment||'')}</td>` : ''}
-        </tr>`;
-      }).join('');
-      srSection = `<table class="cm-sr-table"><tr><th>RANK</th><th>DATES</th><th>POSTING</th><th>ASSIGNMENT</th></tr>${rows}</table>`;
-    }
-  }
-
-  const missionLogHtml = renderMissionLog(c, myDocs);
-  return `${topBar}${srSection}${missionLogHtml}`;
-}
-
-function renderSREditTable(c) {
-  const sr = c.serviceRecord;
-  let html = `<div class="cm-sr-edit-list" id="cm-sr-edit-list">`;
-  sr.forEach((r,i) => {
-    const rankOpts = SR_RANKS.map(rk=>`<option value="${rk}" ${r.rank===rk?'selected':''}>${rk||'— Rank —'}</option>`).join('');
-    const divOpts = `<option value="">— Division Colour —</option>` + SR_DIVISIONS.map(dv=>`<option value="${dv}" ${r.division===dv?'selected':''}>${dv}</option>`).join('');
-    const prevPosting = i>0 ? sr[i-1].posting||'' : '';
-    const prevLogo = i>0 ? sr[i-1].postingLogoFile||'' : '';
-    const prevAssign = i>0 ? sr[i-1].assignment||'' : '';
-    html += `<div class="cm-sr-edit-row" data-idx="${i}">
-      <div class="cm-sr-edit-controls">
-        <button onclick="moveSRRow('${c.id}',${i},-1)" ${i===0?'disabled':''}>${ic('arrow-up','ic-sm')}</button>
-        <button onclick="moveSRRow('${c.id}',${i},1)" ${i===sr.length-1?'disabled':''}>${ic('arrow-down','ic-sm')}</button>
-        <button class="cm-sr-del" onclick="deleteSRRow('${c.id}',${i})">${ic('x','ic-sm')}</button>
-      </div>
-      <div class="cm-sr-edit-fields">
-        <select class="cm-sr-f" onchange="saveSRField('${c.id}',${i},'rank',this.value)">${rankOpts}</select>
-        <select class="cm-sr-f" onchange="saveSRField('${c.id}',${i},'division',this.value)">${divOpts}</select>
-        <input class="cm-sr-f" placeholder="Start stardate" value="${esc(r.startDate||'')}" onblur="saveSRField('${c.id}',${i},'startDate',this.value)">
-        <input class="cm-sr-f" placeholder="End stardate (or Present)" value="${esc(r.endDate||'')}" onblur="saveSRField('${c.id}',${i},'endDate',this.value)">
-        <div class="cm-sr-field-row">
-          <input class="cm-sr-f" placeholder="Posting (ship/station name)" value="${esc(r.posting||'')}" onblur="saveSRField('${c.id}',${i},'posting',this.value)" id="sr-posting-${i}">
-          ${i>0?`<button class="cm-sr-copy-btn" title="Copy posting from row above" onclick="copySRFieldFromAbove('${c.id}',${i},'posting','postingLogoFile')">${ic('arrow-up','ic-sm')} same</button>`:''}
-        </div>
-        <input class="cm-sr-f" placeholder="Logo file (e.g. USS Ship-logo.png) — leave blank if none" value="${esc(r.postingLogoFile||'')}" onblur="saveSRField('${c.id}',${i},'postingLogoFile',this.value)" id="sr-logo-${i}">
-        <div class="cm-sr-field-row">
-          <textarea class="cm-sr-f" rows="2" placeholder="Assignment / duty post (HTML allowed: &lt;b&gt; &lt;i&gt; &lt;br&gt;)" onblur="saveSRField('${c.id}',${i},'assignment',this.value)" id="sr-assign-${i}">${esc(r.assignment||'')}</textarea>
-          ${i>0?`<button class="cm-sr-copy-btn" title="Copy assignment from row above" onclick="copySRFieldFromAbove('${c.id}',${i},'assignment')">${ic('arrow-up','ic-sm')} same</button>`:''}
-        </div>
-      </div>
-    </div>`;
-  });
-  html += `</div><button class="cm-tab-add-btn" onclick="addSRRow('${c.id}')">+ Add Row</button>`;
-  return html;
-}
-
-function toggleSREditMode(charId) {
-  _srEditMode = !_srEditMode;
-  if (charId === _curCharId) _rerenderKeepScroll(charId);
-}
-
-function saveSRField(charId, idx, field, value) {
-  const c = S.characters[charId]; if (!c) return;
-  c.serviceRecord = c.serviceRecord || [];
-  if (!c.serviceRecord[idx]) return;
-  c.serviceRecord[idx][field] = value;
-  persist();
-}
-
-function addSRRow(charId) {
-  const c = S.characters[charId]; if (!c) return;
-  c.serviceRecord = c.serviceRecord || [];
-  c.serviceRecord.push({ id: uid(), rank:'', division:'', startDate:'', endDate:'', posting:'', postingLogoFile:'', assignment:'' });
-  persist();
-  _rerenderKeepScroll(charId);
-}
-
-function copySRFieldFromAbove(charId, idx, ...fields) {
-  const c = S.characters[charId]; if (!c) return;
-  const sr = c.serviceRecord; if (!sr || idx < 1) return;
-  fields.forEach(f => { sr[idx][f] = sr[idx-1][f] || ''; });
-  persist();
-  _rerenderKeepScroll(charId);
-}
-
-function deleteSRRow(charId, idx) {
-  const c = S.characters[charId]; if (!c) return;
-  c.serviceRecord = c.serviceRecord || [];
-  c.serviceRecord.splice(idx, 1);
-  persist();
-  _rerenderKeepScroll(charId);
-}
-
-function moveSRRow(charId, idx, dir) {
-  const c = S.characters[charId]; if (!c) return;
-  const sr = c.serviceRecord || [];
-  const ni = idx + dir;
-  if (ni < 0 || ni >= sr.length) return;
-  [sr[idx], sr[ni]] = [sr[ni], sr[idx]];
-  persist();
-  _rerenderKeepScroll(charId);
-}
-
-function copySRWikitext(charId) {
-  const c = S.characters[charId]; if (!c) return;
-  const sr = c.serviceRecord || [];
-  if (!sr.length) { showToast('No service record entries to export.'); return; }
-  const lines = ['{{Service Record}}'];
-  const rankSpans    = computeSpans(sr, 'rank');
-  const postingSpans = computeSpans(sr, 'posting');
-  const assignSpans  = computeSpans(sr, 'assignment');
-  sr.forEach((r, i) => {
-    if (i > 0) lines.push('|-');
-    // Insignia & Rank only on first row of a rank span
-    if (rankSpans[i] !== null) {
-      const rs = rankSpans[i] > 1 ? `|ROWS=${rankSpans[i]}` : '';
-      lines.push(`{{SR Insignia|${srInsigniaName(r.rank||'')}|${r.division||''}|STYLE=PIC${rs}}}`);
-      lines.push(`{{SR Rank|${r.rank||''}${rs}}}`);
-    }
-    lines.push(`{{SR Dates|<small>${r.startDate||''} - ${r.endDate||'Present'}</small>}}`);
-    // Posting only on first row of a posting span
-    if (postingSpans[i] !== null) {
-      const ps = postingSpans[i] > 1 ? `|ROWS=${postingSpans[i]}` : '';
-      const logoStr = r.postingLogoFile ? `[[File:${r.postingLogoFile}|60px|none]]` : '';
-      const postingName = r.posting ? `[[${r.posting}]]` : '';
-      if (logoStr || postingName) {
-        lines.push(`{{SR Posting|\n${logoStr}${postingName}${ps}}}`);
-      }
-    }
-    // Assignment only on first row of an assignment span
-    if (assignSpans[i] !== null) {
-      const as = assignSpans[i] > 1 ? `|ROWS=${assignSpans[i]}` : '';
-      lines.push(`{{SR Assignment|${r.assignment||''}|${r.division||''}${as}}}`);
-    }
-  });
-  lines.push('{{Service Record End}}');
-  navigator.clipboard.writeText(lines.join('\n')).then(()=>showToast('Service Record wikitext copied!')).catch(()=>showToast('Copy failed — check clipboard permissions.'));
-}
-
-function computeSpans(arr, field) {
-  // Returns array where index i = span size if this is the START of a run, null if mid-run, 1 if no run
-  const result = new Array(arr.length).fill(1);
-  let i = 0;
-  while (i < arr.length) {
-    let j = i + 1;
-    while (j < arr.length && arr[j][field] === arr[i][field] && arr[j][field]) j++;
-    const span = j - i;
-    result[i] = span;
-    for (let k = i+1; k < j; k++) result[k] = null;
-    i = j;
-  }
-  return result;
-}
-
-// ── Mission Log (part of Service tab) ──
-
+// Super admins only, for now. The Mission Log's real value is exporting a
+// mission summary plus its scenes and sims as wikitext — and that is only worth
+// anything once a posted sim can be resolved to an archive URL to cite. Until
+// the sim-archive / Google Groups lookup exists there is nothing to link to, so
+// it stays out of everyone else's way rather than sitting there half-useful.
+//
+// Nothing is deleted: c.missionNotes and c.srMissionSortDesc are still stored
+// and still sync, so notes already written survive and come back with the
+// feature. See ROADMAP.md → New Components, "Mission Log".
 function renderMissionLog(c, myDocs) {
+  if (!isSuperAdmin()) return '';
   c.missionNotes = c.missionNotes || {};
   c.srMissionSortDesc = c.srMissionSortDesc !== false;
 
@@ -7811,7 +7791,6 @@ function renderMissionLog(c, myDocs) {
     <div class="cm-mlog-toolbar">
       <span class="cm-mlog-title">MISSION LOG</span>
       <button class="cm-tab-action" onclick="toggleMissionLogSort('${c.id}')">${sortLabel}</button>
-      <button class="cm-tab-action" onclick="copyMissionLogWikitext('${c.id}')">${ic('copy')} Copy Wikitext</button>
     </div>
     ${rows}
   </div>`;
@@ -7831,350 +7810,6 @@ function toggleMissionLogSort(charId) {
   renderCharProfile(charId);
 }
 
-function copyMissionLogWikitext(charId) {
-  const c = S.characters[charId]; if (!c) return;
-  const myDocs = charDocsForChar(c);
-  if (!myDocs.length) { showToast('No missions to export.'); return; }
-  const mMap = new Map();
-  myDocs.forEach(d => {
-    const mid = d.missionId || '__none__';
-    if (!mMap.has(mid)) mMap.set(mid, { mission: d.missionId?(S.missions[d.missionId]||null):null, docs:[] });
-    mMap.get(mid).docs.push(d);
-  });
-  const groups = [...mMap.values()].map(g => {
-    const dates = g.docs.map(d=>d.postedAt).filter(Boolean).sort();
-    return { ...g, earliest: dates[0]||'', latest: dates[dates.length-1]||'' };
-  }).sort((a,b)=>{
-    const ad = a.latest||a.earliest||'';
-    const bd = b.latest||b.earliest||'';
-    return c.srMissionSortDesc ? bd.localeCompare(ad) : ad.localeCompare(bd);
-  });
-  const lines = ['== Mission History ==',''];
-  groups.forEach(g => {
-    const mid = g.mission ? g.mission.id : '__none__';
-    const mName = g.mission ? g.mission.name : 'No Mission';
-    const sd1 = g.earliest ? toStardate(g.earliest) : '—';
-    const sd2 = g.latest && g.latest !== g.earliest ? toStardate(g.latest) : '';
-    const dateStr = sd2 ? `${sd1} – ${sd2}` : sd1;
-    const note = (c.missionNotes||{})[mid] || '';
-    lines.push(`=== ${mName} ===`);
-    lines.push(`''${dateStr}''`);
-    if (note) lines.push('', note);
-    lines.push('');
-  });
-  navigator.clipboard.writeText(lines.join('\n')).then(()=>showToast('Mission log wikitext copied!')).catch(()=>showToast('Copy failed.'));
-}
-
-// ── Ribbons tab ──
-
-// Build a flat name→{img,category} lookup for the ribbon search
-function buildRibbonLookup() {
-  const map = {};
-  Object.entries(RIBBON_CATALOG).forEach(([cat, entries]) => {
-    entries.forEach(e => { map[e.name] = { img: e.img, category: cat }; });
-  });
-  return map;
-}
-
-// MediaWiki-safe URL. Checks user-saved overrides first (stored in S.settings.ribbonFileOverrides).
-function ribbonImgUrl(imageFile) {
-  if (!imageFile) return '';
-  const overrides = S.settings?.ribbonFileOverrides || {};
-  const file = overrides[imageFile] || imageFile;
-  return RIBBON_IMG_BASE + file.replace(/ /g, '_');
-}
-
-function saveRibbonFileOverride(origFile, newFile) {
-  if (!S.settings) S.settings = {};
-  if (!S.settings.ribbonFileOverrides) S.settings.ribbonFileOverrides = {};
-  if (newFile && newFile !== origFile) {
-    S.settings.ribbonFileOverrides[origFile] = newFile.trim();
-  } else {
-    delete S.settings.ribbonFileOverrides[origFile];
-  }
-  persist();
-  showToast('Filename override saved.');
-}
-
-function ribbonSortedList(c) {
-  const ribbons = [...(c.ribbons || [])];
-  const order = c.ribbonSortOrder || 'oldest';
-  if (order === 'alpha') ribbons.sort((a,b)=>(a.ribbonName||'').localeCompare(b.ribbonName||''));
-  else if (order === 'newest') ribbons.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  else if (order === 'oldest') ribbons.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-  // 'default' keeps insertion order
-  return ribbons;
-}
-
-function renderRibbonsTab(c) {
-  c.ribbons = c.ribbons || [];
-  c.ribbonSortOrder = c.ribbonSortOrder || 'oldest';
-
-  const sortOrder = c.ribbonSortOrder;
-  const sortBtns = ['oldest','newest','alpha','custom'].map(s => {
-    const labels = {oldest:'Oldest first', newest:'Newest first', alpha:'A → Z', custom:'Custom'};
-    const active = sortOrder === s ? ' cm-tab-sort-active' : '';
-    return `<button class="cm-tab-action${active}" onclick="setRibbonSort('${c.id}','${s}')">${labels[s]}</button>`;
-  }).join('');
-
-  const topBar = `<div class="cm-tab-toolbar">
-    ${sortBtns}
-    <button class="cm-tab-action" onclick="copyRibbonsWikitext('${c.id}')">${ic('copy')} Copy Wikitext</button>
-    <button class="cm-tab-action" onclick="toggleRibbonEditMode('${c.id}')">${_ribbonEditMode?ic('check') + ' Done Editing':ic('pencil') + ' Edit'}</button>
-  </div>`;
-
-  if (_ribbonEditMode) return topBar + renderRibbonsEditMode(c);
-
-  if (!c.ribbons.length) {
-    return topBar + `<div class="cm-tab-empty">No ribbons yet. Click <strong>Edit</strong> to add ribbons.</div>`;
-  }
-  const sorted = ribbonSortedList(c);
-  const rows = sorted.map(r => {
-    const imgUrl = ribbonImgUrl(r.imageFile||'');
-    return `<tr>
-      <td class="cm-rib-img-cell"><img src="${imgUrl}" class="cm-rib-img" alt="${esc(r.ribbonName||'')}" onerror="this.outerHTML='<span class=cm-rib-noimg>[No Internet]</span>'"></td>
-      <td><strong>${esc(r.ribbonName||'')}</strong><div style="font-size:0.72rem;color:var(--dim)">${esc(r.category||'')}</div></td>
-      <td style="font-size:0.73rem;color:var(--dim);white-space:nowrap">${esc(r.date||'')}${r.assignment?'<br>'+esc(r.assignment):''}</td>
-      <td style="font-size:0.73rem">${renderWikiLinks(r.citation||'')}</td>
-    </tr>`;
-  }).join('');
-  return topBar + `<table class="cm-ribbon-table"><tr><th></th><th>RIBBON</th><th>DATE / POSTING</th><th>CITATION</th></tr>${rows}</table>`;
-}
-
-function renderRibbonsEditMode(c) {
-  const ribbons = c.ribbons || [];
-  // Collect existing assignments for autocomplete
-  const usedAssignments = [...new Set(ribbons.map(r=>r.assignment).filter(Boolean))];
-  const assignOpts = usedAssignments.map(a=>`<option value="${esc(a)}">`).join('');
-
-  let html = `<div class="cm-rib-edit-list">`;
-  ribbons.forEach((r,i) => {
-    const imgUrl = ribbonImgUrl(r.imageFile||'');
-    const imgTag = `<img src="${imgUrl}" class="cm-rib-img" alt="" onerror="this.outerHTML='<span class=cm-rib-noimg>[img]</span>'">`;
-    if (i === _expandedRibbonIdx) {
-      html += `<div class="cm-rib-edit-row">
-        <div class="cm-rib-edit-preview">${imgTag}</div>
-        <div class="cm-rib-edit-fields">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
-            <strong style="font-size:0.82rem">${esc(r.ribbonName||'Unknown')}</strong>
-            <button onclick="collapseRibbonEdit('${c.id}')" style="background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:3px;padding:2px 8px;font-size:0.75rem;cursor:pointer">${ic('check','ic-sm')} Done</button>
-          </div>
-          <input class="cm-sr-f" placeholder="Date (stardate)" value="${esc(r.date||'')}" onblur="saveRibbonField('${c.id}',${i},'date',this.value)">
-          <input class="cm-sr-f" list="rib-edit-assign-list" placeholder="Assignment / posting" value="${esc(r.assignment||'')}" onblur="saveRibbonField('${c.id}',${i},'assignment',this.value)">
-          <datalist id="rib-edit-assign-list">${assignOpts}</datalist>
-          <textarea class="cm-sr-f" rows="2" placeholder="Citation… use [[Article]] for wiki links" onblur="saveRibbonField('${c.id}',${i},'citation',this.value)">${esc(r.citation||'')}</textarea>
-        </div>
-        <div class="cm-rib-edit-ctrl">
-          <button onclick="moveRibbon('${c.id}',${i},-1)" ${i===0?'disabled':''}>${ic('arrow-up','ic-sm')}</button>
-          <button onclick="moveRibbon('${c.id}',${i},1)" ${i===ribbons.length-1?'disabled':''}>${ic('arrow-down','ic-sm')}</button>
-          <button class="cm-sr-del" onclick="deleteRibbon('${c.id}',${i})">${ic('x','ic-sm')}</button>
-        </div>
-      </div>`;
-    } else {
-      const meta = [r.date, r.assignment].filter(Boolean).join(' · ');
-      html += `<div class="cm-rib-edit-row cm-rib-row-collapsed">
-        <div class="cm-rib-edit-preview">${imgTag}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:0.82rem;font-weight:600">${esc(r.ribbonName||'Unknown')}</div>
-          ${meta?`<div style="font-size:0.72rem;color:var(--dim)">${esc(meta)}</div>`:''}
-        </div>
-        <div class="cm-rib-edit-ctrl">
-          <button onclick="expandRibbonEdit('${c.id}',${i})" title="Edit details">${ic('pencil','ic-sm')}</button>
-          <button onclick="moveRibbon('${c.id}',${i},-1)" ${i===0?'disabled':''}>${ic('arrow-up','ic-sm')}</button>
-          <button onclick="moveRibbon('${c.id}',${i},1)" ${i===ribbons.length-1?'disabled':''}>${ic('arrow-down','ic-sm')}</button>
-          <button class="cm-sr-del" onclick="deleteRibbon('${c.id}',${i})">${ic('x','ic-sm')}</button>
-        </div>
-      </div>`;
-    }
-  });
-  html += `</div>`;
-
-  // Category toggle buttons (multiple can be active)
-  const cats = Object.keys(RIBBON_CATALOG);
-  const catBtns = cats.map(cat => {
-    const active = _activeRibbonCats.has(cat) ? ' rib-cat-active' : '';
-    return `<button class="rib-cat-btn${active}" onclick="toggleRibbonCat('${esc(cat)}')">${esc(cat)}</button>`;
-  }).join('');
-
-  if (_ribbonAddFormOpen) {
-    html += `<div class="cm-rib-add-form" id="rib-add-form">
-      <div class="cm-rib-add-title">ADD RIBBON</div>
-      <div class="cm-rib-add-body">
-        <div class="cm-rib-add-fields">
-          <div class="cm-rib-cat-label">Filter by Category:</div>
-          <div class="cm-rib-cat-btns">${catBtns}</div>
-          <input id="rib-search" class="cm-sr-f" list="rib-datalist" placeholder="Search ribbon name…" oninput="onRibbonSearchInput()" autocomplete="off">
-          <datalist id="rib-datalist"></datalist>
-          <input id="rib-date" class="cm-sr-f" placeholder="Date (stardate)">
-          <input id="rib-assign" class="cm-sr-f" list="rib-assign-list" placeholder="Assignment / posting">
-          <datalist id="rib-assign-list">${assignOpts}</datalist>
-          <textarea id="rib-citation" class="cm-sr-f" rows="2" placeholder="Citation… use [[Article]] for wiki links"></textarea>
-          <div style="display:flex;gap:6px;margin-top:2px">
-            <button class="cm-tab-add-btn" onclick="addRibbon('${c.id}')">+ Add</button>
-            <button class="cm-tab-add-btn" onclick="cancelRibbonAdd('${c.id}')">Cancel</button>
-          </div>
-        </div>
-        <div class="cm-rib-add-side">
-          <div id="rib-preview" class="cm-rib-add-preview"></div>
-          <div id="rib-selected-name" class="cm-rib-add-catname"></div>
-        </div>
-      </div>
-    </div>`;
-  } else {
-    html += `<button class="cm-tab-add-btn" style="margin-top:8px" onclick="openRibbonAddForm('${c.id}')">+ Add Ribbon</button>`;
-  }
-
-  return html;
-}
-
-function toggleRibbonCat(cat) {
-  if (_activeRibbonCats.has(cat)) _activeRibbonCats.delete(cat);
-  else _activeRibbonCats.add(cat);
-  // Update button styles without re-rendering the whole panel
-  document.querySelectorAll('.rib-cat-btn').forEach(b => {
-    b.classList.toggle('rib-cat-active', _activeRibbonCats.has(b.textContent));
-  });
-  // Re-filter the datalist with the current search text
-  onRibbonSearchInput();
-}
-
-function onRibbonSearchInput() {
-  const val = (document.getElementById('rib-search')?.value || '').trim();
-  const dl = document.getElementById('rib-datalist');
-  const prev = document.getElementById('rib-preview');
-  const nameEl = document.getElementById('rib-selected-name');
-
-  // Only populate datalist once typing starts
-  if (dl) {
-    if (val.length === 0) {
-      dl.innerHTML = '';
-    } else {
-      const activeCats = _activeRibbonCats.size > 0 ? [..._activeRibbonCats] : Object.keys(RIBBON_CATALOG);
-      const names = activeCats.flatMap(cat => (RIBBON_CATALOG[cat]||[]).map(r=>r.name));
-      dl.innerHTML = names.map(n=>`<option value="${esc(n)}">`).join('');
-    }
-  }
-
-  // Update preview if exact match found
-  const lookup = buildRibbonLookup();
-  const entry = lookup[val];
-  if (entry) {
-    const url = ribbonImgUrl(entry.img);
-    if (prev) prev.innerHTML = `<img src="${url}" class="cm-rib-img" alt="" onerror="this.outerHTML='<span class=cm-rib-noimg>[No Internet]</span>'">`;
-    if (nameEl) nameEl.textContent = entry.category;
-  } else {
-    if (prev) prev.innerHTML = '';
-    if (nameEl) nameEl.textContent = '';
-  }
-}
-
-function toggleRibbonEditMode(charId) {
-  _ribbonEditMode = !_ribbonEditMode;
-  _ribbonAddFormOpen = false;
-  _expandedRibbonIdx = -1;
-  _activeRibbonCats.clear();
-  if (charId === _curCharId) _rerenderKeepScroll(charId);
-}
-
-function setRibbonSort(charId, order) {
-  const c = S.characters[charId]; if (!c) return;
-  if (order === 'custom') c.ribbons = ribbonSortedList(c); // snapshot current display order
-  c.ribbonSortOrder = order;
-  persist();
-  _rerenderKeepScroll(charId);
-}
-
-function addRibbon(charId) {
-  const ribbonName = document.getElementById('rib-search')?.value.trim() || '';
-  if (!ribbonName) { showToast('Type or select a ribbon name first.'); return; }
-  const lookup = buildRibbonLookup();
-  const entry = lookup[ribbonName];
-  const imgFile = entry?.img || ribbonName.replace(/ /g,'_') + '.png';
-  const category = entry?.category || '';
-  const date = document.getElementById('rib-date')?.value || '';
-  const assignment = document.getElementById('rib-assign')?.value || '';
-  const citation = document.getElementById('rib-citation')?.value || '';
-  const c = S.characters[charId]; if (!c) return;
-  c.ribbons = c.ribbons || [];
-  c.ribbons.push({ id: uid(), category, ribbonName, imageFile: imgFile, date, assignment, citation });
-  persist();
-  _ribbonAddFormOpen = false;
-  _activeRibbonCats.clear();
-  _rerenderKeepScroll(charId);
-}
-
-function openRibbonAddForm(charId) {
-  _ribbonAddFormOpen = true;
-  _activeRibbonCats.clear();
-  _rerenderKeepScroll(charId);
-  setTimeout(() => {
-    document.getElementById('rib-add-form')?.scrollIntoView({behavior:'smooth', block:'nearest'});
-  }, 50);
-}
-
-function expandRibbonEdit(charId, idx) {
-  _expandedRibbonIdx = idx;
-  _rerenderKeepScroll(charId);
-}
-
-function collapseRibbonEdit(charId) {
-  _expandedRibbonIdx = -1;
-  _rerenderKeepScroll(charId);
-}
-
-function cancelRibbonAdd(charId) {
-  _ribbonAddFormOpen = false;
-  _activeRibbonCats.clear();
-  if (charId && charId === _curCharId) _rerenderKeepScroll(charId);
-}
-
-function saveRibbonField(charId, idx, field, value) {
-  const c = S.characters[charId]; if (!c) return;
-  c.ribbons = c.ribbons || [];
-  if (!c.ribbons[idx]) return;
-  c.ribbons[idx][field] = value;
-  persist();
-}
-
-function deleteRibbon(charId, idx) {
-  const c = S.characters[charId]; if (!c) return;
-  c.ribbons = c.ribbons || [];
-  c.ribbons.splice(idx, 1);
-  persist();
-  _rerenderKeepScroll(charId);
-}
-
-function moveRibbon(charId, idx, dir) {
-  const c = S.characters[charId]; if (!c) return;
-  // Snapshot current display order into array before reordering
-  if ((c.ribbonSortOrder || 'oldest') !== 'custom') c.ribbons = ribbonSortedList(c);
-  c.ribbonSortOrder = 'custom';
-  const rb = c.ribbons;
-  const ni = idx + dir;
-  if (ni < 0 || ni >= rb.length) return;
-  [rb[idx], rb[ni]] = [rb[ni], rb[idx]];
-  persist();
-  _rerenderKeepScroll(charId);
-}
-
-
-function copyRibbonsWikitext(charId) {
-  const c = S.characters[charId]; if (!c) return;
-  if (!(c.ribbons||[]).length) { showToast('No ribbons to export.'); return; }
-  // Export in current display sort order; count per name for |2, |3 suffixes
-  const sorted = ribbonSortedList(c);
-  const nameCount = {};
-  const lines = ['{{Ribbons Display|ALIGN=left|COLOR=grey}}','{{Service Ribbons Header}}'];
-  sorted.forEach(r => {
-    const n = r.ribbonName || '';
-    nameCount[n] = (nameCount[n] || 0) + 1;
-    const suffix = nameCount[n] > 1 ? `|${nameCount[n]}` : '';
-    // Citation may contain [[wiki links]] — export raw so wikitext is valid
-    lines.push(`{{Citation|${n}|${r.date||''}|${r.assignment||''}|${r.citation||''}${suffix}}}`);
-  });
-  lines.push('{{Ribbons Display End}}');
-  navigator.clipboard.writeText(lines.join('\n')).then(()=>showToast('Ribbons wikitext copied!')).catch(()=>showToast('Copy failed.'));
-}
 
 // ── Field saves ──
 
@@ -8211,11 +7846,21 @@ function saveCharDivision(value) {
   saveCharField('divisionColor', DIVISION_COLORS[value]||'');
 }
 
-function saveAlias(idx, value) {
+// Which alias row an element sits in, read from the live DOM at the moment the
+// handler fires rather than from a number baked in when the panel was drawn.
+function aliasRowIndex(el) {
+  const row = el && el.closest ? el.closest('.cm-alias-row') : null;
+  if (!row || !row.parentNode) return -1;
+  return [...row.parentNode.children].indexOf(row);
+}
+
+function saveAlias(el) {
   if (!_curCharId || !S.characters) return;
   const c = S.characters[_curCharId]; if (!c) return;
   if (!c.aliases) c.aliases = [];
-  c.aliases[idx] = value.trim();
+  const idx = aliasRowIndex(el);
+  if (idx < 0 || idx >= c.aliases.length) return;
+  c.aliases[idx] = el.value.trim();
   c.updatedAt = Date.now();
   persist();
   renderManifestList();
@@ -8235,9 +7880,11 @@ function addAlias() {
   },50);
 }
 
-function removeAlias(idx) {
+function removeAlias(el) {
   if (!_curCharId || !S.characters) return;
   const c = S.characters[_curCharId]; if (!c || !c.aliases) return;
+  const idx = aliasRowIndex(el);
+  if (idx < 0 || idx >= c.aliases.length) return;
   c.aliases.splice(idx, 1);
   c.updatedAt = Date.now();
   persist();
@@ -8247,14 +7894,12 @@ function removeAlias(idx) {
 
 function deleteCharacter(id) {
   const c = S.characters ? S.characters[id] : null; if (!c) return;
-  if (!confirm(`Remove "${c.name}" from the Manifest?\n\nSim data is not affected.`)) return;
+  if (!confirm(`Remove "${c.name}" from Characters?\n\nSim data is not affected.`)) return;
   delete S.characters[id];
   persist();
   if (_curCharId===id) {
     _curCharId = null;
     _manifestActiveTab = 'sims';
-    _srEditMode = false;
-    _ribbonEditMode = false;
     const _cmProfile = document.getElementById('cm-profile');
     if (_cmProfile) { _cmProfile.className = 'cm-empty-msg'; _cmProfile.innerHTML = 'Select a character to view their profile.'; }
   }
@@ -8325,16 +7970,20 @@ function resizePicture(file, cb) {
 // ================================================================
 // ROUTING (History API)
 // ================================================================
-// Settings and the Character Manifest get real URLs — /settings and
-// /manifest — while staying views inside the one app, so navigating to them
+// Settings and Characters get real URLs — /settings and
+// /characters — while staying views inside the one app, so navigating to them
 // mid-sim never tears the editor down or re-runs the auth gate.
 //
 // Routing only engages when the app is served from a clean path (Vercel,
-// which rewrites /settings and /manifest to LCARS.html). Opened as a file, or
+// which rewrites /settings and /characters to LCARS.html). Opened as a file, or
 // served as .../LCARS.html on GitHub Pages where there are no rewrites, there
 // is no path to push to — ROUTES stays off, every view opens exactly as it did
 // before, and the routes degrade to the dashboard.
-const ROUTE_VIEWS = ['settings', 'manifest', 'admin'];
+const ROUTE_VIEWS = ['settings', 'characters', 'admin'];
+// Retired route names that still have to resolve, because people have them
+// bookmarked. The view they map to is what syncRoute then writes back to the
+// address bar, so an old link silently upgrades itself on arrival.
+const LEGACY_ROUTES = { manifest: 'characters' };
 let _routeView = 'dash';
 
 // Returns {base, view} when the current URL is one this app can route, else
@@ -8347,6 +7996,7 @@ function routeContext() {
   const dir = m[1], last = m[2];
   if (/\.html?$/i.test(last)) return null;          // served as a named file
   if (last === '') return { base: dir, view: 'dash' };
+  if (LEGACY_ROUTES[last]) return { base: dir, view: LEGACY_ROUTES[last] };
   if (ROUTE_VIEWS.includes(last)) return { base: dir, view: last };
   return null;                                      // some other deep path
 }
@@ -8842,8 +8492,12 @@ function jpApplyRow(row, keepContent) {
   });
   if (!keepContent && row.content != null) { doc.content = row.content; doc.jpSavedContent = row.content; }
   if (row.meta) {
+    // chars and charColors are shared -- who is in the sim, and what colour they
+    // are, is the same for everybody. myChars is NOT: it is this writer's own,
+    // and reading it from the shared row is what let one writer's selection
+    // overwrite another's. row.meta.myChars is ignored, including the copy older
+    // clients still write.
     doc.chars = row.meta.chars || [];
-    doc.myChars = row.meta.myChars || [];
     doc.charColors = row.meta.charColors || {};
   }
   if (!doc.chars) doc.chars = [];
@@ -8854,6 +8508,7 @@ function jpApplyRow(row, keepContent) {
   // and offer the owner's as a starting point the first time they see it.
   if (row.mission_name) doc._jpHint = { mission: row.mission_name, scene: row.scene_name || null };
   jpRestoreFiling(doc);
+  jpRestoreMyChars(doc);
   // IN PLACE, never a replacement. jpApplyRow used to build a new object and
   // put it in S.docs, which orphaned every reference anything else was holding
   // -- an open dialog, a function part-way through an await. That is what made
@@ -8992,7 +8647,8 @@ async function jpSaveNow(doc, quiet) {
       p_content: doc.content || '',
       p_title: doc.title || '',
       p_status: doc.status || 'active',
-      p_meta: { chars: doc.chars || [], myChars: doc.myChars || [], charColors: doc.charColors || {} },
+      // No myChars: it is per writer and lives in S.jpMyChars, not in the row.
+      p_meta: { chars: doc.chars || [], charColors: doc.charColors || {} },
     });
     doc.jpVersion = v;
     doc.jpSavedContent = doc.content || '';     // the server now has this exactly
@@ -9175,6 +8831,7 @@ async function jpMakeJoint(id) {
   if (!isCloud()) { showToast('Joint sims need an account — sign in first.'); return; }
   flushSave();
   const a = getAuth();
+  const _p = getPrefs();
   const r = await supaFetch('/rest/v1/jp_docs', {
     method: 'POST',
     headers: { 'Prefer': 'return=representation' },
@@ -9187,8 +8844,16 @@ async function jpMakeJoint(id) {
       mission_name: (S.missions[doc.missionId] || {}).name || null,
       scene_name: (S.scenes[doc.sceneId] || {}).name || null,
       academy: isAcademyDoc(doc),
-      format: { boldLoc: !!S.settings.boldLoc, italOOC: !!S.settings.italOOC, italThoughts: !!S.settings.italThoughts },
-      meta: { chars: doc.chars || [], myChars: doc.myChars || [], charColors: doc.charColors || {} },
+      // The formatting a READER should see, in the same shape sharePayload()
+      // uses. These were three setting names that do not exist anywhere in the
+      // app -- the real ones live in prefs -- so every joint sim published its
+      // format as all-off. Nothing reads jp_docs.format yet, which is the only
+      // reason it never showed.
+      format: { boldLocations: !!_p.boldLocations,
+                italicOOC:     !!_p.italicOOC,
+                thoughtItalic: !!_p.thoughtItalic },
+      // No myChars: per writer, kept in S.jpMyChars -- see jpRestoreMyChars.
+      meta: { chars: doc.chars || [], charColors: doc.charColors || {} },
     })
   });
   if (!r.ok) {
@@ -9202,6 +8867,7 @@ async function jpMakeJoint(id) {
   const row = rows && rows[0];
   doc.docType = 'joint';
   jpRememberFiling(doc);     // it is filed somewhere already; keep it there
+  jpRememberMyChars(doc);    // and whoever is already marked as yours stays yours
   doc.jpOwner = a.uid;
   doc.jpVersion = row ? row.version : 1;
   doc.jpMembers = 1;
@@ -9502,6 +9168,32 @@ function jpFiling() {
   return S.jpFiling;
 }
 
+// Which characters in a joint sim are THIS writer's own. Per writer, exactly
+// like the filing above and for the same reason: it is a fact about the writer,
+// not about the sim. It used to travel in the shared row's meta, so every writer
+// on a joint sim overwrote everyone else's -- tick your character and the next
+// poll handed it to the others; untick somebody else's and theirs came straight
+// back. See jpApplyRow.
+function jpMyChars() {
+  if (!S.jpMyChars) S.jpMyChars = {};
+  return S.jpMyChars;
+}
+
+function jpRememberMyChars(doc) {
+  if (!isJointDoc(doc)) return;
+  jpMyChars()[doc.id] = (doc.myChars || []).slice();
+}
+
+// Put this writer's own selection back after a refresh from the server. With no
+// record yet -- a sim you have just been invited to, or one saved before this
+// was per-writer -- start empty and let syncDocMyChars derive it from the title
+// and your own character list. Keeping whatever arrived would carry another
+// writer's selection in with it, which is the bug this exists to stop.
+function jpRestoreMyChars(doc) {
+  const mine = jpMyChars()[doc.id];
+  doc.myChars = mine ? mine.slice() : [];
+}
+
 function jpRememberFiling(doc) {
   if (!isJointDoc(doc)) return;
   jpFiling()[doc.id] = { missionId: doc.missionId || null, sceneId: doc.sceneId || null };
@@ -9556,7 +9248,7 @@ function jpNormaliseAutoFormat(doc) {
 
 // One way home, used by the header mark and the Dashboard button alike.
 // It has to do two things, not one: leave whatever VIEW is showing (Settings,
-// the Manifest, Admin) *and* close any sim that is open behind it -- otherwise
+// Characters, Admin) *and* close any sim that is open behind it -- otherwise
 // pressing it from Settings drops you back onto the editor, which is not what
 // "home" means to anybody.
 function goHome() {

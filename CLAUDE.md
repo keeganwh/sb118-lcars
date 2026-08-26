@@ -3,6 +3,8 @@
 Browser-based Play-by-Email writing tool for Starbase 118. Read this every session.
 For more depth: `TECH_STACK.md` (stack), `ROADMAP.md` (what's next), `USER_PROTOCOLS.md` (the user's routine).
 
+**`ROADMAP.md` was restructured 2026-08-24 into scored, categorised *batches*.** Work is grouped by code locality, not by priority alone, so one session loads one subsystem. Read its "How this file works" section before picking anything up, and pick a **batch**, not a stray item.
+
 **Live at https://sb118-lcars.vercel.app/.** GitHub Pages still serves the same `main` behind a notice pointing people at the new address; retiring it is on the roadmap.
 
 ## Stack & versions (see TECH_STACK.md for detail)
@@ -20,7 +22,7 @@ For more depth: `TECH_STACK.md` (stack), `ROADMAP.md` (what's next), `USER_PROTO
 - **Cloud** — Supabase tables `writers`, `state`, `snapshots`, all under RLS. Sign-in is Writer ID + PIN, with the auth email derived as `<writerid>@lcars.local` so it needs no server lookup. A Google or Discord identity can be linked to the same auth user, which is both a second way in and the route back from a forgotten PIN. Snapshots live in their own table, fetched on demand, capped at ten per sim. Every network call is gated on `isCloud()`; offline-only is a first-class mode.
 - **Privileged operations** — anything the anon key cannot do (removing a login, purging an expired deletion, resetting somebody else's PIN, reading the writer roster) is a `security definer` Postgres function in `supabase/schema.sql`, called over PostgREST. **There are deliberately no Edge Functions and no server secrets** — see the recovery/deletion memory file for why.
 - **Roles and moderation** — `writers.role` is `writer` / `moderator` / `super_admin`. Moderators action the PIN reset queue at `/admin`; super admins also see the writer roster and assign roles. **The client-side guards are cosmetic** — RLS on `pin_reset_requests` and the role checks inside the functions are the boundary, so never move a check up into the page.
-- **Offline download** — `api/download.js` re-inlines the three files into one self-contained `LCARS.html` on demand, so "download one file and run it with no network" still holds.
+- **Offline download — FROZEN as of 2026-08-24.** `api/download.js` re-inlines the three files into one self-contained `LCARS.html` on demand. It is **frozen at v4.24 and is not to be extended**: features that require the server (Joint Posts for everyone, real-time writing, anything HQ) are deliberately not carried into it. Do not contort a feature to keep the inlined build working. If a genuinely offline app is wanted later, the agreed answer is a purpose-built simplified "LCARS Lite", not a bigger inliner. See `ROADMAP.md` → Batch 3.
 - **UI** — hand-written LCARS CSS. Classic skin (Dark/Light/High-contrast) plus the Delta Prime skin, via CSS variables. Fonts from Google Fonts, loaded dynamically.
 
 ## Hard rules (never break these)
@@ -32,6 +34,8 @@ For more depth: `TECH_STACK.md` (stack), `ROADMAP.md` (what's next), `USER_PROTO
 5. **Don't batch unrelated changes.** Commit and push after each change.
 6. **Verify in a browser.** There is no test suite, and a syntax check cannot see a valid block going missing — see the landmines below.
 7. **Ask questions in plain text, never in a modal.** The user has asked for this explicitly. Put decisions to them as prose in your reply — do not use `AskUserQuestion` or any other pop-up chooser on this project.
+8. **Don't extend the offline download.** It is frozen (see above). A new shared file still needs the `vercel.json` cache-header list updated, but `api/download.js` no longer grows.
+9. **Don't add character data that SB118 HQ owns.** HQ tracks accounts and character records; duplicating them here creates redundancy that makes a later integration harder. Service History and Ribbons are being removed for exactly this reason — don't reintroduce that shape of data.
 
 ### Pending changelog entry format
 
@@ -52,6 +56,7 @@ Entries are read by writers, not developers. Write them in plain language, sayin
 
 ## Run / test
 
+- **Output fidelity has a two-part test.** `test/fidelity_browser.js` compares the three render passes against each other (24 checks). `test/OUTPUT-FIDELITY-TEST.md` is the hand-run half — the sample sim, the Google Doc to paste from, and thirteen checks in Gmail and Google Groups. The automated half cannot see what a mail client does with the result; both halves are needed.
 - No build, no server needed for the basics: open `LCARS.html` in any browser, or serve the folder (`python3 -m http.server -d .`) to exercise routing.
 - **A headless browser is the real test.** Playwright is available and Chromium is pre-installed at `/opt/pw-browsers/chromium`. Drive the affected flow and listen for `pageerror`. Use it after any non-trivial change.
 - For user-facing fixes, verify on the live Vercel URL after the deploy.
@@ -71,12 +76,15 @@ Entries are read by writers, not developers. Write them in plain language, sayin
 - **Supabase free tier pauses a project after ~1 week idle.** It resumes from the dashboard.
 - **`lcars.js` is ~9,500 lines** — read targeted ranges, not the whole file.
 - **`<p>` and `<div>` are not interchangeable outside the editor.** `#editor p,#editor div{margin:0}` flattens both, so pasted content (Google Docs and Word give `<p>`) looks identical to typed content (`<div>`) while writing — and then copies out double spaced, because `<p>` carries a margin everywhere else. The copy handler normalises `<p>`→`<div>` on the way to the clipboard. Normalise on the way *out*, not at paste time: it fixes sims that already exist and leaves stored content untouched.
+- **Alias matching is registered in two places and filters the same wrong way.** `detectChars` (~3601) and `applyNameBold` (~4567) each build their alias list as `if (alias && /[\s.]/.test(alias))` — **only aliases containing a space or a period are registered.** A single-word alias falls through to `CREX`, which matches any capitalised word followed by a colon, so it still *bolds* and the bug looks absent, while attribution, colouring and `myChars` quietly miss. Fix both sites together, via a shared helper. See `ROADMAP.md` → Batch 1.
 - **A mode restriction lives in more than one place.** Academy mode blocks things in three: the CSS that greys the button out, the guard inside the command (`doIndent`), and the keyboard handler. Changing a rule means changing all three — twice now a button has started working while its keyboard shortcut silently did not.
 - **`stripFormattingHtml()` runs on open, on paste and on applying source view.** Anything it strips is removed repeatedly, not once, so a structural feature it touches will appear to work and then quietly revert the next time the sim is opened.
 - **Boot raises prompts on a timer, and they fight.** The reconcile question, a pending deletion, a temporary PIN that must be changed and the Delta Prime intro have now collided three times, twice invisibly. Any new boot-time prompt must check `#mo` is hidden before it paints.
 - **`admin_action_reset()` writes `auth.users.encrypted_password` via `crypt()`** — the one thing in the schema Supabase does not support. If temporary PINs ever stop working, that is why; the fallback is written into the function's own comment.
 - **Deploy before running a schema migration, never after.** New app code tolerates columns it no longer uses; old app code does not tolerate columns that have vanished. Applying a migration while a browser still holds the previous build gives a raw PostgREST error about a missing column. There is a friendly `PGRST204` message in `publishShare`, but the ordering is the real fix.
-- **The editor's render pass is not the reader's.** `applyMarkers` tints markers so a *writer* can spot them mid-sim. Anything showing a finished sim to someone else wants what the editor's **`copy` handler** produces: locations bold, OOC and thoughts italic, markers plain, and no colour at all — character colours included. `lrToReadingHtml()` in `lcars-render.js` is that pass; use it rather than writing a third answer.
+- **Bold and italic have to be read off the STYLE, not off the tag.** Google Docs wraps a copied selection in `<b id="docs-internal-guid-…" style="font-weight:normal">` — a bold tag its own style switches back off — and marks the words that are really bold as `<span style="font-weight:700">`. Keeping the tag and dropping the style bolded every pasted sim and lost the writer's own bold; Word and Outlook use the same span-with-a-style shape. `cleanPasteHTML` handles this now, and `_docsWrapV1` in `loadState`'s migration block repaired the sims already stored that way. **This is the one place formatting is normalised on the way IN rather than on the way out** — because the information is destroyed at paste time otherwise, which is exactly what happened to sims pasted before the fix.
+- **A mail client's default stylesheet is not LCARS's.** `ul`/`ol` carry a block margin in Gmail and Google Groups that LCARS zeroes in `lcars.css` — which a paste target never sees. Anything whose appearance depends on an LCARS rule has to state that rule inline on copy-out, after the attribute strip. Lists are the case that bit; check any new block element the same way.
+- **The editor's render pass is not the reader's.** `applyMarkers` tints markers so a *writer* can spot them mid-sim. Anything showing a finished sim to someone else wants what the editor's **`copy` handler** produces: locations bold, OOC and thoughts italic, markers plain, and no colour at all — character colours included. `lrToReadingHtml()` in `lcars-render.js` is that pass; use it rather than writing a third answer. It now strips style down to `margin-left` and normalises `<p>`→`<div>` itself, so it holds on its own rather than relying on `share.js`'s sanitiser to do it. `ind-1..4` stay as classes deliberately — share.html scales indents down on a narrow screen, and an inline margin could not be overridden. **`test/fidelity_browser.js` compares all three passes**; run it after touching any of them.
 - **A new shared file means updating `api/download.js` AND the `vercel.json` cache-header list.** Miss the first and the offline download breaks; miss the second and a fix never reaches anyone's browser.
 - **A joint sim is an ordinary doc in `S.docs`, marked `docType:'joint'`.** That
   is what makes the nav, dashboard, manifest and search work on it for free, and
@@ -107,6 +115,8 @@ Entries are read by writers, not developers. Write them in plain language, sayin
 - Don't add a build step, a bundler or npm dependencies — the zero-dependency, plain-`fetch` design is deliberate, and it is what keeps the offline download working.
 - Don't put the Supabase `service_role` key anywhere in this repo or the app. The anon key is fine; RLS is what protects the data, and privileged work goes through `security definer` functions instead.
 - Don't reintroduce a recovery email or an Edge Function for account recovery. Both were considered at length and rejected — the reasoning is in `memory/session_lcars_2026-08-recovery-deletion.md`.
+- Don't extend `api/download.js`. The offline download is frozen — see the hard rules.
+- Don't reintroduce a character wiki importer, a service record or ribbon data. Scrapped 2026-08-24 as redundant against SB118 HQ.
 - Don't recreate the `main-ikuxoc` branch.
 
 ## Key files
@@ -117,7 +127,7 @@ Entries are read by writers, not developers. Write them in plain language, sayin
 - `api/download.js` — serverless route that rebuilds the three into one offline file.
 - `supabase/schema.sql` · `supabase/README.md` — database schema and setup steps.
 - `vercel.json` — route rewrites and cache headers.
-- `LCARS-Guide-v2.html` — user guide, served at `/guide`. Predates accounts; a rewrite is on the roadmap.
+- `LCARS-Guide-v2.html` — user guide, served at `/guide`. Predates accounts, Joint Posts and share links; a ground-up rebuild is `ROADMAP.md` → Batch 9.
 - `CHANGELOG.md` — human-readable version history.
 - `TECH_STACK.md` · `ROADMAP.md` · `USER_PROTOCOLS.md` — stack, outstanding work, and the user's routine.
 
