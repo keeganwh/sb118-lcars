@@ -309,6 +309,7 @@ const VERSIONS = [
       'Added: LCARS now works out who is in a sim from the title. Title a sim the usual way \u2014 the names, a dash, then the title \u2014 and everyone named is listed in the Characters panel straight away, before anybody has spoken, and ticked as yours. Only characters you have added to your character list are recognised \u2014 a name you have not added is treated as somebody else\u2019s and left alone. Ranks are fine, several characters are fine however you separate them, and any alias you have set up counts. If you have already chosen who is in a sim, nothing is changed',
       'Fixed: on a joint sim, which characters are marked as yours was stored once for the whole sim rather than once per writer. Everyone on the sim shared one list, so another writer marking their character marked it on your copy too, and unticking it only lasted until the next refresh brought theirs back. Your selection is now your own. The first time you open a joint sim after this update it is worked out fresh from the title and your character list',
       'Fixed: a character taken from the sim title showed up unticked beside their own dialogue when the title and the sim spelled them differently \u2014 \u201cCommander Robin Hopper\u201d in the title, \u201cHopper:\u201d in the sim. LCARS now matches the character rather than the spelling, so ticking, unticking and your sim counts all follow the person',
+      'Fixed: pasting a sim in from Google Docs turned the whole pasted section bold, and lost the words you had actually bolded or italicised there. Google Docs wraps whatever you copy in a bold tag that it then switches off again, and LCARS was keeping the tag and throwing away the switch-off. Bold and italic pasted from Docs, Word or Outlook now come through as themselves, and the rest of the paste stays plain',
     ],
   },
 ];
@@ -3042,32 +3043,117 @@ function levenshtein(a, b) {
 // ================================================================
 // CLEAN COPY
 // ================================================================
-// ── PASTE HANDLER: strip colors/fonts from pasted content ──
+// -- PASTE HANDLER: strip colors/fonts from pasted content --
+//
+// Bold and italic have to be read off the STYLE, not just off the tag, or a
+// paste from Google Docs comes out backwards. Docs wraps the whole selection in
+//   <b id="docs-internal-guid-..." style="font-weight:normal">
+// -- a bold tag that its own style switches back off -- and marks the words that
+// are really bold as <span style="font-weight:700">. Keeping the <b> and
+// dropping the <span>s bolded the entire pasted sim in the editor and lost the
+// bold the writer had actually applied. Word and Outlook do the same thing with
+// their own <span style="font-weight:bold">.
+//
+// So: a bold or italic tag whose style says otherwise is unwrapped, and any
+// element whose style says bold or italic becomes a real <strong>/<em> before
+// it is unwrapped. What is stored is plain <strong>/<em>, which is what copy-out
+// and the reading pass already understand.
+const PASTE_KEEP = ['strong','b','em','i','s','strike','del','a',
+                    'div','p','br','ul','ol','li','blockquote','h1','h2','h3','h4'];
+
+// What an element's own inline style says about weight/slant/strike.
+// Returns true, false or null -- null meaning "says nothing, inherit".
+function _pasteStyleSays(node) {
+  const st = node.getAttribute && node.getAttribute('style');
+  const out = { bold: null, italic: null, strike: null };
+  if (!st) return out;
+  const weight = /font-weight\s*:\s*([^;]+)/i.exec(st);
+  if (weight) {
+    const v = weight[1].trim().toLowerCase();
+    if (/^\d+$/.test(v)) out.bold = +v >= 600;
+    else if (v === 'bold' || v === 'bolder') out.bold = true;
+    else if (v === 'normal' || v === 'lighter') out.bold = false;
+  }
+  const slant = /font-style\s*:\s*([^;]+)/i.exec(st);
+  if (slant) {
+    const v = slant[1].trim().toLowerCase();
+    if (v === 'italic' || v === 'oblique') out.italic = true;
+    else if (v === 'normal') out.italic = false;
+  }
+  const deco = /text-decoration(?:-line)?\s*:\s*([^;]+)/i.exec(st);
+  if (deco) out.strike = /line-through/i.test(deco[1]);
+  return out;
+}
+
 function cleanPasteHTML(html) {
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
+
+  // Wrap an element's children in <strong>/<em>/<s>, then unwrap the element.
+  function unwrapAs(node, tags) {
+    let target = node;
+    tags.forEach(t => {
+      const w = document.createElement(t);
+      while (target.firstChild) w.appendChild(target.firstChild);
+      target.appendChild(w);
+      target = w;
+    });
+    while (node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+    node.parentNode.removeChild(node);
+  }
 
   // Recursively unwrap or clean each element
   function processNode(node) {
     if (node.nodeType === 8) { node.parentNode.removeChild(node); return; } // drop comment nodes (StartFragment/EndFragment)
     if (node.nodeType !== 1) return; // text nodes pass through
     const tag = node.tagName.toLowerCase();
-    const keep = ['strong','b','em','i','s','strike','del','a',
-                  'div','p','br','ul','ol','li','blockquote','h1','h2','h3','h4'];
-    if (!keep.includes(tag)) {
-      // Unwrap: replace element with its children
+    const says = _pasteStyleSays(node);
+
+    // Recurse FIRST: the children carry their own styles, and this element is
+    // about to be rewritten or unwrapped underneath them.
+    [...node.childNodes].forEach(processNode);
+
+    // A bold/italic tag that its own style switches off is a wrapper, not
+    // formatting -- this is the Google Docs case. Drop the tag, keep the words.
+    const tagIsBold   = tag === 'b' || tag === 'strong';
+    const tagIsItalic = tag === 'i' || tag === 'em';
+    if ((tagIsBold && says.bold === false) || (tagIsItalic && says.italic === false)) {
       while (node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
       node.parentNode.removeChild(node);
       return;
     }
+
+    if (!PASTE_KEEP.includes(tag)) {
+      // Unwrap -- but carry any real formatting its style was expressing.
+      const wrap = [];
+      if (says.bold)   wrap.push('strong');
+      if (says.italic) wrap.push('em');
+      if (says.strike) wrap.push('s');
+      unwrapAs(node, wrap);
+      return;
+    }
+
+    // A kept tag can still be carrying styled formatting of its own (a <div>
+    // that Docs made bold, say). Put that inside it before the style is lost.
+    const inner = [];
+    if (says.bold && !tagIsBold)     inner.push('strong');
+    if (says.italic && !tagIsItalic) inner.push('em');
+    if (inner.length) {
+      let target = node;
+      inner.forEach(t => {
+        const w = document.createElement(t);
+        while (target.firstChild) w.appendChild(target.firstChild);
+        target.appendChild(w);
+        target = w;
+      });
+    }
+
     // For kept elements, strip all styles/classes/ids except href on anchors
     [...node.attributes].forEach(attr => {
       if (tag === 'a' && attr.name === 'href') return;
       if (tag === 'a' && attr.name === 'target') return;
       node.removeAttribute(attr.name);
     });
-    // Recurse into children (iterate copy since we may mutate)
-    [...node.childNodes].forEach(processNode);
   }
 
   [...tmp.childNodes].forEach(processNode);
