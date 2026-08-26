@@ -23,11 +23,14 @@
 //     and silently ships an offline copy missing the new file, which is the
 //     one failure nobody would notice.
 //   * Failing is the intended end state, not a bug to fix by growing this
-//     file. When it starts refusing, that is the signal to build LCARS Lite.
+//     file. When it starts refusing, that is the signal to build LCARS Offline.
 //
 // If a genuinely offline LCARS is wanted later, the agreed answer is a
-// purpose-built, deliberately simplified "LCARS Lite" — not a bigger inliner.
-// See ROADMAP.md -> Batch 3 and TECH_STACK.md.
+// purpose-built, deliberately pared-back "LCARS Offline" — not a bigger inliner.
+// See ROADMAP.md -> Batch 12 (deferred, low priority) and TECH_STACK.md.
+//
+// Standing rule from 2026-08-26: LCARS Offline gets no NEW features, whatever
+// lands online. Fixes and tweaks are fine.
 
 const LINK_TAG = '<link rel="stylesheet" href="lcars.css">';
 const RENDER_TAG = '<script src="lcars-render.js"></script>';

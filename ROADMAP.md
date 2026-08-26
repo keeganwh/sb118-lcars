@@ -86,18 +86,27 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 
 ---
 
-# BATCH 3 — Freeze offline, open Joint Posts
+# BATCH 3 — Joint Posts (offline freeze shelved)
 
-**Top score [+5]. Category: Component Revision + Testing.**
+**Top score [+4]. Category: Component Revision + Testing.**
 
-**Why these together, and in this order:** the download freeze has to land **before** Joint Posts opens to everyone, or the one-file offline build starts silently shipping a feature it structurally cannot support. Everything else here is joint-sim adjacent and small.
+**The offline half is done enough and shelved.** The freeze landed 2026-08-26 and is doing its job — including the ordering this batch existed to protect, since the download can no longer silently ship a feature it cannot support. The remaining offline polish is **incomplete on purpose and low priority**; see the first item and Batch 12. **This batch is now effectively the Joint Posts batch.**
 
-- [x] **[+5] Freeze the offline download.** _Done 2026-08-26._
-      **Frozen at v4.24.** Verified booting clean from `file://` at `21d8aec` first — v4.24 plus the changes pending for the next version — so the version being frozen at is one that actually works.
-      The freeze is recorded in `api/download.js` (a header saying it is finished and must not grow a fourth inline), `CLAUDE.md`, `TECH_STACK.md`, and the Settings copy, which now tells a writer the offline copy is frozen and that Joint Posts, share links, accounts, syncing and anything HQ are not in it.
-      **The route now refuses to build rather than breaking quietly.** It only ever knew about three files, so a fourth shared file would have built cleanly and shipped an offline copy silently missing it — no error, the feature just absent. A check now rejects any leftover relative `src`/`href` (absolute font URLs and the `data:` favicon are fine). Verified both ways: current `main` builds, a simulated fourth file is refused.
-      `OFFLINE_FROZEN_VERSION` at the top of `lcars.js` is the stated version — it deliberately does **not** follow `APP_VERSION`.
-      **This unblocks the build-step question that was gating real-time writing** (Batch 7) — a bundler no longer costs the one-file copy, because the one-file copy is frozen.
+**Why the rest belong together:** everything below is joint-sim adjacent and small, and opening Joint Posts to everyone was always gated on the freeze — which is now satisfied.
+
+- [~] **[+5 → low] Freeze the offline download.** _Partially done 2026-08-26. **SHELVED — incomplete. Do not pick this up without being asked.**_
+      **The freeze itself is in place and holding.** What landed:
+      - Frozen at **v4.24**, verified booting clean from `file://` at `21d8aec` first — v4.24 plus the changes pending for the next version — so the version frozen at is one that actually works.
+      - Recorded in `api/download.js`, `CLAUDE.md`, `TECH_STACK.md`, and the Settings copy, which tells a writer the offline copy is frozen and that Joint Posts, share links, accounts, syncing and anything HQ are not in it.
+      - **The route now refuses to build rather than breaking quietly.** It only ever knew about three files, so a fourth shared file would have built cleanly and shipped an offline copy silently missing it — no error, the feature just absent. A check now rejects any leftover relative `src`/`href` (absolute font URLs and the `data:` favicon are fine). Verified both ways: current `main` builds, a simulated fourth file is refused.
+      - `OFFLINE_FROZEN_VERSION` at the top of `lcars.js` is the stated version — it deliberately does **not** follow `APP_VERSION`.
+      - **This unblocks the build-step question that was gating real-time writing** (Batch 7) — a bundler no longer costs the one-file copy, because the one-file copy is frozen.
+
+      **What is NOT done, and why it is shelved rather than finished:**
+      - The offline copy is still **indistinguishable from LCARS online** — its tab reads `LCARS v4.24`, identical to the live app, so a writer with both open cannot tell which is which. An offline label was proposed and deliberately **not** built.
+      - Nothing has been **removed**. Cloud features are inert offline, not absent, so an offline writer still sees account settings, a sync line that never updates and a share button that cannot fire.
+      - **"LCARS Offline" as a distinct, pared-back thing does not exist.** See Batch 12 — the follow-up has been moved there.
+      _Shelved deliberately: the freeze does the load-bearing work, and the rest is polish on a component we intend to replace. **Low priority from here.**_
 
 - [ ] **[+4] Open Joint Posts to everyone.**
       `jpCanCreate()` at `lcars.js:9486` is `return isCloud() && isSuperAdmin();` — only a super admin can **start** a joint sim or convert a solo one. Anyone invited can already join, take turns and write. Change it to `return isCloud();` and verify all three call sites: the convert path (~4183), button visibility (~9334) and the create guard (~9465, which currently toasts "Joint sims are still being tested.").
@@ -117,16 +126,6 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 - [ ] **[0] Test: deleting an account while the server is unreachable.** _Testing._
       Covered by `account-check.js offline`, never done by hand. Folded in here because it is the same offline-path headspace as the freeze.
       _Done when: the flow has been walked through by hand with the network off._
-
-- [ ] **[—] "LCARS Lite" — direction settled 2026-08-26, not yet designed.** _Its own session. Do not start it inside another batch._
-      **The user has decided this is the answer**, rather than leaving it open: a **purpose-built, deliberately pared-back offline app** replaces the inlined download in time. Not a bigger inliner.
-      What is settled:
-      - **Still browser-based** — an HTML file you open, same as today. Not a native app, not a build step, "for now".
-      - **Deliberately fewer bells and whistles.** It decides up front what a writer actually needs with no connection and is built to that, rather than being the full app with pieces disabled.
-      - **Strip what cannot apply offline** — account settings, sign-in, syncing, share links, Joint Posts, anything HQ. Not hidden behind a guard: absent.
-      What is **not** decided, and should not be assumed: what stays in, whether it shares source with the main app or is its own file, how a writer moves work between the two beyond the backup file, and when it gets built.
-      _Trigger to start: the user asks, or `/api/download` begins refusing (see below) — whichever comes first._
-      _Note: the frozen route now refuses to build if a new shared file lands, rather than silently shipping a copy missing it. **That refusal is the alarm clock for this item.**_
 
 ---
 
@@ -304,6 +303,21 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 
 ## New Components
 
+- [ ] **[—] "LCARS Offline" — a pared-back offline app.** _Deferred here 2026-08-26 from Batch 3. **Low priority. Do not start without being asked.**_
+      Direction is settled, the work is not. In time a **purpose-built, deliberately pared-back offline app** replaces the inlined download. **Not a bigger inliner** — `api/download.js` is frozen and stays frozen.
+      **Settled:**
+      - **Still browser-based** — an HTML file you open, same as today. Not a native app.
+      - **Removal, not concealment.** Account management, cloud syncing, sign-in, share links and Joint Posts come **out**, rather than being hidden behind a guard as they are now.
+      - **The writing surface and the character list are core** and stay, in full. Output fidelity in particular is not a candidate for simplification — getting a sim into Gmail correctly is the entire point of writing offline.
+      - **The JP *tag* stays, the JP *machinery* goes.** Confirmed separable: `postType` (the label, 13 references) is independent of `docType:'joint'` (the machinery, 2 references). A sim can be tagged JP with no joint-post code present.
+      **Open, and not to be assumed:** what else stays in, whether it shares source with the main app or is its own file, how work moves between the two beyond a backup file, and when it is built.
+      **Feasibility, measured 2026-08-26 — it is not a rewrite.** Cloud code is concentrated, not woven through: ~85 KB across 93 functions (Joint Posts 42 KB / 50 fns, auth 24 KB / 20, sync 12 KB / 12, shares 4.6 KB / 7, admin+snapshots 1.4 KB / 4). Of 43 `isCloud()` call sites, most sit inside functions that would themselves be deleted — only about **a dozen genuine seams** land in code Lite would keep (`applyImport`, `eraseAllData`, `showHistory`, `settingsAccountCard`, `updateShareButton`, `manualSaveAndSync`, `markWizardSeen`, `showBuiltWith`, `renderSettingsView`).
+      **Size is the weakest argument and should not drive it.** The whole app is 618 KB, read from local disk. Stripping cloud saves ~a fifth; trimming `VERSIONS` (57 KB, 12% of `lcars.js`, mostly release notes for features Lite will not have) saves another tenth. The real payoff is **no dead UI** — today an offline writer sees account settings, a sync line that never updates and a share button that cannot fire.
+      **Known gap inherited from the shelved freeze:** the offline copy's tab reads `LCARS v4.24`, identical to online, so a writer with both open cannot tell them apart. An offline label was proposed and deliberately not built.
+      _Reassessment must cover: **(a)** what has changed in the app since the freeze that Offline needs to absorb or drop, and **(b)** confirming the no-new-features rule below has actually held._
+      > **Standing rule from 2026-08-26 — LCARS Offline gets no new features.** Fixes and tweaks yes; features no. This applies from that date onward regardless of what lands online. `api/download.js` enforces the structural half itself by refusing to build if a fourth shared file appears — **that refusal is the alarm clock for this item, not a bug.**
+      _Trigger to revisit: the user asks, or the download route begins refusing._
+
 - [ ] **[+1] Notifications.** _Low priority, future follow-up._
       There is no notification surface anywhere in the app. It would serve joint sims (nobody is told when a sim is handed to them by the deletion transfer, or when they are removed from one), the moderator PIN-reset queue (currently a bare count in the header), share links expiring, a forced PIN change on a temporary PIN, and later anything HQ pushes at a writer.
       _Note: the Groups extension writes "an inbox row" and notifications need somewhere to land. Decide deliberately whether that is one surface or two._
@@ -355,7 +369,7 @@ Not development, not batched, and **user-triggered** — they run when the user 
 
 Settled, with reasons. Do not re-open without a new one.
 
-- **The one-file offline download is frozen.** _2026-08-24._ Stops at a stated version rather than absorbing online-only features. A purpose-built "LCARS Lite" is the preferred future answer over shoehorning. See Batch 3.
+- **The one-file offline download is frozen at v4.24.** _Decided 2026-08-24; landed 2026-08-26._ Stops at a stated version rather than absorbing online-only features, and the route refuses to build if a fourth shared file lands. **LCARS Offline gets no new features from 2026-08-26 onward — fixes and tweaks only.** A purpose-built, pared-back "LCARS Offline" is the agreed future answer over shoehorning; it is **deferred to Batch 12 at low priority**, and the freeze work in Batch 3 is deliberately incomplete and shelved.
 - **Character wiki import — scrapped.** _2026-08-24._ `parseServiceRecordWikitext()` / `parseRibbonsWikitext()` and the whole import idea are dropped, along with the service record and ribbon data they would have filled. SB118 HQ already tracks character data; building it here creates redundancy that makes integration harder.
 - **Whole-sim wikitext export — dropped.** _2026-08-24._ Replaced by the quote-with-citation idea. People should link to the archive.
 - **Snapshot diffs — dropped.** _2026-08-14._ The benefit disappeared when snapshots moved out of the synced payload. Diffs would add a failure mode (one corrupt diff breaks the reconstruction chain) to solve a problem that no longer exists.
