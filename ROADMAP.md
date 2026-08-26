@@ -92,12 +92,11 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 
 **Why these together, and in this order:** the download freeze has to land **before** Joint Posts opens to everyone, or the one-file offline build starts silently shipping a feature it structurally cannot support. Everything else here is joint-sim adjacent and small.
 
-- [ ] **[+5] Freeze the offline download.** _Decision, then a small change._
-      **Settled 2026-08-24, do not re-litigate.** The one-file download stops here. Declare the current version the last one `api/download.js` carries, and stop updating it rather than shoehorning online-only features into it.
-      - Note the freeze in `CLAUDE.md`, `TECH_STACK.md`, and the Settings download-button copy so a writer knows what they're getting.
-      - Flag a later follow-up to decide whether to build a purpose-made, deliberately simplified **"LCARS Lite"** offline app instead of maintaining the inlined one.
-      _This is also what unblocks the build-step question that has been gating real-time writing — a bundler no longer costs the one-file copy, because the one-file copy is frozen._
-      _Done when: the download is documented as frozen at a stated version, and the app says so where a writer downloads it._
+- [x] **[+5] Freeze the offline download.** _Done 2026-08-26._
+      **Frozen at v4.24.** Verified booting clean from `file://` at `21d8aec` first — v4.24 plus the changes pending for the next version — so the version being frozen at is one that actually works.
+      The freeze is recorded in `api/download.js` (a header saying it is finished and must not grow a fourth inline), `CLAUDE.md`, `TECH_STACK.md`, and the Settings copy, which now tells a writer the offline copy is frozen and that Joint Posts, share links, accounts, syncing and anything HQ are not in it.
+      `OFFLINE_FROZEN_VERSION` at the top of `lcars.js` is the stated version — it deliberately does **not** follow `APP_VERSION`.
+      **This unblocks the build-step question that was gating real-time writing** (Batch 7) — a bundler no longer costs the one-file copy, because the one-file copy is frozen.
 
 - [ ] **[+4] Open Joint Posts to everyone.**
       `jpCanCreate()` at `lcars.js:9486` is `return isCloud() && isSuperAdmin();` — only a super admin can **start** a joint sim or convert a solo one. Anyone invited can already join, take turns and write. Change it to `return isCloud();` and verify all three call sites: the convert path (~4183), button visibility (~9334) and the create guard (~9465, which currently toasts "Joint sims are still being tested.").
@@ -117,6 +116,11 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 - [ ] **[0] Test: deleting an account while the server is unreachable.** _Testing._
       Covered by `account-check.js offline`, never done by hand. Folded in here because it is the same offline-path headspace as the freeze.
       _Done when: the flow has been walked through by hand with the network off._
+
+- [ ] **[—] "LCARS Lite" — a later decision, not a design.** _Flagged 2026-08-26 by the freeze above. Do not start it._
+      The frozen download will eventually drift far enough behind LCARS online to be worth replacing. When that happens the agreed answer is a **purpose-built, deliberately simplified offline app** — one that decides up front what a writer actually needs with no connection, and is built to that — **not a bigger inliner**.
+      **This is a flag, not a brief.** Nothing about it is designed: not what it includes, not whether it shares code with the app, not whether it exists at all. Raising it is a decision for the user to make when the drift is real, and it should get its own session.
+      _Trigger to revisit: the frozen copy is missing something a writer offline genuinely needs, or someone asks for it._
 
 ---
 

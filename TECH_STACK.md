@@ -12,7 +12,7 @@ _The whole stack at a glance. Current app version: **4.24**._
 
 A **dependency-free vanilla web app** — no framework, no bundler, no npm, no transpiler. It ships as four files that share one codebase (`LCARS.html`, `lcars.css`, `lcars.js`, `lcars-render.js`), hosted on Vercel, with Supabase behind it for accounts and cross-device sync. Every network call is made with plain `fetch`.
 
-**The single-file offline download is frozen at v4.24** (decided 2026-08-24). It is no longer the constraint it was: features that need the server are deliberately not carried into it, and a purpose-built simplified "LCARS Lite" is the preferred future answer rather than a bigger inliner. **This is what unblocks a build step** — a bundler no longer costs the one-file copy, because the one-file copy has stopped growing. The no-dependency design still stands on its own merits and is not up for grabs.
+**The single-file offline download is frozen at v4.24** (decided 2026-08-24; landed 2026-08-26, verified booting clean from `file://` at `21d8aec` — v4.24 plus the changes pending for the next version). It is no longer the constraint it was: features that need the server are deliberately not carried into it, and a purpose-built simplified "LCARS Lite" is the preferred future answer rather than a bigger inliner. **This is what unblocks a build step** — a bundler no longer costs the one-file copy, because the one-file copy has stopped growing. The no-dependency design still stands on its own merits and is not up for grabs.
 
 Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same `main` behind a notice pointing people at the new address.
 
@@ -32,7 +32,7 @@ Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same 
 | **Snapshots** | Own Supabase table | Fetched on demand rather than carried in the synced payload, capped at ten per sim on both sides. |
 | **Offline** | First-class mode | The first-run gate offers an account or offline-only. Every network call is gated on `isCloud()`. |
 | **Hosting** | Vercel | `vercel.json` rewrites `/`, `/settings`, `/manifest` to `LCARS.html` and `/guide` to the guide, and sets no-cache headers on the three app files. |
-| **Serverless** | `api/download.js` | Re-inlines the app files into one self-contained `LCARS.html` on demand. **Frozen at v4.24 — do not extend.** |
+| **Serverless** | `api/download.js` | Re-inlines the app files into one self-contained `LCARS.html` on demand. **Frozen at v4.24 — do not extend, and do not add a fourth inline.** |
 | **Styling / UI** | Hand-written CSS | LCARS-inspired. Classic skin (Dark / Light / High-contrast) plus the Delta Prime skin, via CSS variables. Resizable sidebar panels. |
 | **Fonts** | Google Fonts | Droid Sans preloaded. UI and editor fonts user-selectable from ~56 families, loaded dynamically by injecting a `<link>`. |
 | **Auth secrets** | Anon key only | The Supabase anon key is embedded in the page and safe there — RLS protects the data. The `service_role` key must never appear in this repo or the app. |
@@ -46,7 +46,7 @@ Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same 
 | `lcars.js` | All behaviour (~9,500 lines), including `APP_VERSION` and `VERSIONS`. |
 | `lcars-render.js` | The sim render pass (`lrToReadingHtml()`), shared by the app and the share viewer. Loaded **before** `lcars.js`. |
 | `share.html`, `share.js` | The standalone read-only viewer at `/s/<token>`. |
-| `api/download.js` | Serverless route rebuilding the single offline file. |
+| `api/download.js` | Serverless route rebuilding the single offline file. **Frozen — finished, not maintained.** |
 | `supabase/schema.sql`, `supabase/README.md` | Database schema and setup steps. |
 | `vercel.json` | Route rewrites and cache headers. |
 | `LCARS-Guide-v2.html` | User guide, served at `/guide`. Predates accounts, Joint Posts and share links; ground-up rebuild is Batch 9. |

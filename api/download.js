@@ -8,7 +8,25 @@
 //
 // The sources are fetched from this same deployment rather than read off disk,
 // so no bundling configuration is needed and the download always matches what
-// is actually live. Adding a new shared file means adding it here too.
+// is actually live.
+//
+// FROZEN AT v4.24 (decided 2026-08-24). Verified booting clean from file:// at
+// 21d8aec, which is v4.24 plus the changes pending for the next version.
+//
+// This route is finished. It is not to be extended, and no feature is to be
+// contorted to keep it working:
+//   * Anything that needs the server is deliberately absent from the offline
+//     copy — Joint Posts, share links, accounts, anything SB118 HQ.
+//   * A new shared file is NOT to be added to the inline list below. If one
+//     lands, this route keeps serving what it can and the offline copy simply
+//     stops gaining features; it does not grow a fourth inline.
+//   * If the tags it looks for stop matching, it fails loudly rather than
+//     emitting a broken app. That is the intended end state, not a bug to fix
+//     by growing this file.
+//
+// If a genuinely offline LCARS is wanted later, the agreed answer is a
+// purpose-built, deliberately simplified "LCARS Lite" — not a bigger inliner.
+// See ROADMAP.md -> Batch 3 and TECH_STACK.md.
 
 const LINK_TAG = '<link rel="stylesheet" href="lcars.css">';
 const RENDER_TAG = '<script src="lcars-render.js"></script>';

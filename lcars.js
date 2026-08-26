@@ -5,6 +5,11 @@ const ZWS = String.fromCharCode(0x200B); // zero-width space used as caret ancho
 const SKEY = 'lcars_v1';
 
 const APP_VERSION = '4.24';
+
+// The offline download is frozen (decided 2026-08-24). This is the last
+// version /api/download carries and it deliberately does NOT follow
+// APP_VERSION — do not bump it when the app version changes.
+const OFFLINE_FROZEN_VERSION = '4.24';
 const VERSIONS = [
   {
     version: '4.0',
@@ -313,6 +318,7 @@ const VERSIONS = [
       'Fixed: sims you had already pasted in from Google Docs are repaired on this update. They were stored with the whole pasted section bold, so they looked bold here and on a share link, and came out un-bold in the group. The stray bold is removed once, on the next time LCARS opens, and any bold you applied yourself inside it is left alone',
       'Fixed: a bulleted list copied into Gmail or Google Groups arrived with an extra gap above and below it. Mail clients put a margin around a list of their own, which LCARS turns off in its own styling but could not turn off in somebody else\u2019s. The copy now says so outright, so a list sits tight against the lines around it, the way it does while you are writing',
       'Fixed: turning a sim into a joint sim saved the wrong record of your Bold locations, Italic OOC and Italic thoughts settings alongside it \u2014 always as if all three were switched off. Nothing reads that record yet, so nothing has looked wrong, but it would have done the moment something did',
+      'Changed: the offline download is finished. Settings now says what it is and what it is not \u2014 one HTML file frozen at v4.24 that will not gain anything further, and without anything that needs the server: Joint Posts, share links, signing in, syncing between devices, and anything to do with SB118 HQ. It stays the way to write somewhere with no connection, and to keep a copy of the tool that cannot be taken away from you; move work between the two with a backup file',
     ],
   },
 ];
@@ -6695,8 +6701,24 @@ function settingsAccountCard() {
         <div class="set-tiles" style="margin-top:6px">
           ${setBtn('exportData()', 'download', 'Back up my data', 'Downloads one file holding everything.')}
           ${setBtn('importData()', 'upload', 'Restore from a backup', 'Replaces everything currently in LCARS.')}
-          ${setBtn('downloadOfflineCopy()', 'archive', 'Download LCARS', 'One HTML file that runs with no internet.')}
+          ${setBtn('downloadOfflineCopy()', 'archive', 'Download LCARS',
+            `One HTML file that runs with no internet. Frozen at v${OFFLINE_FROZEN_VERSION}.`)}
         </div>
+        ${isFileCopy() ? '' : `<div class="set-note">
+          <strong style="color:var(--text)">About the offline copy.</strong>
+          It is one HTML file you keep on your own machine and open with no internet at all &mdash; the
+          writing, your sims, characters, styling and backups, all in the browser you open it in.
+          <strong style="color:var(--text)">It is finished, and no longer being developed.</strong>
+          It is frozen at <strong style="color:var(--text)">v${OFFLINE_FROZEN_VERSION}</strong>
+          plus the handful of changes since, and it will not gain anything after that.
+        </div>
+        <div class="set-note">
+          Anything that needs the server is <strong style="color:var(--text)">not in it</strong> &mdash;
+          Joint Posts, share links, signing in, syncing between devices, and anything that talks to
+          SB118 HQ. Those live in LCARS online only. The offline copy is for writing somewhere with no
+          connection, and for keeping a copy of the tool that cannot be taken away from you; move work
+          between the two with a backup file.
+        </div>`}
       </div>
 
       <div class="set-block set-danger-block">
