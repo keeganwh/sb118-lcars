@@ -327,5 +327,43 @@ select pg_temp.ok((select count(*) from public.jp_members
                   'RLS: a member cannot remove the owner from the roster');
 
 
+-- ---------------------------------------------------------------------------
+-- A share link on a joint sim
+-- ---------------------------------------------------------------------------
+-- shared_docs is keyed by doc_id and carries authors as a list precisely so a
+-- joint sim can be shared once, by whoever gets there first, and managed by
+-- everyone on it. The original policy asked only `auth.uid() = owner_uid`,
+-- which made the row invisible to every other member: the dialog told them the
+-- sim was not shared, and publishing it upserted onto a row they could not
+-- update, so it failed with nothing useful to say.
+reset role;
+insert into public.jp_docs (doc_id, owner_uid, title, content)
+  values ('rls2', '00000000-0000-0000-0000-00000000000a', 'Shared JP', 'text');
+select pg_temp.be('a');
+select public.jp_invite('rls2', 'B222');
+select pg_temp.be('b');
+select public.jp_accept_invite((select id from public.jp_my_invites() where doc_id = 'rls2' limit 1));
+
+set role authenticated;
+select pg_temp.be('a');
+insert into public.shared_docs (doc_id, owner_uid, title, content)
+  values ('rls2', '00000000-0000-0000-0000-00000000000a', 'Shared JP', 'text');
+select pg_temp.ok((select count(*) from public.shared_docs where doc_id = 'rls2') = 1,
+                  'RLS: the writer who publishes a joint sim sees their own share');
+
+select pg_temp.be('b');
+select pg_temp.ok((select count(*) from public.shared_docs where doc_id = 'rls2') = 1,
+                  'RLS: every member of a joint sim can see its share link');
+update public.shared_docs set content = 'republished by b' where doc_id = 'rls2';
+reset role;
+select pg_temp.ok((select content from public.shared_docs where doc_id = 'rls2') = 'republished by b',
+                  'RLS: and can republish it, so the link stays one link');
+
+-- A non-member still gets nothing, share or no share.
+set role authenticated;
+select pg_temp.be('c');
+select pg_temp.ok((select count(*) from public.shared_docs where doc_id = 'rls2') = 0,
+                  'RLS: somebody not on the joint sim sees no share row');
+
 reset role;
 \echo '--- all joint-post database checks passed ---'

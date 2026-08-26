@@ -24,6 +24,7 @@ const DB = {
   docs: {},           // doc_id -> row
   members: {},        // doc_id -> [uid]
   invites: [],
+  shares: {},        // doc_id -> shared_docs row
   LOCK_MS: 5 * 60 * 1000,   // must match jp_lock_minutes() in schema.sql
 };
 const widOf  = u => (u === A.uid ? A.wid : B.wid);
@@ -125,6 +126,28 @@ async function ctxFor(browser, who, errors) {
         out = [];
       } else if (url.includes('/rest/v1/jp_invitations')) {
         out = DB.invites.filter(i => i.status === 'open' && url.includes(encodeURIComponent(i.doc_id)));
+      } else if (url.includes('/rest/v1/shared_docs')) {
+        // Mirrors the policy: the publisher OR anybody on the joint sim.
+        const m = route.request().method();
+        const idOf = u => decodeURIComponent(u.split('doc_id=eq.')[1].split('&')[0]);
+        const visible = row => row && (row.owner_uid === who.uid ||
+                                       (DB.members[row.doc_id] || []).includes(who.uid));
+        if (m === 'POST') {
+          const p = JSON.parse(body);
+          const prev = DB.shares[p.doc_id];
+          if (prev && !visible(prev)) { status = 403; out = { message: 'row-level security' }; }
+          else {
+            DB.shares[p.doc_id] = { token: (prev && prev.token) || 'tok-' + p.doc_id, ...prev, ...p };
+            out = [DB.shares[p.doc_id]];
+          }
+        } else if (m === 'DELETE') {
+          const id = idOf(url);
+          if (visible(DB.shares[id])) delete DB.shares[id];
+          out = [];
+        } else {
+          const row = DB.shares[idOf(url)];
+          out = visible(row) ? [row] : [];
+        }
       } else if (url.includes('/rest/v1/snapshots')) {
         out = [];
       } else out = [];
@@ -491,6 +514,29 @@ async function ctxFor(browser, who, errors) {
   await a.p.waitForTimeout(700);
   ok(await a.p.evaluate(id => !S.docs[id], delId),
      'and it does not come back on the next refresh');
+
+  // --- a share link on a joint sim ----------------------------------------
+  // shared_docs is keyed by doc_id and carries authors as a list precisely so a
+  // joint sim shares as ONE sim. Neither half had ever been exercised.
+  await a.p.evaluate(id => publishShare(S.docs[id], null), docId);
+  await a.p.waitForTimeout(500);
+  const share = DB.shares[docId];
+  ok(!!share, 'a joint sim publishes a share link');
+  ok(!!share && (share.authors || []).length === 2,
+     'and is signed by everyone on the sim, not just whoever pressed Share');
+  ok(!!share && (share.authors || []).some(x => x.writer_id === 'B222'),
+     'including the writer who did not publish it');
+
+  // canShare() is false over http, which is what the test server speaks, so the
+  // dialog's own gate is stubbed out -- what is under test here is the row
+  // being visible to the other writer, not the https check.
+  const seen = await b.p.evaluate(id => { canShare = () => true; return fetchShare(id); }, docId);
+  ok(!!seen, 'another writer on the joint sim can see the share link');
+
+  await b.p.evaluate(id => publishShare(S.docs[id], null), docId);
+  await b.p.waitForTimeout(500);
+  ok(DB.shares[docId] && DB.shares[docId].token === share.token,
+     'and republishing keeps the same link rather than failing on the other writer\'s row');
 
   console.log('\n--- browser checks ---');
   pass.forEach(l => console.log('PASS: ' + l));
