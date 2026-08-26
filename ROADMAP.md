@@ -103,11 +103,11 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
       `jpCanCreate()` is `return isCloud();`. All three call sites verified — the convert path in `onPostTypeChange`, the "make this joint" button in `jpPaint`, and the guard in `jpConfirmMakeJoint`, whose "still being tested" toast is now a sign-in prompt (an account, not a role, is the one real requirement: a joint sim lives on a shared row).
       The server never keyed off role: `jp_docs_insert` asks only that you own what you create, and `jp_invite()` only that you own the sim — so no schema change was needed. `test/jp_browser.js` covers it with three checks, run as an ordinary writer.
 
-- [ ] **[+4] Joint Posts follow-ups — review, don't assume.**
-      Some of these may already work. Verify each, then fix or delete:
-      - **Per-member mission/scene filing.** Likely already done — there is a long comment at `lcars.js:9488` explaining that filing lives in each writer's own payload precisely because missions are private per writer. Confirm and close.
-      - **A joint sim cannot be turned back into a solo one.** The dialog says so rather than pretending otherwise. Decide whether that stands.
-      - **Snapshots on a joint sim are per writer**, since `snapshots` is keyed by `writer_uid`. Defensible as "my revisions", but it should be a deliberate choice rather than a leftover.
+- [ ] **[+4] Joint Posts follow-ups — review, don't assume.** _Two of three closed 2026-08-26._
+      - [x] **Per-member mission/scene filing** — already correct, and covered. `jpFiling()` keeps it in each writer's own blob because missions are private per writer, and `test/jp_browser.js` proves it three ways: filing survives a refresh from the server, the sim appears in the mission tree rather than only on the dashboard, and two writers can file the same joint sim in different places. Closed, no change.
+      - [x] **Snapshots on a joint sim are per writer** — kept, deliberately. `snapshots` is keyed by `writer_uid` and its RLS policy enforces that; "the points I would want to come back to" is the right reading of a revision history on a shared sim. The history window now says so, which it did not.
+            Exercising it found a real fault next door: **`restoreSnapshot()` was the fourth editing path and the only one with no guard.** On a joint sim held by somebody else it put an old revision over the editor and `doc.content` while the save it depended on could never go through. It asks `jpEditBlocked()` now, like every other editing path. Same shape as `delDoc` and the reconcile count — outside the three places a joint sim was supposed to differ.
+      - [ ] **A joint sim cannot be turned back into a solo one.** The dialog says so rather than pretending otherwise. Still open — a decision, not a bug.
       _Done when: each has been exercised and is either fixed or recorded as intended behaviour._
 
 - [x] **[0] Test: publishing a share link on a joint sim.** _Done 2026-08-26 — it did not work, and now does._
