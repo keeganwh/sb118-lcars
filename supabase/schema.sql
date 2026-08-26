@@ -904,6 +904,29 @@ grant select, delete                 on table public.jp_members to authenticated
 grant select                         on table public.jp_invitations to authenticated;
 
 -- ---------------------------------------------------------------------------
+-- shared_docs, on a joint sim
+-- ---------------------------------------------------------------------------
+-- Redefined HERE rather than beside the table, because it needs is_jp_member()
+-- and that is defined above this line, not above the table.
+--
+-- shared_docs is keyed by doc_id and carries authors as a list precisely so a
+-- joint sim is shared once, as one sim, rather than once per writer. The
+-- original policy asked only `auth.uid() = owner_uid`, which made the row
+-- invisible to everyone else on the sim: their dialog said the sim was not
+-- shared, and publishing it upserted onto a row they were not allowed to
+-- update, which failed with nothing they could act on. Every member can now
+-- see the share, republish it and stop it -- the same rights they have over
+-- the sim itself.
+--
+-- owner_uid stays whoever published; it is the audit trail and the cascade, not
+-- the permission. Nothing changes for a solo sim: is_jp_member() is false for a
+-- doc_id that is not a joint sim.
+drop policy if exists shared_docs_own on public.shared_docs;
+create policy shared_docs_own on public.shared_docs
+  for all using      (auth.uid() = owner_uid or public.is_jp_member(doc_id))
+      with check (auth.uid() = owner_uid or public.is_jp_member(doc_id));
+
+-- ---------------------------------------------------------------------------
 -- The owner is a member of their own sim, always
 -- ---------------------------------------------------------------------------
 -- Written by a trigger rather than by the client, because jp_members has no

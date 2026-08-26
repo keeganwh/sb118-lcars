@@ -110,9 +110,11 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
       - **Snapshots on a joint sim are per writer**, since `snapshots` is keyed by `writer_uid`. Defensible as "my revisions", but it should be a deliberate choice rather than a leftover.
       _Done when: each has been exercised and is either fixed or recorded as intended behaviour._
 
-- [ ] **[0] Test: publishing a share link on a joint sim.** _Testing._
-      `shared_docs` is keyed by `doc_id` and stores `authors` as a list precisely so this works, but it has never been exercised.
-      _Done when: a joint sim publishes, renders and expires correctly at `/s/<token>`._
+- [x] **[0] Test: publishing a share link on a joint sim.** _Done 2026-08-26 — it did not work, and now does._
+      Two real faults, neither visible until it was exercised:
+      - The byline was whoever pressed Share, alone. `sharePayload()` built `authors` from `getAuth()` and never asked who else was on the sim. It now reads `jp_roster()`; `share.js` already joined a list of names, it was only ever sent one.
+      - **Only the writer who published could see the share.** `shared_docs_own` asked `auth.uid() = owner_uid`, so every other member's dialog said the sim was not shared — and publishing it upserted onto a row they were not allowed to update, failing with nothing they could act on. The policy now also accepts `is_jp_member(doc_id)`, redefined below the JP section because that is where `is_jp_member()` exists. Solo sims are unaffected.
+      **The schema change is not applied yet — deploy the app first, then run `schema.sql`.** Four checks in `supabase/test/run.sh`, four in `test/jp_browser.js`.
 
 - [ ] **[0] Test: deleting an account while the server is unreachable.** _Testing._
       Covered by `account-check.js offline`, never done by hand. Folded in here because it is the same offline-path headspace as the freeze.

@@ -17,6 +17,8 @@ const VERSIONS = [
       'Fixed: the Storage and Usage report in the Admin panel showed nothing but an error on every account. It now opens with bars showing how much of the space is gone and what is filling it',
       'Fixed: on a joint sim, restoring an old revision worked even when somebody else had the sim. It put the old version on screen and over your copy of the sim, while the save it needed could never go through \u2014 so the writing came back on the next refresh and the restore had done nothing but alarm you. Restoring now asks for the sim first, the same as writing does',
       'Changed: the Revision Snapshots window on a joint sim now says the revisions are your own. Each writer keeps their own history of a shared sim, which is deliberate \u2014 they are the points you would want to come back to \u2014 but nothing said so',
+      'Fixed: a share link on a joint sim was signed by whoever pressed Share, as though they had written it alone. It is now signed by everyone on the sim',
+      'Fixed: on a joint sim, only the writer who shared it could see the share link. Everyone else was told the sim was not shared, and sharing it themselves failed without saying why. Anyone on a joint sim can now see the link, update the shared copy and stop sharing \u2014 and there is one link for the sim rather than one per writer',
     ],
   },
   {
@@ -10126,14 +10128,13 @@ function shareWhyNot() {
 // What gets published. Everything the viewer needs to render the sim the way
 // the writer sees it, and deliberately nothing else -- no mission, no scene, no
 // word count, no snapshot history.
-function sharePayload(doc) {
+async function sharePayload(doc) {
   const p = getPrefs();
   return {
     doc_id:         doc.id,
     owner_uid:      getAuth().uid,
     title:          doc.title || 'Untitled sim',
-    authors:        [{ writer_id: getAuth().writerId || '',
-                       display_name: _writerProfile.display_name || null }],
+    authors:        await shareAuthors(doc),
     status:         doc.status || 'active',
     doc_updated_at: new Date().toISOString(),
     content:        doc.content || '',
@@ -10148,6 +10149,25 @@ function sharePayload(doc) {
                       italicOOC:     !!p.italicOOC,
                       thoughtItalic: !!p.thoughtItalic },
   };
+}
+
+// Who the share is BY. shared_docs is keyed by doc_id and carries authors as a
+// list precisely because a joint sim has more than one writer -- so the byline
+// on a shared joint sim is everyone on it, in roster order, not whoever pressed
+// Share. The viewer already joins a list of names; it was only ever being sent
+// one. If the roster cannot be fetched, publishing with a byline of one beats
+// failing to publish at all.
+async function shareAuthors(doc) {
+  const me = [{ writer_id: getAuth().writerId || '',
+                display_name: _writerProfile.display_name || null }];
+  if (!isJointDoc(doc)) return me;
+  try {
+    const roster = await supaRpc('jp_roster', { p_doc_id: doc.id });
+    if (roster && roster.length)
+      return roster.map(r => ({ writer_id: r.writer_id || '',
+                                display_name: r.display_name || null }));
+  } catch (e) { /* fall through to the one-name byline */ }
+  return me;
 }
 
 // _writerProfile is filled in when the Settings view renders, which means a
@@ -10175,7 +10195,7 @@ async function fetchShare(docId) {
 // token and any link already sent out stays valid. token is absent from the
 // payload, which is what stops the merge overwriting it.
 async function publishShare(doc, hours) {
-  const body = sharePayload(doc);
+  const body = await sharePayload(doc);
   body.expires_at = hours == null ? null : new Date(Date.now() + hours * 3600 * 1000).toISOString();
   const r = await supaFetch('/rest/v1/shared_docs?on_conflict=doc_id', {
     method: 'POST',
