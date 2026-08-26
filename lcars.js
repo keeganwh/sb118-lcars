@@ -19,6 +19,7 @@ const VERSIONS = [
       'Changed: the Revision Snapshots window on a joint sim now says the revisions are your own. Each writer keeps their own history of a shared sim, which is deliberate \u2014 they are the points you would want to come back to \u2014 but nothing said so',
       'Fixed: a share link on a joint sim was signed by whoever pressed Share, as though they had written it alone. It is now signed by everyone on the sim',
       'Fixed: on a joint sim, only the writer who shared it could see the share link. Everyone else was told the sim was not shared, and sharing it themselves failed without saying why. Anyone on a joint sim can now see the link, update the shared copy and stop sharing \u2014 and there is one link for the sim rather than one per writer',
+      'Changed: anyone with an account can now start a joint sim, or turn a sim they are writing into one. Starting one was held back to admins while the feature was being tried out; joining, taking turns and writing were open all along, and now the whole of it is',
     ],
   },
   {
@@ -11182,7 +11183,7 @@ function jpNudge() {
 function jpConfirmMakeJoint(id) {
   const doc = S.docs[id];
   if (!doc || isJointDoc(doc)) return;
-  if (!jpCanCreate()) { showToast('Joint sims are still being tested.'); return; }
+  if (!jpCanCreate()) { showToast('Sign in to make a sim joint — a shared sim needs an account.'); return; }
   openModal('Make this a joint sim?',
     '<div style="font-size:0.9rem;line-height:1.6">' +
     '<p><strong>' + esc(doc.title || 'This sim') + '</strong> moves out of your own storage and into ' +
@@ -11194,16 +11195,17 @@ function jpConfirmMakeJoint(id) {
     { ok: 'Make it joint' });
 }
 
-// ── Rollout gate ──────────────────────────────────────────────────────────
-// TEMPORARY, and meant to be deleted. Joint Posts goes to production before it
-// has been exercised against the real Supabase by real people, so STARTING a
-// joint sim is held back to super admins for now. Everything else is open:
-// anybody invited to a joint sim can accept it, take turns and write, which is
-// what makes it testable with a second account at all.
+// ── Who can start a joint sim ─────────────────────────────────────────────
+// Everyone with an account. The super-admin rollout gate that used to live here
+// was temporary, for the rounds before Joint Posts had been exercised against
+// the real Supabase; it has been, so it is gone.
 //
-// To open it to everyone: make this return true, and drop the paragraph in the
-// roadmap that describes the gate. Nothing else keys off it.
-function jpCanCreate() { return isCloud() && isSuperAdmin(); }
+// An account is the only requirement, and it is a real one rather than a
+// policy: a joint sim lives on a shared row, so there is nowhere to put one
+// when you are signed out. The server has never keyed off role here -- the
+// jp_docs insert policy asks only that you own what you create, and jp_invite()
+// asks only that you own the sim -- so this is the whole of the change.
+function jpCanCreate() { return isCloud(); }
 
 // ── Where a joint sim is filed ────────────────────────────────────────────
 // A joint sim is filed PER WRITER, and the filing lives in that writer's own

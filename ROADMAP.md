@@ -105,11 +105,11 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
       _This is also what unblocks the build-step question that has been gating real-time writing — a bundler no longer costs the one-file copy, because the one-file copy is frozen._
       _Done when: the download is documented as frozen at a stated version, and the app says so where a writer downloads it._
 
-- [ ] **[+4] Open Joint Posts to everyone.** _Built and tested; **deliberately held** until Batch 7 lands._
-      The work is done and parked on **`claude/jp-open-everyone-ylzf4u`**, a single commit on top of the fixes: `jpCanCreate()` becomes `return isCloud();`, the guard's "Joint sims are still being tested." toast becomes a sign-in prompt (an account, not a role, is the one real requirement — a joint sim lives on a shared row), and `test/jp_browser.js` gains three checks run as an ordinary writer.
-      All three call sites were verified: the convert path in `onPostTypeChange()`, the button in `jpPaint()`, and the guard in `jpConfirmMakeJoint()`.
+- [x] **[+4] Open Joint Posts to everyone.** _Built and tested. **This branch opens it**; it merges once Batch 7 is proven._
+      `jpCanCreate()` is `return isCloud();`, the guard's "Joint sims are still being tested." toast is now a sign-in prompt (an account, not a role, is the one real requirement — a joint sim lives on a shared row), and `test/jp_browser.js` gains three checks run as an ordinary writer.
+      All three call sites verified: the convert path in `onPostTypeChange()`, the button in `jpPaint()`, and the guard in `jpConfirmMakeJoint()`.
       **The server never keyed off role** — `jp_docs_insert` asks only that you own what you create and `jp_invite()` only that you own the sim (re-verified against `main` 2026-09-19), so this is a client change with no migration behind it.
-      **Do not merge it before live writing works.** Until then the closed gate is the small-scale test field, which is the whole point of holding it.
+      **Do not merge to `main` before live writing works.** Until then the closed gate on `main` is the small-scale test field, which is the whole point of holding it.
       _Done when: live writing is proven with a small group, and then any signed-in writer can start a joint sim._
 
 - [ ] **[+4] Joint Posts follow-ups — review, don't assume.** _Two of three closed 2026-08-26._
