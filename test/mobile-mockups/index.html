@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en" data-skin="prime" data-mode="dark" data-vibe="calm" data-duty="command">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>LCARS — mobile layout mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Droid+Sans:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+<!-- The real stylesheet. Nothing here is a lookalike: if it renders wrong in
+     the mockup it will render wrong in the app. -->
+<link rel="stylesheet" href="../../lcars.css">
+<style>
+/* ══ MOCKUP-ONLY STYLES ═══════════════════════════════════════════════════
+   Everything in this file is throwaway. When the real mobile work ships,
+   delete test/mobile-mockups entirely. Nothing here is meant to be lifted
+   into lcars.css unchanged — it is here to be FELT, not merged. */
+
+html,body{height:100%;overflow:hidden}
+body{--ac:#F0705F}
+
+/* The page fills the visible viewport, not the layout viewport: 100vh under a
+   mobile URL bar is taller than the screen, which is the classic cause of an
+   editor whose bottom is unreachable. dvh is the fix; vh is the fallback. */
+#mock{display:flex;flex-direction:column;height:100vh;height:100dvh;
+  padding-bottom:env(safe-area-inset-bottom)}
+
+/* ── The lab bar. Deliberately NOT LCARS-styled, so there is never a moment
+      where you wonder whether it is part of the design being judged. ── */
+#lab{position:fixed;z-index:9000;left:0;right:0;top:0;background:#111;color:#ddd;
+  font:13px/1.35 system-ui,sans-serif;border-bottom:2px solid #555;
+  max-height:64vh;overflow-y:auto;padding:8px 10px 10px}
+#lab.shut{transform:translateY(-101%)}
+#lab-tab{position:fixed;z-index:9001;top:0;right:0;background:#111;color:#fff;
+  border:1px solid #555;border-top:none;border-right:none;border-radius:0 0 0 8px;
+  font:600 12px/1 system-ui,sans-serif;padding:7px 11px;letter-spacing:1px}
+#lab h4{font:600 11px/1 system-ui,sans-serif;letter-spacing:1.5px;color:#888;
+  margin:9px 0 5px;text-transform:uppercase}
+#lab h4:first-child{margin-top:0}
+.lab-row{display:flex;flex-wrap:wrap;gap:5px}
+.lab-row button{background:#222;color:#bbb;border:1px solid #444;border-radius:5px;
+  padding:8px 11px;font:13px system-ui,sans-serif;min-height:38px}
+.lab-row button[aria-pressed="true"]{background:#2f6fd0;border-color:#5b9bff;color:#fff}
+#lab .hint{color:#8a8a8a;font-size:11.5px;margin-top:9px;line-height:1.45}
+#mock{padding-top:34px}   /* room for the lab tab */
+
+/* ── Shared mobile rules (these ARE the candidates for lcars.css) ────────── */
+
+/* Tap targets. 44px is the figure both Apple and Google publish; the desktop
+   toolbar buttons are about 26px tall. Coarse-pointer only, so a mouse user
+   keeps the compact toolbar even at a narrow window. */
+@media (pointer:coarse){
+  .tbb,.btn,.panel-toggle{min-height:44px;min-width:40px;
+    display:inline-flex;align-items:center;justify-content:center}
+  .tbb{padding:6px 10px}
+}
+/* iOS Safari zooms the page whenever a focused control is under 16px. The fix
+   is to floor the control, never to disable zoom with maximum-scale — that
+   takes pinch-zoom away from everyone, including people who need it. */
+@media (pointer:coarse){
+  input,select,textarea,.mi,.ms{font-size:16px}
+}
+
+/* ── Header: compact, and the strapline goes ─────────────────────────────── */
+#hdr{height:48px}
+.hdr-title{display:none}
+
+/* ── Editor ──────────────────────────────────────────────────────────────── */
+#ec{padding:14px 14px 20px;-webkit-overflow-scrolling:touch}
+#editor{max-width:none}
+
+/* ── Toolbar, mobile form ────────────────────────────────────────────────── */
+#dh{padding:3px 6px}
+.dh-r1{padding-bottom:2px}
+.mob-tb{display:flex;align-items:center;gap:3px;overflow-x:auto;scrollbar-width:none}
+.mob-tb::-webkit-scrollbar{display:none}
+.mob-tb[hidden]{display:none}
+.mob-tb .tsep{margin:0 2px}
+/* The bottom position sits against the keyboard, where the thumb already is.
+   Border flips to the top edge so the amber rule still faces the editor. */
+#tb-slot-bottom{flex-shrink:0;background:var(--panel);
+  border-top:2px solid var(--amber);padding:3px 6px}
+body.ui-hidden #tb-slot-bottom{display:none}
+
+/* Panels that open off a grouped toolbar button. Anchored to the toolbar's
+   own edge rather than to the button, so a panel never opens off-screen. */
+.mpanel{position:absolute;left:6px;right:6px;background:var(--panel);
+  border:1px solid var(--border);border-radius:8px;padding:7px;z-index:400;
+  display:none;gap:5px;flex-wrap:wrap;box-shadow:0 8px 26px rgba(0,0,0,.5)}
+.mpanel.open{display:flex}
+.mpanel .tbb{flex:1 1 auto;justify-content:center;gap:5px}
+.mob-tb .tbb{gap:4px}
+#tb-slot-top .mpanel{top:calc(100% + 4px)}
+#tb-slot-bottom .mpanel{bottom:calc(100% + 4px)}
+#tb-slot-top,#tb-slot-bottom{position:relative}
+
+/* ── The drawer: both rails, one panel, tabbed ───────────────────────────── */
+#drawer{position:fixed;z-index:600;top:0;bottom:0;left:0;width:min(310px,84%);
+  background:var(--panel2);border-right:3px solid var(--amber);
+  display:flex;flex-direction:column;transform:translateX(-102%);
+  transition:transform .2s ease;box-shadow:0 0 30px rgba(0,0,0,.5)}
+#drawer.open{transform:none}
+#scrim{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.5);display:none}
+#scrim.on{display:block}
+.dw-tabs{display:flex;flex-shrink:0}
+.dw-tabs button{flex:1;background:var(--panel);color:var(--dim);border:none;
+  border-bottom:2px solid var(--border);padding:14px 6px;font-family:inherit;
+  font-size:0.73rem;letter-spacing:2px;font-weight:bold}
+.dw-tabs button[aria-selected="true"]{color:var(--amber);border-bottom-color:var(--amber)}
+.dw-body{flex:1;overflow-y:auto;padding:8px}
+.dw-pane{display:none}
+.dw-pane.on{display:block}
+/* The edge-tab handle variant: a permanent grab tab on the screen edge. */
+#edge-tab{position:fixed;z-index:590;left:0;top:42%;background:var(--amber);color:#000;
+  border:none;border-radius:0 10px 10px 0;padding:16px 6px;font-weight:bold;
+  writing-mode:vertical-rl;letter-spacing:2px;font-size:0.7rem;display:none}
+body[data-handle="edge"] #edge-tab{display:block}
+body[data-handle="edge"] .handle-btn{display:none}
+
+/* Mock sim rows in the drawer */
+.mk-row{padding:12px 10px;border-bottom:1px solid var(--border);font-size:0.87rem}
+.mk-row.on{color:var(--amber)}
+.mk-row small{display:block;color:var(--dim);font-size:0.73rem;margin-top:3px}
+.mk-sd{padding:10px 4px;font-size:0.87rem}
+.mk-sd label{display:block;color:var(--dim);font-size:0.73rem;letter-spacing:1px;
+  margin:12px 0 4px;text-transform:uppercase}
+
+/* ── Hiding the UI while writing ─────────────────────────────────────────── */
+body.ui-hidden #hdr,body.ui-hidden #dh{display:none}
+#restore{position:fixed;z-index:700;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));
+  display:none;background:var(--amber);color:#000;border:none;border-radius:22px;
+  padding:12px 16px;font-family:inherit;font-weight:bold;font-size:0.8rem;
+  box-shadow:0 4px 18px rgba(0,0,0,.45)}
+body.ui-hidden #restore{display:block}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+<symbol id="i-sort" viewBox="0 0 24 24"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></symbol>
+<symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+<symbol id="i-contrast" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 18a6 6 0 0 0 0-12z"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></symbol>
+<symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></symbol>
+<symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+<symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+<symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+<symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+<symbol id="i-clipboard" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+<symbol id="i-eraser" viewBox="0 0 24 24"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+<symbol id="i-indent" viewBox="0 0 24 24"><path d="m3 8 4 4-4 4"/><path d="M21 12H11"/><path d="M21 18H11"/><path d="M21 6H11"/></symbol>
+<symbol id="i-outdent" viewBox="0 0 24 24"><path d="m7 8-4 4 4 4"/><path d="M21 12H11"/><path d="M21 18H11"/><path d="M21 6H11"/></symbol>
+<symbol id="i-circle-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></symbol>
+<symbol id="i-table" viewBox="0 0 24 24"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></symbol>
+<symbol id="i-square-check" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-square" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/></symbol>
+<symbol id="i-file-text" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+<symbol id="i-hexagon" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></symbol>
+<symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+<symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/></symbol>
+<symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+<symbol id="i-archive" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-book-open" viewBox="0 0 24 24"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></symbol>
+<symbol id="i-move-right" viewBox="0 0 24 24"><path d="M18 8l4 4-4 4"/><path d="M2 12h20"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+<symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 9 5-5 5 5"/><path d="M12 4v12"/></symbol>
+<symbol id="i-layout-grid" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol>
+<symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></symbol>
+</defs></svg>
+
+<!-- ══ LAB BAR ══ variant switches. Not part of any design being judged. ══ -->
+<button id="lab-tab" onclick="labToggle()">LAB</button>
+<div id="lab" class="shut">
+  <h4>Toolbar position</h4>
+  <div class="lab-row" data-set="pos">
+    <button data-v="top">Top</button>
+    <button data-v="bottom">Bottom (by the keyboard)</button>
+  </div>
+
+  <h4>Toolbar layout</h4>
+  <div class="lab-row" data-set="tb">
+    <button data-v="grouped">Grouped</button>
+    <button data-v="flat">Flat row (today's)</button>
+  </div>
+
+  <h4>Getting the UI out of the way</h4>
+  <div class="lab-row" data-set="hide">
+    <button data-v="toggle">Toggle button</button>
+    <button data-v="auto">Auto-hide when typing</button>
+    <button data-v="off">Never hide</button>
+  </div>
+
+  <h4>Drawer handle</h4>
+  <div class="lab-row" data-set="handle">
+    <button data-v="bar">Button in the bar</button>
+    <button data-v="edge">Tab on the screen edge</button>
+  </div>
+
+  <h4>Skin</h4>
+  <div class="lab-row" data-set="skin">
+    <button data-v="prime-dark">Prime dark</button>
+    <button data-v="prime-light">Prime light</button>
+    <button data-v="classic-dark">Classic dark</button>
+    <button data-v="classic-light">Classic light</button>
+    <button data-v="classic-hc">High contrast</button>
+  </div>
+
+  <p class="hint">Your choices are remembered on this device. The editor below is
+  a real editable area — type in it, watch what the keyboard does to the layout,
+  and try copying a paragraph out. Tap LAB again to get this bar out of the way.</p>
+</div>
+
+<div id="mock">
+
+  <!-- ══ HEADER ══ -->
+  <div id="hdr">
+    <div class="hdr-badge">LCARS</div>
+    <button class="btn btn-s btn-sm handle-btn" onclick="drawerOpen()">&#9776; Sims</button>
+    <span class="hdr-title">STARBASE 118 WRITING TOOL</span>
+    <div class="hdr-right">
+      <button class="btn btn-s btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg></button>
+      <button class="btn btn-s btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg></button>
+    </div>
+  </div>
+
+  <!-- The sim title stays under the header whatever the toolbar does: a title
+       pinned to the bottom of the screen reads as a footer, not a heading. -->
+  <div id="dh">
+    <div class="dh-r1">
+      <input type="text" id="doc-title" value="Ghosts in the Drift" aria-label="Sim title">
+      <button class="btn btn-s btn-sm" title="Close sim"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <!-- The button rows land here when the toolbar is set to Top. -->
+    <div id="tb-slot-top"></div>
+  </div>
+
+  <!-- ══ EDITOR ══ -->
+  <div id="ec">
+    <div id="editor" contenteditable="true" spellcheck="true">
+      <div><strong>((USS Astraeus - Bridge))</strong></div>
+      <div><br></div>
+      <div><strong>Lt. Cmdr. Yavin:</strong> ::Leaning over the tactical rail, watching the sensor return resolve into something with edges.:: That is not a debris field.</div>
+      <div><br></div>
+      <div><strong>Ens. Okoro:</strong> Confirmed, sir. Mass distribution is too regular. Something built it.</div>
+      <div><br></div>
+      <div><em>oO Built it, or left it. Oo</em></div>
+      <div><br></div>
+      <div><strong>Lt. Cmdr. Yavin:</strong> =/\= Bridge to Engineering, I need every erg you can spare on the forward array. =/\=</div>
+      <div><br></div>
+      <div>::The deck plating hums as power reroutes. On the main viewer the shape turns over, slow and deliberate, and for the first time the light catches a surface that is unmistakably a hull.::</div>
+      <div><br></div>
+      <div><strong>Ens. Okoro:</strong> Sir. It just changed course.</div>
+      <div><br></div>
+      <div><em>((OOC - tagging whoever wants the first contact, no rush.))</em></div>
+      <div><br></div>
+      <div>Type below this line to feel what the keyboard does &mdash;</div>
+      <div><br></div>
+    </div>
+  </div>
+
+  <div id="tb-slot-bottom"></div>
+</div>
+
+<!-- ══ THE TOOLBAR ══ moved between the two slots by script ══ -->
+<div id="dh-holder" hidden>
+  <div id="tbrow">
+
+    <!-- GROUPED: the handful you reach for constantly stay out in the open;
+         everything else groups behind a named button. -->
+    <div class="mob-tb" id="tb-grouped">
+      <button class="tbb" onclick="ec('bold')"><strong>B</strong></button>
+      <button class="tbb" onclick="ec('italic')"><em>I</em></button>
+      <button class="tbb tbb-names" onclick="mpanel('ins')">Insert <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+      <button class="tbb tbb-names" onclick="mpanel('fmt')">Format <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+      <button class="tbb tbb-names" onclick="mpanel('tools')">Tools <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+      <div class="tsep"></div>
+      <button class="tbb" onclick="fakeCopy(this)" title="Copy sim"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg></button>
+      <button class="tbb hide-btn" onclick="hideUI()" title="Hide the panels and write">&#8597;</button>
+    </div>
+
+    <!-- FLAT: today's desktop row, unchanged, so you can feel the difference. -->
+    <div class="mob-tb" id="tb-flat" hidden>
+      <button class="tbb"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg></button>
+      <button class="tbb tbb-names"><svg class="ic" aria-hidden="true"><use href="#i-eraser"/></svg></button>
+      <button class="tbb tbb-names">&lt;/&gt;</button>
+      <button class="tbb tbb-names">&para;</button>
+      <div class="tsep"></div>
+      <button class="tbb" onclick="ec('bold')"><strong>B</strong></button>
+      <button class="tbb" onclick="ec('italic')"><em>I</em></button>
+      <button class="tbb" onclick="ec('strikeThrough')"><s>S</s></button>
+      <button class="tbb"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg></button>
+      <div class="tsep"></div>
+      <button class="tbb tbb-names"><svg class="ic" aria-hidden="true"><use href="#i-indent"/></svg></button>
+      <button class="tbb tbb-names"><svg class="ic" aria-hidden="true"><use href="#i-outdent"/></svg></button>
+      <button class="tbb tbb-names"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg></button>
+      <div class="tsep"></div>
+      <button class="tbb tbb-mkr">::Action::</button>
+      <button class="tbb tbb-mkr">=/\= Comms =/\=</button>
+      <button class="tbb tbb-mkr">oO Thoughts Oo</button>
+      <button class="tbb tbb-mkr">((Location))</button>
+      <button class="tbb tbb-mkr">((OOC))</button>
+      <div class="tsep"></div>
+      <button class="tbb tbb-names">Auto Format <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+      <button class="tbb tbb-names">Visual Aids <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+    </div>
+
+    <!-- Panels behind the grouped buttons -->
+    <div class="mpanel" id="mp-ins">
+      <button class="tbb tbb-mkr" onclick="ins('::Action::')">::Action::</button>
+      <button class="tbb tbb-mkr" onclick="ins('=/\\= Comms =/\\=')">=/\= Comms =/\=</button>
+      <button class="tbb tbb-mkr" onclick="ins('oO Thoughts Oo')">oO Thoughts Oo</button>
+      <button class="tbb tbb-mkr" onclick="ins('((Location))')">((Location))</button>
+      <button class="tbb tbb-mkr" onclick="ins('((OOC - ))')">((OOC))</button>
+    </div>
+    <div class="mpanel" id="mp-fmt">
+      <button class="tbb" onclick="ec('strikeThrough')"><s>S</s></button>
+      <button class="tbb tbb-names"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg> Link</button>
+      <button class="tbb tbb-names"><svg class="ic" aria-hidden="true"><use href="#i-indent"/></svg> Indent</button>
+      <button class="tbb tbb-names"><svg class="ic" aria-hidden="true"><use href="#i-outdent"/></svg> Outdent</button>
+      <button class="tbb tbb-names"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg> Bullet</button>
+      <button class="tbb tbb-names"><svg class="ic" aria-hidden="true"><use href="#i-eraser"/></svg> Clear formatting</button>
+    </div>
+    <div class="mpanel" id="mp-tools">
+      <button class="tbb tbb-names"><strong>B Names</strong></button>
+      <button class="tbb tbb-names"><strong>B Locations</strong></button>
+      <button class="tbb tbb-names"><em>Italic Thoughts</em></button>
+      <button class="tbb tbb-names"><em>Italic OOCs</em></button>
+      <button class="tbb tbb-names fmt-on">::Actions::</button>
+      <button class="tbb tbb-names fmt-on">=/\= Comms =/\=</button>
+      <button class="tbb tbb-names fmt-on">oO Thoughts Oo</button>
+      <button class="tbb tbb-names">&lt;/&gt; Source</button>
+      <button class="tbb tbb-names">&para; Markers</button>
+    </div>
+  </div>
+</div>
+
+<button id="restore" onclick="showUI()">&#8597; Show controls</button>
+<button id="edge-tab" onclick="drawerOpen()">SIMS</button>
+<div id="scrim" onclick="drawerClose()"></div>
+
+<!-- ══ DRAWER ══ both rails in one panel ══ -->
+<div id="drawer">
+  <div class="dw-tabs">
+    <button data-pane="sims" aria-selected="true" onclick="dwTab('sims')">SIMS</button>
+    <button data-pane="details" aria-selected="false" onclick="dwTab('details')">SIM DETAILS</button>
+    <button class="panel-toggle" onclick="drawerClose()" style="flex:0 0 46px" aria-label="Close">
+      <svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="dw-body">
+    <div class="dw-pane on" id="pane-sims">
+      <div class="sb-add-btns" style="display:flex;gap:5px;padding:4px 0 10px">
+        <button class="btn btn-s btn-sm" style="flex:1">+ Mission</button>
+        <button class="btn btn-s btn-sm" style="flex:1">+ Scene</button>
+        <button class="btn btn-s btn-sm" style="flex:1">+ Sim</button>
+      </div>
+      <div class="mk-row"><strong>The Drift</strong><small>Mission &middot; 3 scenes</small></div>
+      <div class="mk-row on">Ghosts in the Drift<small>Yavin &middot; 24 Aug</small></div>
+      <div class="mk-row">Nothing But Static<small>Yavin, Okoro &middot; 21 Aug</small></div>
+      <div class="mk-row">A Long Way From The Wardroom<small>Yavin &middot; 18 Aug</small></div>
+      <div class="mk-row"><strong>Shore Leave</strong><small>Mission &middot; 1 scene</small></div>
+      <div class="mk-row">Two Drinks In<small>Yavin &middot; 02 Aug</small></div>
+    </div>
+    <div class="dw-pane" id="pane-details">
+      <div class="mk-sd">
+        <label>Title</label><input class="mi" value="Ghosts in the Drift">
+        <label>Scene</label><input class="mi" value="Approach">
+        <label>Posted</label><input class="mi" value="24 Aug 2026">
+        <label>Characters in this sim</label>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">
+          <button class="tbb tbb-names">Yavin</button>
+          <button class="tbb tbb-names">Okoro</button>
+        </div>
+        <label>Word count</label><div style="color:var(--dim)">612 words</div>
+        <div style="display:flex;gap:5px;margin-top:16px;flex-wrap:wrap">
+          <button class="btn btn-s btn-sm" style="flex:1">Snapshot</button>
+          <button class="btn btn-s btn-sm" style="flex:1">Share</button>
+          <button class="btn btn-s btn-sm" style="flex:1">Archive</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══ MOCKUP SCRIPT ══════════════════════════════════════════════════════════
+   Throwaway. Enough behaviour to judge how each layout FEELS on a real phone;
+   none of it is written to be lifted into lcars.js. */
+
+var V = {pos:'top', tb:'grouped', hide:'toggle', handle:'bar', skin:'prime-dark'};
+try{ var saved = JSON.parse(localStorage.getItem('lcars_mockup_v1')||'{}');
+     for(var k in saved) if(k in V) V[k]=saved[k]; }catch(e){}
+
+function save(){ try{ localStorage.setItem('lcars_mockup_v1', JSON.stringify(V)); }catch(e){} }
+
+/* ── Applying a variant ─────────────────────────────────────────────────── */
+function apply(){
+  var tbrow = document.getElementById('tbrow');
+  document.getElementById(V.pos==='bottom'?'tb-slot-bottom':'tb-slot-top').appendChild(tbrow);
+  document.getElementById('dh-holder').hidden = true;
+
+  document.getElementById('tb-grouped').hidden = (V.tb!=='grouped');
+  document.getElementById('tb-flat').hidden    = (V.tb==='grouped');
+
+  document.body.dataset.handle = V.handle;
+
+  /* The hide button only exists in the toggle variant; auto-hide has no button
+     because the act of typing is the trigger. */
+  var hb = document.querySelector('.hide-btn');
+  if(hb) hb.style.display = (V.hide==='toggle') ? '' : 'none';
+  if(V.hide!=='auto') showUI();
+
+  /* Skin. The app sets data-* on <html> for Delta Prime and body classes for
+     the classic themes; the mockup reproduces both so the RESPONSIVE-vs-skin
+     precedence trap is visible here rather than in production. */
+  var h = document.documentElement, b = document.body;
+  b.classList.remove('light','hc');
+  if(V.skin.indexOf('prime')===0){
+    h.setAttribute('data-skin','prime');
+    h.setAttribute('data-mode', V.skin==='prime-light'?'light':'dark');
+    h.style.setProperty('--ac', V.skin==='prime-light' ? '#B4463C' : '#F0705F');
+  }else{
+    h.setAttribute('data-skin','classic');
+    h.setAttribute('data-mode', V.skin==='classic-light'?'light':'dark');
+    if(V.skin==='classic-light') b.classList.add('light');
+    if(V.skin==='classic-hc')    b.classList.add('hc');
+  }
+
+  document.querySelectorAll('#lab .lab-row').forEach(function(row){
+    var set = row.dataset.set;
+    row.querySelectorAll('button').forEach(function(btn){
+      btn.setAttribute('aria-pressed', String(btn.dataset.v === V[set]));
+    });
+  });
+}
+
+document.querySelectorAll('#lab .lab-row button').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    V[btn.parentNode.dataset.set] = btn.dataset.v;
+    save(); apply();
+  });
+});
+
+function labToggle(){ document.getElementById('lab').classList.toggle('shut'); }
+
+/* ── Hiding the UI ──────────────────────────────────────────────────────── */
+function hideUI(){ closePanels(); document.body.classList.add('ui-hidden'); }
+function showUI(){ document.body.classList.remove('ui-hidden'); }
+
+/* Auto-hide: the panels go the moment you type, and come back when you scroll
+   up or tap outside the editor. Deliberately a bit eager — the point of the
+   mockup is to find out whether eager is helpful or infuriating. */
+var ed = document.getElementById('editor');
+ed.addEventListener('input', function(){ if(V.hide==='auto') hideUI(); });
+document.getElementById('ec').addEventListener('scroll', function(){
+  if(V.hide==='auto' && this.scrollTop <= 0) showUI();
+});
+document.addEventListener('click', function(e){
+  if(V.hide==='auto' && !e.target.closest('#editor') && !e.target.closest('#lab')) showUI();
+});
+
+/* ── Grouped toolbar panels ─────────────────────────────────────────────── */
+function closePanels(){
+  document.querySelectorAll('.mpanel').forEach(function(p){ p.classList.remove('open'); });
+}
+function mpanel(name){
+  var p = document.getElementById('mp-'+name), was = p.classList.contains('open');
+  closePanels();
+  if(!was) p.classList.add('open');
+}
+document.addEventListener('click', function(e){
+  if(!e.target.closest('.mpanel') && !e.target.closest('.mob-tb')) closePanels();
+});
+
+/* ── Drawer ─────────────────────────────────────────────────────────────── */
+function drawerOpen(){
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('scrim').classList.add('on');
+}
+function drawerClose(){
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('scrim').classList.remove('on');
+}
+function dwTab(pane){
+  document.querySelectorAll('.dw-tabs button[data-pane]').forEach(function(b){
+    b.setAttribute('aria-selected', String(b.dataset.pane === pane));
+  });
+  document.querySelectorAll('.dw-pane').forEach(function(p){
+    p.classList.toggle('on', p.id === 'pane-'+pane);
+  });
+}
+
+/* ── Editor odds and ends ───────────────────────────────────────────────── */
+function ec(cmd){ document.execCommand(cmd, false, null); ed.focus(); }
+function ins(text){
+  ed.focus();
+  document.execCommand('insertText', false, text);
+  closePanels();
+}
+function fakeCopy(btn){
+  var old = btn.innerHTML;
+  btn.textContent = 'Copied';
+  setTimeout(function(){ btn.innerHTML = old; }, 900);
+}
+
+apply();
+</script>
+</body>
+</html>
