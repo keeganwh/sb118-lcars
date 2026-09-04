@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>LCARS v4.24</title>
 <!-- The icon is inlined rather than linked, like the CSS and JS: /api/download
      rebuilds the app as one file, and a linked image would be a second file the
@@ -123,6 +123,7 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
     <span class="hdr-badge"><span id="hdr-mark-plate"><img id="hdr-mark" alt=""></span>LCARS</span>
     <span class="hdr-title">STARBASE 118 WRITING TOOL</span>
   </button>
+  <button id="hdr-more" onclick="mobMore()" aria-expanded="false" aria-label="App menu" title="Menu"><svg class="ic" aria-hidden="true"><use href="#i-layout-grid"/></svg></button>
   <div class="hdr-right">
     <button class="btn btn-s btn-sm" id="btn-dash" onclick="goHome()" title="Command Dashboard"><svg class="ic" aria-hidden="true"><use href="#i-hexagon"/></svg> Dashboard</button>
     <button class="btn btn-s btn-sm" id="btn-manifest-toggle" onclick="openManifest()"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg> Characters</button>
@@ -146,6 +147,11 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
     <button class="btn btn-s btn-sm" onclick="openSettings()" id="btn-settings" title="Settings"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg> Settings</button>
   </div>
 </div>
+
+<!-- The one control that clears the furniture out of the way for writing.
+     Phone only; position never changes between its two states. -->
+<button id="mob-ui-toggle" onclick="mobToggleUI()" aria-pressed="false"
+        title="Hide or show the header and toolbar">&#8597;</button>
 
 <!-- WORKSPACE — the dashboard/editor view -->
 <div id="workspace" class="view">
@@ -213,7 +219,7 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
         <button class="tbb" id="tbb-b" onclick="ec('bold')" title="Bold (Ctrl+B)"><strong>B</strong></button>
         <button class="tbb" id="tbb-i" onclick="ec('italic')" title="Italic (Ctrl+I)"><em>I</em></button>
         <button class="tbb" id="tbb-s" onclick="ec('strikeThrough')" title="Strikethrough"><s>S</s></button>
-        <button class="tbb" onclick="doLink()" title="Link (Ctrl+K)"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg></button>
+        <button class="tbb" id="tbb-link" onclick="doLink()" title="Link (Ctrl+K)"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg></button>
         <div class="tsep"></div>
         <button class="tbb tbb-names" id="tbb-ind" onclick="doIndent()" title="Indent (Tab)" style="padding:3px 5px"><svg class="ic" aria-hidden="true"><use href="#i-indent"/></svg></button>
         <button class="tbb tbb-names" id="tbb-outd" onclick="doOutdent()" title="Outdent (Shift+Tab)" style="padding:3px 5px"><svg class="ic" aria-hidden="true"><use href="#i-outdent"/></svg></button>
@@ -235,6 +241,20 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
             <button class="tbb tbb-mkr" onclick="insertMarker('location')" title="Wrap selection in ((…)) location markers, or insert placeholder">((Location))</button>
             <button class="tbb tbb-mkr" onclick="insertMarker('ooc')" title="Wrap selection in ((OOC - …)) OOC markers, or insert placeholder">((OOC))</button>
           </div>
+        </div>
+        <!-- Phone only. mobSyncChrome() fills these from the buttons already in
+             this toolbar and puts them back above 820px, so every control has
+             exactly one definition and keeps its id, its handler and its
+             on/off state. -->
+        <div class="tb-dd-wrap tb-mob-wrap" id="tb-fmt-wrap">
+          <button class="tbb tbb-names" id="tbb-fmt" onclick="toggleTbDropdown('fmt')"
+            title="Formatting">Format <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+          <div class="tb-dd" id="tb-dd-fmt"></div>
+        </div>
+        <div class="tb-dd-wrap tb-mob-wrap" id="tb-tools-wrap">
+          <button class="tbb tbb-names" id="tbb-tools" onclick="toggleTbDropdown('tools')"
+            title="Auto formatting, visual aids and view options">Tools <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+          <div class="tb-dd" id="tb-dd-tools"></div>
         </div>
         <!-- Expanded mode (individual buttons, shown when markerLayout='buttons') -->
         <button class="tbb tbb-mkr tb-mkr-exp" onclick="insertMarker('action')" title="Wrap selection in ::…:: action markers, or insert placeholder">::Action::</button>
@@ -287,6 +307,24 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
 
   <!-- RESIZE HANDLE RIGHT -->
   <div class="resize-handle" id="rh-right" onmousedown="startResize(event,'right')"></div>
+
+  <!-- MOBILE: the rail that opens the drawer. It occupies layout space beside
+       the editor rather than floating over the text, and its tab travels with
+       the drawer instead of being buried by it. -->
+  <div id="mob-rail">
+    <button id="mob-rail-tab" onclick="mobDrawer('sims')" aria-expanded="false"
+            aria-label="Open sims and sim details">
+      <svg class="ic" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+      <span class="mob-rail-label">SIMS</span>
+    </button>
+  </div>
+  <div id="mob-scrim" onclick="mobDrawer(null)"></div>
+  <!-- One tab strip for both panels: they occupy the same place when open. -->
+  <div id="mob-tabs">
+    <button id="mob-tab-sims" onclick="mobDrawer('sims')">SIMS</button>
+    <button id="mob-tab-details" onclick="mobDrawer('details')">SIM DETAILS</button>
+    <button id="mob-tab-close" onclick="mobDrawer(null)" aria-label="Close panel"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+  </div>
 
   <!-- SIM DETAILS / CHARACTERS PANEL -->
   <div id="cp">
