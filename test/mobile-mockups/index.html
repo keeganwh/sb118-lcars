@@ -93,15 +93,24 @@ body{--ac:#F0705F}
       sidebar (24px) in a thumb-sized form. ── */
 #ws{flex:1;min-height:0;display:flex}
 body[data-side="right"] #ws{flex-direction:row-reverse}
-#rail{width:34px;flex-shrink:0;background:var(--panel);
-  border-right:2px solid var(--border);display:flex;align-items:center;
-  justify-content:center}
+#rail{width:38px;flex-shrink:0;background:var(--panel);
+  border-right:2px solid var(--border);display:flex;align-items:flex-start;
+  justify-content:center;padding-top:10px}
 body[data-side="right"] #rail{border-right:none;border-left:2px solid var(--border)}
 body.hc #rail{border-color:var(--amber)}
-#rail-tab{width:100%;height:100%;background:transparent;border:none;
-  color:var(--amber);font-family:inherit;font-weight:bold;font-size:0.7rem;
-  letter-spacing:2px;writing-mode:vertical-rl;padding:0}
-body[data-side="left"] #rail-tab{transform:rotate(180deg)}
+/* The tab is filled and chevroned rather than a bare word: on the edge of the
+   screen a label alone reads as a heading, not as something you press. The
+   chevron points the way the drawer will travel. It sits near the top, under
+   the toggle, so the two controls form one column instead of one being adrift
+   in the middle of the screen. */
+#rail-tab{width:34px;padding:9px 0 11px;background:var(--amber);color:#000;
+  border:none;border-radius:6px;font-family:inherit;font-weight:bold;
+  font-size:0.68rem;letter-spacing:2px;display:flex;flex-direction:column;
+  align-items:center;gap:5px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+#rail-tab .ic{width:15px;height:15px;stroke-width:2.6}
+#rail-tab .rt-label{writing-mode:vertical-rl}
+body[data-side="right"] #rail-tab .rt-label{transform:rotate(180deg)}
+body.hc #rail-tab{color:#000}
 
 /* ── Drawer. Its handle rides on the drawer's own outer edge, so opening it
       moves the handle rather than burying it. ── */
@@ -141,7 +150,7 @@ body[data-side="right"] #dw-tab{left:-34px;border-radius:10px 0 0 10px}
    between states -- there is no hunting for it on the far side of the screen.
    Its z-index is below the scrim, so an open drawer covers and dims it like
    everything else the drawer sits over. */
-body.ui-hidden #hdr,body.ui-hidden #dh{display:none}
+body.ui-hidden #hdr,body.ui-hidden #dh,body.ui-hidden #rail{display:none}
 #ui-toggle{position:fixed;z-index:450;top:calc(4px + env(safe-area-inset-top));
   width:34px;height:40px;background:var(--panel);color:var(--amber);
   border:1px solid var(--amber);border-radius:4px;font-family:inherit;
@@ -225,8 +234,8 @@ body[data-side="left"]  .hdr-badge{margin-left:40px}
   <p class="hint">Settled last round and now fixed: toolbar at the top, grouped
   as Copy&nbsp;/&nbsp;B&nbsp;/&nbsp;I&nbsp;/&nbsp;Insert&nbsp;/&nbsp;Format&nbsp;/&nbsp;Tools,
   and no auto-hide. The <strong>&#8597;</strong> in the top corner, above the rail,
-  hides and shows the header and toolbar &mdash; one button that never moves, and
-  that the drawer covers when it opens. The sims rail is part of the
+  hides and shows the header, toolbar and sims rail &mdash; one button that never
+  moves, and that the drawer covers when it opens. The sims rail is part of the
   layout rather than floating over the text, and its tab travels with the
   drawer instead of being covered by it.</p>
 </div>
@@ -289,7 +298,13 @@ body[data-side="left"]  .hdr-badge{margin-left:40px}
 
   <!-- ══ WORKSPACE: rail beside the editor, never over it ══ -->
   <div id="ws">
-    <div id="rail"><button id="rail-tab" onclick="drawerOpen()">SIMS</button></div>
+    <div id="rail">
+      <button id="rail-tab" onclick="drawerOpen()" aria-expanded="false"
+              aria-label="Open the sims and sim details panel">
+        <svg class="ic" aria-hidden="true"><use id="rail-chev" href="#i-chevron-left"/></svg>
+        <span class="rt-label">SIMS</span>
+      </button>
+    </div>
 
     <div id="ec">
       <div id="editor" contenteditable="true" spellcheck="true">
@@ -373,6 +388,8 @@ function save(){ try{ localStorage.setItem('lcars_mockup_v3', JSON.stringify(V))
 
 function apply(){
   document.body.dataset.side = V.side;
+  document.getElementById('rail-chev')
+    .setAttribute('href', V.side==='right' ? '#i-chevron-left' : '#i-chevron-right');
 
   /* Skin. The app sets data-* on <html> for Delta Prime and body classes for
      the classic themes; reproducing both here is what makes the
@@ -428,10 +445,12 @@ document.addEventListener('click', function(e){
 
 /* ── Drawer ─────────────────────────────────────────────────────────────── */
 function drawerOpen(){
+  document.getElementById('rail-tab').setAttribute('aria-expanded','true');
   document.getElementById('drawer').classList.add('open');
   document.getElementById('scrim').classList.add('on');
 }
 function drawerClose(){
+  document.getElementById('rail-tab').setAttribute('aria-expanded','false');
   document.getElementById('drawer').classList.remove('open');
   document.getElementById('scrim').classList.remove('on');
 }
