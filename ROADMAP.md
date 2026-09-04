@@ -124,7 +124,7 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 
 **Top score [+5]. Category: Component Revision + New Component.**
 
-**Why these together:** doing them apart means laying out the sim details panel twice. Restructure the markup first, then make the whole workspace responsive over the new structure in the same pass.
+**Why these together:** doing them apart means laying out the sim details panel twice. Restructure the markup first, then make the whole workspace responsive over the new structure in the same pass. **The mobile half is already designed** — see the brief linked below; nothing in it depends on how the details panel is reordered.
 
 - [ ] **[+5] Reorganise the sim details panel.** _Revision._
       Reorder the fields and tools from **most fundamental to most specific** — what someone needs first, first. Fix the alignment and visual consistency, which have drifted as things were added.
@@ -132,9 +132,9 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 
 - [ ] **[+4] Mobile optimisation of the workspace.** _New Component — never done._
       The header, Settings and the Manifest were made responsive in session 2. **The editor, the toolbar and the two resizable sidebars were never touched** — the whole workspace view, in other words.
-      **Observed on a real phone, v4.23:**
-      1. *The page zooms in when a field is focused.* Almost certainly iOS Safari's auto-zoom, which fires on any focused input under 16px. `.mi` / `.ms` are `0.87rem` and `#search-input` is `0.8rem` against a 15px UI base — about 13px and 12px. Fix is to **floor form controls at 16px on coarse pointers**, not to disable zoom with `maximum-scale`, which breaks pinch-zoom for everyone. Not verified on device — confirm before building on it.
-      2. *Buttons do not all fit.* Expected, and covered by the work above.
+      **The design is settled and must not be re-litigated — read `memory/session_lcars_2026-09-mobile-brief.md` first.** A planning session (2026-09-04) built mockups, tested them on a real phone over four rounds, and settled the toolbar position, its grouping, the hide control, both sidebars as one right-hand drawer, and the visual treatment. The brief carries the decisions, the reasoning, the options that were tried and rejected, and the landmines found on the way.
+      **Working mockups:** `test/mobile-mockups/` on branch `claude/mobile-optimization-planning-my6upp` — `index.html` is the design, `looks.html` records why it looks that way. **Throwaway: delete the folder when this ships.**
+      The 16px auto-zoom guess from v4.23 is confirmed and fixed in the mockup; the rest of that note is superseded by the brief.
       _Done when: a sim can be read, written and copied out on a phone without pinch-zooming._
 
 > **Landmine for this batch:** responsive rules go in the one `RESPONSIVE` section at the foot of `lcars.css`, **after** the skin overrides — anything earlier is silently outranked by the `:root[data-skin="prime"]` blocks. Breakpoint is 820px.
