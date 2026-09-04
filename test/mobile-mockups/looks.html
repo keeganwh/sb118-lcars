@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en" data-skin="prime" data-mode="light" data-vibe="calm" data-duty="command">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>LCARS — mobile visual treatments</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Droid+Sans:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../lcars.css">
+<style>
+/* ══ VISUAL TREATMENTS ═════════════════════════════════════════════════════
+   The layout and the behaviour are settled (see index.html). This page is
+   about how the furniture LOOKS. Three treatments of the identical screen,
+   stacked so they can be compared by scrolling rather than by remembering.
+
+   The complaint being answered: the current draft speaks four button
+   languages at once — a big rounded badge, two circular outline buttons, a
+   boxed toggle, three outlined pills in the toolbar — plus a full-height
+   empty column with a sticker on it. Each treatment below picks ONE language
+   and holds to it.
+   ════════════════════════════════════════════════════════════════════════ */
+
+html,body{height:auto;overflow:auto}
+body{background:var(--bg);color:var(--text);padding:0 0 60px}
+
+.page-head{padding:16px 14px 6px}
+.page-head h1{font-family:var(--display-font,inherit);font-size:1.15rem;color:var(--text);letter-spacing:.5px}
+.page-head p{color:var(--dim);font-size:0.87rem;margin-top:6px;line-height:1.5;max-width:52ch}
+
+.skinbar{position:sticky;top:0;z-index:50;background:var(--panel);
+  border-bottom:1px solid var(--border);padding:8px 10px;display:flex;gap:5px;
+  flex-wrap:wrap;align-items:center}
+.skinbar span{color:var(--dim);font-size:0.73rem;letter-spacing:1.5px;margin-right:4px}
+.skinbar button{background:transparent;color:var(--dim);border:1px solid var(--border);
+  border-radius:5px;padding:7px 10px;font-family:inherit;font-size:0.8rem}
+.skinbar button[aria-pressed="true"]{background:var(--amber);color:var(--panel-hdr-tx);border-color:var(--amber)}
+
+.case{padding:22px 14px 0}
+.case h2{font-family:var(--display-font,inherit);font-size:1rem;color:var(--amber);
+  letter-spacing:1px;margin-bottom:4px}
+.case .why{color:var(--dim);font-size:0.83rem;line-height:1.5;margin-bottom:10px;max-width:52ch}
+.screen{height:430px;border:1px solid var(--border);border-radius:10px;overflow:hidden;
+  display:flex;flex-direction:column;background:var(--bg);position:relative}
+.body-txt{flex:1;overflow:hidden;padding:12px 14px;font-size:12pt;line-height:1.15;color:var(--text)}
+.body-txt p{margin:0 0 .8em}
+.body-txt em{font-style:italic}
+
+/* ── Shared: the sim text is identical in all three, so only the furniture
+      is being judged. ── */
+
+/* ════ A — ONE BAR ═════════════════════════════════════════════════════════
+   Everything collapses into a single bar plus one quiet tool row. No boxes on
+   anything: the toolbar is text and icons on the bar's own surface, and the
+   only filled shape on screen is the accent mark. */
+.a-bar{height:44px;background:var(--bar,var(--panel));display:flex;align-items:center;
+  gap:9px;padding:0 8px 0 0;flex-shrink:0}
+.a-mark{width:8px;align-self:stretch;background:var(--amber);flex-shrink:0}
+.a-title{flex:1;min-width:0;font-weight:600;font-size:0.95rem;color:#fff;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:root[data-mode="light"] .a-title{color:#fff}
+.a-bar .ic{width:19px;height:19px}
+.a-ib{background:transparent;border:none;color:rgba(255,255,255,.72);padding:8px;
+  display:inline-flex;align-items:center;font-family:inherit;font-size:1.05rem;line-height:1}
+.a-tools{height:42px;display:flex;align-items:center;gap:2px;padding:0 4px;
+  background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0}
+.a-tb{background:transparent;border:none;color:var(--dim);font-family:inherit;
+  font-size:0.83rem;padding:9px 9px;display:inline-flex;align-items:center;gap:4px}
+.a-tb strong,.a-tb em{color:var(--text);font-size:0.95rem}
+.a-tb .ic{width:16px;height:16px}
+.a-wrap{flex:1;display:flex;min-height:0}
+.a-rail{width:26px;flex-shrink:0;display:flex;justify-content:center;padding-top:10px}
+.a-tab{width:26px;height:62px;background:var(--amber);color:var(--panel-hdr-tx);
+  border:none;border-radius:8px 0 0 8px;display:flex;align-items:center;
+  justify-content:center;padding:0}
+.a-tab .ic{width:15px;height:15px;stroke-width:2.6}
+
+/* ════ B — LCARS SPINE ═════════════════════════════════════════════════════
+   The accent leaves the header and runs down the writing edge as one
+   continuous elbow, the way LCARS actually works. The sims tab is a segment
+   of that spine rather than an object sitting on top of it, and the segment
+   the drawer opens from is simply a lighter block in the same run. */
+.b-top{display:flex;flex-shrink:0}
+.b-hdr{flex:1;height:46px;background:var(--amber);color:var(--panel-hdr-tx);
+  display:flex;align-items:center;padding:0 12px;gap:10px;
+  border-radius:0 0 0 18px;font-weight:700;letter-spacing:2px;font-size:0.8rem}
+.b-hdr .ic{width:18px;height:18px}
+.b-hdr-r{margin-left:auto;display:flex;gap:4px}
+.b-hdr-r button{background:transparent;border:none;color:var(--panel-hdr-tx);padding:6px;
+  font-family:inherit;font-size:1.05rem;line-height:1}
+.b-spine-top{width:34px;height:46px;background:var(--amber);flex-shrink:0}
+.b-mid{flex:1;display:flex;min-height:0}
+.b-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.b-title{padding:9px 12px 7px;font-weight:700;color:var(--title-active,var(--text));
+  font-size:0.95rem;border-bottom:1px solid var(--border)}
+.b-tools{display:flex;align-items:center;gap:2px;padding:5px 6px;
+  border-bottom:1px solid var(--border)}
+.b-tb{background:transparent;border:none;color:var(--dim);font-family:inherit;
+  font-size:0.8rem;padding:8px;display:inline-flex;align-items:center;gap:4px}
+.b-tb strong,.b-tb em{color:var(--text);font-size:0.95rem}
+.b-tb .ic{width:15px;height:15px}
+.b-spine{width:34px;flex-shrink:0;display:flex;flex-direction:column;gap:4px;
+  padding-bottom:4px}
+.b-seg{background:var(--amber);opacity:.28}
+.b-seg.tall{flex:1}
+.b-tab{background:var(--amber);color:var(--panel-hdr-tx);border:none;height:74px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  border-radius:0 0 0 12px;font-weight:700;font-size:0.62rem;letter-spacing:1.5px;padding:0}
+.b-tab .rt{writing-mode:vertical-rl;transform:rotate(180deg)}
+.b-tab .ic{width:14px;height:14px;stroke-width:2.6}
+
+/* ════ C — QUIET ═══════════════════════════════════════════════════════════
+   Nothing is filled except what is currently active. One hairline separates
+   each band, the accent appears once as a thin edge stripe, and the sims
+   handle is the stripe swelling into a chevron. The furniture recedes and the
+   sim is the only thing with weight on the screen. */
+.c-hdr{height:42px;display:flex;align-items:center;gap:10px;padding:0 10px;
+  border-bottom:1px solid var(--border);flex-shrink:0}
+.c-brand{font-family:var(--display-font,inherit);font-weight:700;letter-spacing:1.5px;
+  font-size:0.73rem;color:var(--amber);flex-shrink:0}
+.c-title{flex:1;min-width:0;font-weight:600;font-size:0.92rem;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-ib{background:transparent;border:none;color:var(--dim);padding:8px;
+  display:inline-flex;align-items:center;font-family:inherit;font-size:1.05rem;line-height:1}
+.c-ib .ic{width:18px;height:18px}
+.c-tools{display:flex;align-items:center;gap:1px;padding:4px 6px;
+  border-bottom:1px solid var(--border);flex-shrink:0}
+.c-tb{background:transparent;border:none;color:var(--dim);font-family:inherit;
+  font-size:0.82rem;padding:9px 8px;display:inline-flex;align-items:center;gap:4px}
+.c-tb.on{color:var(--amber)}
+.c-tb strong,.c-tb em{color:var(--text);font-size:0.95rem}
+.c-tb .ic{width:16px;height:16px}
+.c-wrap{flex:1;display:flex;min-height:0}
+.c-rail{width:22px;flex-shrink:0;display:flex;align-items:flex-start;
+  justify-content:flex-end;padding-top:14px}
+.c-tab{width:22px;height:54px;background:color-mix(in oklab,var(--amber) 16%,transparent);
+  color:var(--amber);border:none;border-radius:7px 0 0 7px;display:flex;
+  align-items:center;justify-content:center;padding:0}
+.c-tab .ic{width:14px;height:14px;stroke-width:2.8}
+.c-stripe{position:absolute;right:0;top:0;bottom:0;width:3px;background:var(--amber);opacity:.5}
+
+.note{padding:20px 14px 0;color:var(--dim);font-size:0.83rem;line-height:1.55;max-width:52ch}
+.note strong{color:var(--text)}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+<symbol id="i-sort" viewBox="0 0 24 24"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></symbol>
+<symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+<symbol id="i-contrast" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 18a6 6 0 0 0 0-12z"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></symbol>
+<symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></symbol>
+<symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+<symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+<symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+<symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+<symbol id="i-clipboard" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+<symbol id="i-eraser" viewBox="0 0 24 24"><path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+<symbol id="i-indent" viewBox="0 0 24 24"><path d="m3 8 4 4-4 4"/><path d="M21 12H11"/><path d="M21 18H11"/><path d="M21 6H11"/></symbol>
+<symbol id="i-outdent" viewBox="0 0 24 24"><path d="m7 8-4 4 4 4"/><path d="M21 12H11"/><path d="M21 18H11"/><path d="M21 6H11"/></symbol>
+<symbol id="i-circle-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></symbol>
+<symbol id="i-table" viewBox="0 0 24 24"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></symbol>
+<symbol id="i-square-check" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-square" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/></symbol>
+<symbol id="i-file-text" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+<symbol id="i-hexagon" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></symbol>
+<symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+<symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/></symbol>
+<symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+<symbol id="i-archive" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-book-open" viewBox="0 0 24 24"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></symbol>
+<symbol id="i-move-right" viewBox="0 0 24 24"><path d="M18 8l4 4-4 4"/><path d="M2 12h20"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+<symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 9 5-5 5 5"/><path d="M12 4v12"/></symbol>
+<symbol id="i-layout-grid" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol>
+<symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></symbol>
+</defs></svg>
+
+<div class="skinbar" id="skinbar">
+  <span>SKIN</span>
+  <button data-v="prime-light">Prime light</button>
+  <button data-v="prime-dark">Prime dark</button>
+  <button data-v="classic-dark">Classic dark</button>
+  <button data-v="classic-light">Classic light</button>
+  <button data-v="classic-hc">High contrast</button>
+</div>
+
+<div class="page-head">
+  <h1>Three ways the same screen could look</h1>
+  <p>Layout and behaviour are settled — this is only about the furniture. Each
+  treatment picks one visual language and holds to it, instead of mixing a
+  filled badge, outlined circles, a boxed toggle and outlined pills on one
+  screen. Same sim text in all three so only the chrome is being judged.</p>
+</div>
+
+<!-- ══ A ══════════════════════════════════════════════════════════════════ -->
+<div class="case">
+  <h2>A · One bar</h2>
+  <p class="why">Header and sim title merge into a single dark bar; the accent
+  survives as one slim block on its leading edge. Nothing else is filled or
+  outlined — the tools are just text and icons. Two bands of furniture instead
+  of three, and about 40px more sim on screen.</p>
+  <div class="screen">
+    <div class="a-bar">
+      <div class="a-mark"></div>
+      <div class="a-title">Ghosts in the Drift</div>
+      <button class="a-ib"><svg class="ic"><use href="#i-user"/></svg></button>
+      <button class="a-ib"><svg class="ic"><use href="#i-settings"/></svg></button>
+      <button class="a-ib">&#8597;</button>
+    </div>
+    <div class="a-tools">
+      <button class="a-tb"><svg class="ic"><use href="#i-copy"/></svg></button>
+      <button class="a-tb"><strong>B</strong></button>
+      <button class="a-tb"><em>I</em></button>
+      <button class="a-tb">Insert <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+      <button class="a-tb">Format <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+      <button class="a-tb">Tools <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+    </div>
+    <div class="a-wrap">
+      <div class="body-txt">
+        <p><strong>((USS Astraeus - Bridge))</strong></p>
+        <p><strong>Lt. Cmdr. Yavin:</strong> ::Leaning over the tactical rail, watching the sensor return resolve into something with edges.:: That is not a debris field.</p>
+        <p><strong>Ens. Okoro:</strong> Confirmed, sir. Mass distribution is too regular. Something built it.</p>
+        <p><em>oO Built it, or left it. Oo</em></p>
+        <p><strong>Lt. Cmdr. Yavin:</strong> =/\= Bridge to Engineering, I need every erg you can spare. =/\=</p>
+      </div>
+      <div class="a-rail">
+        <button class="a-tab"><svg class="ic"><use href="#i-chevron-left"/></svg></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ B ══════════════════════════════════════════════════════════════════ -->
+<div class="case">
+  <h2>B · LCARS spine</h2>
+  <p class="why">The accent leaves the header and runs down the writing edge as
+  one continuous elbow — which is what LCARS actually is. The sims tab is a
+  segment of that run rather than a sticker on top of it, and the dimmed
+  segment below is the same spine continuing. The most on-theme of the three,
+  and the most colour.</p>
+  <div class="screen">
+    <div class="b-top">
+      <div class="b-hdr">
+        LCARS
+        <div class="b-hdr-r">
+          <button><svg class="ic"><use href="#i-user"/></svg></button>
+          <button><svg class="ic"><use href="#i-settings"/></svg></button>
+          <button>&#8597;</button>
+        </div>
+      </div>
+      <div class="b-spine-top"></div>
+    </div>
+    <div class="b-mid">
+      <div class="b-main">
+        <div class="b-title">Ghosts in the Drift</div>
+        <div class="b-tools">
+          <button class="b-tb"><svg class="ic"><use href="#i-copy"/></svg></button>
+          <button class="b-tb"><strong>B</strong></button>
+          <button class="b-tb"><em>I</em></button>
+          <button class="b-tb">Insert <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+          <button class="b-tb">Format <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+          <button class="b-tb">Tools <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+        </div>
+        <div class="body-txt">
+          <p><strong>((USS Astraeus - Bridge))</strong></p>
+          <p><strong>Lt. Cmdr. Yavin:</strong> ::Leaning over the tactical rail, watching the sensor return resolve into something with edges.:: That is not a debris field.</p>
+          <p><strong>Ens. Okoro:</strong> Confirmed, sir. Mass distribution is too regular. Something built it.</p>
+          <p><em>oO Built it, or left it. Oo</em></p>
+        </div>
+      </div>
+      <div class="b-spine">
+        <button class="b-tab">
+          <svg class="ic"><use href="#i-chevron-left"/></svg>
+          <span class="rt">SIMS</span>
+        </button>
+        <div class="b-seg tall"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ C ══════════════════════════════════════════════════════════════════ -->
+<div class="case">
+  <h2>C · Quiet</h2>
+  <p class="why">Nothing is filled except what is currently on. Hairlines
+  separate the bands, the accent appears once as the edge stripe, and the sims
+  handle is that stripe swelling into a chevron. The furniture recedes until
+  the sim is the only thing on screen with any weight — the calmest for long
+  writing, the least obviously LCARS.</p>
+  <div class="screen">
+    <div class="c-hdr">
+      <span class="c-brand">LCARS</span>
+      <span class="c-title">Ghosts in the Drift</span>
+      <button class="c-ib"><svg class="ic"><use href="#i-user"/></svg></button>
+      <button class="c-ib"><svg class="ic"><use href="#i-settings"/></svg></button>
+      <button class="c-ib">&#8597;</button>
+    </div>
+    <div class="c-tools">
+      <button class="c-tb"><svg class="ic"><use href="#i-copy"/></svg></button>
+      <button class="c-tb"><strong>B</strong></button>
+      <button class="c-tb"><em>I</em></button>
+      <button class="c-tb on">Insert <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+      <button class="c-tb">Format <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+      <button class="c-tb">Tools <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+    </div>
+    <div class="c-wrap">
+      <div class="body-txt">
+        <p><strong>((USS Astraeus - Bridge))</strong></p>
+        <p><strong>Lt. Cmdr. Yavin:</strong> ::Leaning over the tactical rail, watching the sensor return resolve into something with edges.:: That is not a debris field.</p>
+        <p><strong>Ens. Okoro:</strong> Confirmed, sir. Mass distribution is too regular. Something built it.</p>
+        <p><em>oO Built it, or left it. Oo</em></p>
+        <p><strong>Lt. Cmdr. Yavin:</strong> =/\= Bridge to Engineering, I need every erg you can spare. =/\=</p>
+      </div>
+      <div class="c-rail">
+        <button class="c-tab"><svg class="ic"><use href="#i-chevron-left"/></svg></button>
+      </div>
+    </div>
+    <div class="c-stripe"></div>
+  </div>
+</div>
+
+<p class="note">All three keep what the lab settled: toolbar at the top,
+grouped as Copy&nbsp;/&nbsp;B&nbsp;/&nbsp;I&nbsp;/&nbsp;Insert&nbsp;/&nbsp;Format&nbsp;/&nbsp;Tools,
+a hide control in the top corner, and a sims handle on the right edge that
+opens the drawer. They are not exclusive — the <strong>bar</strong> from A, the
+<strong>spine</strong> from B and the <strong>quiet toolbar</strong> from C can be
+mixed. Try each skin: B leans hardest on the accent, so it changes most between
+Prime and High&nbsp;Contrast.</p>
+
+<script>
+var skins = document.getElementById('skinbar');
+function setSkin(v){
+  var h = document.documentElement, b = document.body;
+  b.classList.remove('light','hc');
+  if(v.indexOf('prime')===0){
+    h.setAttribute('data-skin','prime');
+    h.setAttribute('data-mode', v==='prime-light'?'light':'dark');
+    h.style.setProperty('--ac', v==='prime-light' ? '#B4463C' : '#F0705F');
+  }else{
+    h.setAttribute('data-skin','classic');
+    h.setAttribute('data-mode', v==='classic-light'?'light':'dark');
+    if(v==='classic-light') b.classList.add('light');
+    if(v==='classic-hc')    b.classList.add('hc');
+  }
+  skins.querySelectorAll('button').forEach(function(x){
+    x.setAttribute('aria-pressed', String(x.dataset.v===v));
+  });
+  try{ localStorage.setItem('lcars_looks_skin', v); }catch(e){}
+}
+skins.querySelectorAll('button').forEach(function(x){
+  x.addEventListener('click', function(){ setSkin(x.dataset.v); });
+});
+var start='prime-light';
+try{ start = localStorage.getItem('lcars_looks_skin') || start; }catch(e){}
+setSkin(start);
+</script>
+</body>
+</html>
