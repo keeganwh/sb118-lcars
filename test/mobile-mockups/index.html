@@ -77,9 +77,6 @@ body{--ac:#F0705F}
 .mob-tb{display:flex;align-items:center;gap:3px}
 .mob-tb .tsep{margin:0 2px}
 .mob-tb .tbb{gap:4px}
-/* The hide control is pinned to the toolbar's trailing edge and never moves:
-   its twin in the hidden state occupies the same corner of the screen. */
-.tb-spacer{flex:1}
 
 /* Panels behind the grouped buttons. Anchored to the toolbar's edges rather
    than to the button, so a panel can never open off-screen. */
@@ -96,7 +93,7 @@ body{--ac:#F0705F}
       sidebar (24px) in a thumb-sized form. ── */
 #ws{flex:1;min-height:0;display:flex}
 body[data-side="right"] #ws{flex-direction:row-reverse}
-#rail{width:34px;flex-shrink:0;background:var(--panel2);
+#rail{width:34px;flex-shrink:0;background:var(--panel);
   border-right:2px solid var(--border);display:flex;align-items:center;
   justify-content:center}
 body[data-side="right"] #rail{border-right:none;border-left:2px solid var(--border)}
@@ -138,21 +135,25 @@ body[data-side="right"] #dw-tab{left:-34px;border-radius:10px 0 0 10px}
 .mk-sd label{display:block;color:var(--dim);font-size:0.73rem;letter-spacing:1px;
   margin:12px 0 4px;text-transform:uppercase}
 
-/* ── Hiding the controls ─────────────────────────────────────────────────── */
+/* ── Hiding the controls ─────────────────────────────────────────────────
+   One button, one place, always there. It sits in the corner directly above
+   the rail, so it reads as part of the same edge furniture and never moves
+   between states -- there is no hunting for it on the far side of the screen.
+   Its z-index is below the scrim, so an open drawer covers and dims it like
+   everything else the drawer sits over. */
 body.ui-hidden #hdr,body.ui-hidden #dh{display:none}
-/* Same corner, same glyph, same size as the hide button it replaces — the only
-   difference is the arrow's direction. Top of the screen, clear of the
-   keyboard and next to where the hide control was. */
-#restore{position:fixed;z-index:700;top:calc(6px + env(safe-area-inset-top));
-  display:none;background:var(--panel);color:var(--amber);
-  border:1px solid var(--amber);border-radius:4px;width:40px;height:44px;
-  font-family:inherit;font-size:1rem;align-items:center;justify-content:center}
-body[data-side="left"]  #restore{right:6px}
-body[data-side="right"] #restore{left:6px}
-body.ui-hidden #restore{display:flex}
+#ui-toggle{position:fixed;z-index:450;top:calc(4px + env(safe-area-inset-top));
+  width:34px;height:40px;background:var(--panel);color:var(--amber);
+  border:1px solid var(--amber);border-radius:4px;font-family:inherit;
+  font-size:1rem;display:flex;align-items:center;justify-content:center;padding:0}
+body[data-side="right"] #ui-toggle{right:0;border-radius:4px 0 0 4px;border-right:none}
+body[data-side="left"]  #ui-toggle{left:0;border-radius:0 4px 4px 0;border-left:none}
+/* The header's own buttons step aside rather than sitting under it. */
+body[data-side="right"] .hdr-right{padding-right:44px}
+body[data-side="left"]  .hdr-badge{margin-left:40px}
 </style>
 </head>
-<body data-side="left">
+<body data-side="right">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
 <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
 <symbol id="i-sort" viewBox="0 0 24 24"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></symbol>
@@ -223,9 +224,9 @@ body.ui-hidden #restore{display:flex}
 
   <p class="hint">Settled last round and now fixed: toolbar at the top, grouped
   as Copy&nbsp;/&nbsp;B&nbsp;/&nbsp;I&nbsp;/&nbsp;Insert&nbsp;/&nbsp;Format&nbsp;/&nbsp;Tools,
-  and no auto-hide. The <strong>&#8597;</strong> at the right of the toolbar hides
-  the header and toolbar; the button that brings them back sits in the same
-  corner, at the top, away from the keyboard. The sims rail is part of the
+  and no auto-hide. The <strong>&#8597;</strong> in the top corner, above the rail,
+  hides and shows the header and toolbar &mdash; one button that never moves, and
+  that the drawer covers when it opens. The sims rail is part of the
   layout rather than floating over the text, and its tab travels with the
   drawer instead of being covered by it.</p>
 </div>
@@ -256,8 +257,6 @@ body.ui-hidden #restore{display:flex}
       <button class="tbb tbb-names" onclick="mpanel('ins')">Insert <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
       <button class="tbb tbb-names" onclick="mpanel('fmt')">Format <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
       <button class="tbb tbb-names" onclick="mpanel('tools')">Tools <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
-      <div class="tb-spacer"></div>
-      <button class="tbb" id="hide-btn" onclick="hideUI()" title="Hide the header and toolbar">&#8597;</button>
     </div>
 
     <div class="mpanel" id="mp-ins">
@@ -317,7 +316,8 @@ body.ui-hidden #restore{display:flex}
   </div>
 </div>
 
-<button id="restore" onclick="showUI()" title="Show the header and toolbar">&#8597;</button>
+<button id="ui-toggle" onclick="toggleUI()" aria-pressed="false"
+        title="Hide or show the header and toolbar">&#8597;</button>
 <div id="scrim" onclick="drawerClose()"></div>
 
 <!-- ══ DRAWER ══ both rails in one panel, its tab riding on its outer edge ══ -->
@@ -366,10 +366,10 @@ body.ui-hidden #restore{display:flex}
 /* ══ MOCKUP SCRIPT ══ throwaway; enough behaviour to judge how this feels on a
    real phone, not written to be lifted into lcars.js. ═══════════════════════ */
 
-var V = {side:'left', skin:'prime-dark'};
-try{ var saved = JSON.parse(localStorage.getItem('lcars_mockup_v2')||'{}');
+var V = {side:'right', skin:'prime-dark'};
+try{ var saved = JSON.parse(localStorage.getItem('lcars_mockup_v3')||'{}');
      for(var k in saved) if(k in V) V[k]=saved[k]; }catch(e){}
-function save(){ try{ localStorage.setItem('lcars_mockup_v2', JSON.stringify(V)); }catch(e){} }
+function save(){ try{ localStorage.setItem('lcars_mockup_v3', JSON.stringify(V)); }catch(e){} }
 
 function apply(){
   document.body.dataset.side = V.side;
@@ -407,8 +407,11 @@ document.querySelectorAll('#lab .lab-row button').forEach(function(btn){
 function labToggle(){ document.getElementById('lab').classList.toggle('shut'); }
 
 /* ── Hiding the controls: a deliberate toggle, never automatic ───────────── */
-function hideUI(){ closePanels(); document.body.classList.add('ui-hidden'); }
-function showUI(){ document.body.classList.remove('ui-hidden'); }
+function toggleUI(){
+  closePanels();
+  var hidden = document.body.classList.toggle('ui-hidden');
+  document.getElementById('ui-toggle').setAttribute('aria-pressed', String(hidden));
+}
 
 /* ── Grouped toolbar panels ─────────────────────────────────────────────── */
 function closePanels(){
