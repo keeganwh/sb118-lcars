@@ -1381,6 +1381,43 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   #ec{padding:14px 14px 20px;-webkit-overflow-scrolling:touch}
   #editor{max-width:none}
 
+  /* The sim title row lives in the header on a phone, so it lost the one thing
+     that used to hide it: being inside #dh, which is .hidden with no sim open.
+     It showed an empty "Sim Title..." box on the dashboard. Ask #dh directly
+     rather than adding a second piece of state to keep in step. */
+  #hdr .dh-r1{display:none}
+  body:has(#dh:not(.hidden)) #hdr .dh-r1{display:flex}
+
+  /* ── Dashboard. Built for a wide screen: a five-across stat strip and
+     four-column tables, both of which ran off the side of a phone. ── */
+  #dashboard{padding:16px 14px 24px}
+  .dash-title{font-size:1.05rem;letter-spacing:1px;margin-bottom:14px}
+  /* The five stats wrap instead of running off the side. Only the FLOW is
+     changed, never the paint: Delta Prime gives the strip its own pill shapes
+     and a solid hero tile, and a grid here would have flattened them. Written
+     at skin specificity as well, because
+     `:root[data-skin="prime"] body .dash-stats` sets display and would
+     otherwise outrank a bare .dash-stats and leave the row unwrapped -- which
+     is exactly what it did first time. */
+  .dash-stats,:root[data-skin] body .dash-stats{flex-wrap:wrap;width:100%}
+  .dash-stat-item,:root[data-skin] body .dash-stat-item{flex:1 1 28%;min-width:0;padding:10px 8px}
+  .dash-stat-num{font-size:1.2rem}
+  :root[data-skin] body .dash-stat-item:first-child .dash-stat-num{font-size:1.6rem}
+  .dash-stat-lbl{font-size:0.62rem;letter-spacing:.5px}
+
+  /* Each row becomes a block: the title on its own line, the rest beneath it
+     as labelled fragments. A four-column table cannot be made to fit, and
+     scrolling it sideways would hide the columns that say when and where. */
+  .dash-table,.dash-table tbody,.dash-table tr,.dash-table td{display:block;width:auto}
+  .dash-table tr:first-child{display:none}   /* the header row, now redundant */
+  .dash-table tr{padding:10px 0;border-bottom:1px solid var(--border)}
+  .dash-table td{padding:0;border:none}
+  .dash-table td:first-child{font-size:0.95rem;margin-bottom:3px}
+  .dash-table td:not(:first-child){display:inline-block;margin-right:12px}
+  .dash-table td[data-lbl]::before{content:attr(data-lbl) ": ";opacity:.65}
+  .dash-actions .dash-action{flex:1 1 100%;min-width:0}
+  .dash-header-row{gap:0}
+
   /* ── The two rails become one drawer, opened from a rail on the right ── */
   #rh-left,#rh-right{display:none}
   #sidebar,#cp{position:fixed;top:0;bottom:0;right:0;left:auto;

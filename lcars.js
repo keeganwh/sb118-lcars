@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-04',
     changes: [
+      'The Command Dashboard now fits a phone screen: the statistics sit in a grid rather than running off the side, and each row of the sim tables reads as a block instead of a table too wide to see.',
       'The writing screen now works properly on a phone. The header and the sim title share one bar, the toolbar groups its buttons under Insert, Format and Tools so they all fit, and the sims list and sim details open together as one panel from a tab on the right-hand edge.',
       'A new button in the top corner of a phone screen hides the header and the toolbar so a sim has the whole screen, and brings them back from the same place.',
       'Tapping a text box on an iPhone no longer zooms the page in.',
@@ -2819,9 +2820,9 @@ function renderDashboard() {
           const date = d.updatedAt ? new Date(d.updatedAt).toLocaleDateString() : '—';
           return `<tr>
             <td><span class="dash-link" onclick="openDoc('${d.id}')">${esc(d.title||'Untitled')}</span></td>
-            <td style="color:var(--dim);font-size:0.8rem">${m?esc(m.name):'—'}</td>
-            <td style="color:var(--dim);font-size:0.8rem">${words}</td>
-            <td style="color:var(--dim);font-size:0.8rem">${date}</td>
+            <td data-lbl="Mission" style="color:var(--dim);font-size:0.8rem">${m?esc(m.name):'—'}</td>
+            <td data-lbl="Words" style="color:var(--dim);font-size:0.8rem">${words}</td>
+            <td data-lbl="Edited" style="color:var(--dim);font-size:0.8rem">${date}</td>
           </tr>`;
         }).join('')}
       </table>` : ''}
@@ -2833,8 +2834,8 @@ function renderDashboard() {
           const m = d.missionId ? S.missions[d.missionId] : null;
           return `<tr>
             <td><span class="dash-link" onclick="openDoc('${d.id}')">${esc(d.title||'Untitled')}</span></td>
-            <td style="color:var(--dim);font-size:0.8rem">${m?esc(m.name):'—'}</td>
-            <td style="color:var(--dim);font-size:0.8rem">${d.postedAt||'—'}</td>
+            <td data-lbl="Mission" style="color:var(--dim);font-size:0.8rem">${m?esc(m.name):'—'}</td>
+            <td data-lbl="Posted" style="color:var(--dim);font-size:0.8rem">${d.postedAt||'—'}</td>
           </tr>`;
         }).join('')}
       </table>` : ''}
