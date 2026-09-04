@@ -66,17 +66,40 @@ body{--ac:#F0705F}
   input,select,textarea,.mi,.ms{font-size:16px}
 }
 
-#hdr{height:48px}
-.hdr-title{display:none}
+/* ── Treatment A: one bar ────────────────────────────────────────────────
+   Header and sim title are a single bar, with the accent surviving as one
+   slim block on its leading edge. Nothing else on the screen is filled or
+   outlined -- the toolbar is text and icons on the panel's own surface. Two
+   bands of furniture instead of three. */
+#hdr{height:46px;background:var(--bar,var(--panel));border-bottom:none;
+  padding:0 6px 0 0;gap:8px}
+.hdr-badge,.hdr-title{display:none}
+#hdr .hdr-mark{width:8px;align-self:stretch;background:var(--amber);flex-shrink:0}
+/* The title now sits on the dark bar, so it needs a light colour -- and
+   `:root[data-skin="prime"] body #doc-title{color:var(--ink)}` (lcars.css:795)
+   outranks a bare `#doc-title`, which is the skin-precedence trap the project
+   notes warn about. The override has to be written at the same specificity to
+   land. Real note for the build session, not a mockup quirk. */
+:root[data-skin] body #doc-title,#doc-title{color:#fff;font-size:0.95rem;font-weight:600}
+#doc-title::placeholder{color:rgba(255,255,255,.5)}
+/* Classic light's bar has no dark surface of its own, so give it one rather
+   than let the header go pale and the white title vanish. */
+body.light #hdr{background:#2B2521}
+#hdr .hdr-right{gap:0;padding-right:40px}
+#hdr .hdr-right .btn{background:transparent;border:none;color:rgba(255,255,255,.72);
+  padding:10px 9px}
 #ec{padding:14px 14px 20px;-webkit-overflow-scrolling:touch}
 #editor{max-width:none}
-#dh{padding:3px 6px}
-.dh-r1{padding-bottom:2px}
 
-/* ── Toolbar ─────────────────────────────────────────────────────────────── */
-.mob-tb{display:flex;align-items:center;gap:3px}
-.mob-tb .tsep{margin:0 2px}
-.mob-tb .tbb{gap:4px}
+/* ── Toolbar: one quiet row, nothing boxed ───────────────────────────────── */
+#dh{position:relative;background:var(--panel);border-bottom:1px solid var(--border);
+  padding:0 4px}
+.mob-tb{display:flex;align-items:center;gap:2px;min-height:42px}
+.mob-tb .tsep{display:none}
+.mob-tb .tbb,.mob-tb .tbb-names{border:none!important;background:transparent;
+  color:var(--dim)!important;font-size:0.83rem!important;letter-spacing:0;
+  padding:9px 9px;gap:4px}
+.mob-tb .tbb strong,.mob-tb .tbb em{color:var(--text);font-size:0.95rem}
 
 /* Panels behind the grouped buttons. Anchored to the toolbar's edges rather
    than to the button, so a panel can never open off-screen. */
@@ -86,31 +109,25 @@ body{--ac:#F0705F}
   box-shadow:0 8px 26px rgba(0,0,0,.5)}
 .mpanel.open{display:flex}
 .mpanel .tbb{flex:1 1 auto;justify-content:center;gap:5px}
-#dh{position:relative}
 
 /* ── Workspace row: the rail sits IN the layout beside the editor, so nothing
       the drawer owns ever covers the writing. This is the desktop collapsed
       sidebar (24px) in a thumb-sized form. ── */
 #ws{flex:1;min-height:0;display:flex}
 body[data-side="right"] #ws{flex-direction:row-reverse}
-#rail{width:38px;flex-shrink:0;background:var(--panel);
-  border-right:2px solid var(--border);display:flex;align-items:flex-start;
-  justify-content:center;padding-top:10px}
-body[data-side="right"] #rail{border-right:none;border-left:2px solid var(--border)}
-body.hc #rail{border-color:var(--amber)}
-/* The tab is filled and chevroned rather than a bare word: on the edge of the
-   screen a label alone reads as a heading, not as something you press. The
-   chevron points the way the drawer will travel. It sits near the top, under
-   the toggle, so the two controls form one column instead of one being adrift
-   in the middle of the screen. */
-#rail-tab{width:34px;padding:9px 0 11px;background:var(--amber);color:#000;
-  border:none;border-radius:6px;font-family:inherit;font-weight:bold;
-  font-size:0.68rem;letter-spacing:2px;display:flex;flex-direction:column;
-  align-items:center;gap:5px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
-#rail-tab .ic{width:15px;height:15px;stroke-width:2.6}
+#rail{width:26px;flex-shrink:0;background:transparent;border:none;
+  display:flex;align-items:flex-start;justify-content:center;padding-top:10px}
+/* The tab is the only filled shape on the screen besides the accent block, so
+   it does not need a column drawn behind it to be found. The word sits under
+   the chevron: the chevron says it opens, the word says what. */
+#rail-tab{width:26px;height:86px;background:var(--amber);color:var(--panel-hdr-tx);
+  border:none;border-radius:8px 0 0 8px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:5px;padding:0;
+  font-family:inherit;font-weight:700;font-size:0.6rem;letter-spacing:1.5px}
+body[data-side="left"] #rail-tab{border-radius:0 8px 8px 0}
+#rail-tab .ic{width:13px;height:13px;stroke-width:2.6}
 #rail-tab .rt-label{writing-mode:vertical-rl}
 body[data-side="right"] #rail-tab .rt-label{transform:rotate(180deg)}
-body.hc #rail-tab{color:#000}
 
 /* ── Drawer. Its handle rides on the drawer's own outer edge, so opening it
       moves the handle rather than burying it. ── */
@@ -151,15 +168,16 @@ body[data-side="right"] #dw-tab{left:-34px;border-radius:10px 0 0 10px}
    Its z-index is below the scrim, so an open drawer covers and dims it like
    everything else the drawer sits over. */
 body.ui-hidden #hdr,body.ui-hidden #dh,body.ui-hidden #rail{display:none}
-#ui-toggle{position:fixed;z-index:450;top:calc(4px + env(safe-area-inset-top));
-  width:34px;height:40px;background:var(--panel);color:var(--amber);
-  border:1px solid var(--amber);border-radius:4px;font-family:inherit;
-  font-size:1rem;display:flex;align-items:center;justify-content:center;padding:0}
-body[data-side="right"] #ui-toggle{right:0;border-radius:4px 0 0 4px;border-right:none}
-body[data-side="left"]  #ui-toggle{left:0;border-radius:0 4px 4px 0;border-left:none}
-/* The header's own buttons step aside rather than sitting under it. */
-body[data-side="right"] .hdr-right{padding-right:44px}
-body[data-side="left"]  .hdr-badge{margin-left:40px}
+#ui-toggle{position:fixed;z-index:450;top:3px;width:34px;height:40px;
+  background:transparent;color:rgba(255,255,255,.72);border:none;
+  font-family:inherit;font-size:1.05rem;line-height:1;display:flex;
+  align-items:center;justify-content:center;padding:0}
+body[data-side="right"] #ui-toggle{right:4px}
+body[data-side="left"]  #ui-toggle{left:4px}
+/* With the bar hidden there is nothing behind it, so it takes a quiet surface
+   of its own rather than changing position. */
+body.ui-hidden #ui-toggle{background:var(--panel);color:var(--amber);
+  border:1px solid var(--border);border-radius:6px}
 </style>
 </head>
 <body data-side="right">
@@ -231,7 +249,9 @@ body[data-side="left"]  .hdr-badge{margin-left:40px}
     <button data-v="classic-hc">High contrast</button>
   </div>
 
-  <p class="hint">Settled last round and now fixed: toolbar at the top, grouped
+  <p class="hint">Now carrying treatment A from the look book: header and sim
+  title in one bar, an unboxed toolbar, and the rail reduced to its tab.
+  Also fixed: toolbar at the top, grouped
   as Copy&nbsp;/&nbsp;B&nbsp;/&nbsp;I&nbsp;/&nbsp;Insert&nbsp;/&nbsp;Format&nbsp;/&nbsp;Tools,
   and no auto-hide. The <strong>&#8597;</strong> in the top corner, above the rail,
   hides and shows the header, toolbar and sims rail &mdash; one button that never
@@ -244,8 +264,8 @@ body[data-side="left"]  .hdr-badge{margin-left:40px}
 
   <!-- ══ HEADER ══ -->
   <div id="hdr">
-    <div class="hdr-badge">LCARS</div>
-    <span class="hdr-title">STARBASE 118 WRITING TOOL</span>
+    <div class="hdr-mark"></div>
+    <input type="text" id="doc-title" value="Ghosts in the Drift" aria-label="Sim title">
     <div class="hdr-right">
       <button class="btn btn-s btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg></button>
       <button class="btn btn-s btn-sm"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg></button>
@@ -254,11 +274,6 @@ body[data-side="left"]  .hdr-badge{margin-left:40px}
 
   <!-- ══ TITLE + TOOLBAR ══ -->
   <div id="dh">
-    <div class="dh-r1">
-      <input type="text" id="doc-title" value="Ghosts in the Drift" aria-label="Sim title">
-      <button class="btn btn-s btn-sm" title="Close sim"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
-    </div>
-
     <div class="mob-tb">
       <button class="tbb" onclick="fakeCopy(this)" title="Copy sim"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg></button>
       <button class="tbb" onclick="ec('bold')"><strong>B</strong></button>
@@ -266,6 +281,7 @@ body[data-side="left"]  .hdr-badge{margin-left:40px}
       <button class="tbb tbb-names" onclick="mpanel('ins')">Insert <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
       <button class="tbb tbb-names" onclick="mpanel('fmt')">Format <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
       <button class="tbb tbb-names" onclick="mpanel('tools')">Tools <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+      <button class="tbb" title="Close sim"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
     </div>
 
     <div class="mpanel" id="mp-ins">
