@@ -10,6 +10,9 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-04',
     changes: [
+      'On a phone the app name is back in the bar when no sim is open, and tapping it goes to the Dashboard — the badge does that on a computer, and there was no way home without going through the menu.',
+      'The app menu on a phone now dims the page behind it like the sims panel does, groups its contents under Go To and Appearance, and closes when you tap away.',
+      'Tidier on a phone: the button that hides the controls only appears when a sim is open, the status bar hides itself when there is nothing to report, and the zoom buttons — which are for a mouse — are gone.',
       'Fixed: the SIMS tab on a phone was a blank orange block in the Classic dark theme — its label and arrow were being painted in the same colour as the tab itself.',
       'The menu behind the grid button on a phone is now a proper LCARS panel: readable rows rather than washed-out outlined buttons, the theme choices listed directly instead of behind a hover menu that a touchscreen cannot open, and it closes once you pick something.',
       'The Command Dashboard now fits a phone screen: the statistics sit in a grid rather than running off the side, and each row of the sim tables reads as a block instead of a table too wide to see.',
@@ -2823,7 +2826,7 @@ function renderDashboard() {
           return `<tr>
             <td><span class="dash-link" onclick="openDoc('${d.id}')">${esc(d.title||'Untitled')}</span></td>
             <td data-lbl="Mission" style="color:var(--dim);font-size:0.8rem">${m?esc(m.name):'—'}</td>
-            <td data-lbl="Words" style="color:var(--dim);font-size:0.8rem">${words}</td>
+            <td data-lbl="Words" style="color:var(--dim);font-size:0.8rem">${words||'—'}</td>
             <td data-lbl="Edited" style="color:var(--dim);font-size:0.8rem">${date}</td>
           </tr>`;
         }).join('')}
@@ -9542,6 +9545,7 @@ function mobDrawer(which) {
   const b = document.body;
   b.classList.remove('mob-sims', 'mob-details', 'mob-open');
   if (which) {
+    b.classList.remove('mob-more');
     b.classList.add('mob-' + which, 'mob-open');
     // Hiding the furniture and then opening the drawer left no way back to it.
     mobShowUI();
@@ -9552,6 +9556,15 @@ function mobDrawer(which) {
   if (dt) dt.setAttribute('aria-selected', String(which === 'details'));
   const rt = document.getElementById('mob-rail-tab');
   if (rt) rt.setAttribute('aria-expanded', String(!!which));
+}
+
+// The scrim is shared by the drawer and the app menu, so it closes whichever
+// is up rather than knowing which one asked for it.
+function mobOverlayClose() {
+  mobDrawer(null);
+  document.body.classList.remove('mob-more');
+  const b = document.getElementById('hdr-more');
+  if (b) b.setAttribute('aria-expanded', 'false');
 }
 
 // ── Clearing the furniture. Deliberate, never automatic: anything that moves
@@ -9570,6 +9583,7 @@ function mobShowUI() {
 
 // ── The header's app buttons, folded behind one control ──
 function mobMore() {
+  mobDrawer(null);          // one overlay at a time; they share the scrim
   const on = document.body.classList.toggle('mob-more');
   const b = document.getElementById('hdr-more');
   if (b) b.setAttribute('aria-expanded', String(on));

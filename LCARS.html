@@ -125,9 +125,13 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
   </button>
   <button id="hdr-more" onclick="mobMore()" aria-expanded="false" aria-label="App menu" title="Menu"><svg class="ic" aria-hidden="true"><use href="#i-layout-grid"/></svg></button>
   <div class="hdr-right">
+    <!-- The two group labels are phone-only: on the desktop bar these buttons
+         are a single row and need no headings. -->
+    <span class="hdr-menu-lbl">GO TO</span>
     <button class="btn btn-s btn-sm" id="btn-dash" onclick="goHome()" title="Command Dashboard"><svg class="ic" aria-hidden="true"><use href="#i-hexagon"/></svg> Dashboard</button>
     <button class="btn btn-s btn-sm" id="btn-manifest-toggle" onclick="openManifest()"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg> Characters</button>
     <div class="tsep"></div>
+    <span class="hdr-menu-lbl">APPEARANCE</span>
     <div id="style-picker">
       <button class="btn btn-s btn-sm" id="btn-style" title="Style"
               aria-haspopup="true" aria-expanded="false" onclick="toggleStyleMenu()"><svg class="ic" aria-hidden="true"><use href="#i-palette"/></svg> Style <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
@@ -318,7 +322,7 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
       <span class="mob-rail-label">SIMS</span>
     </button>
   </div>
-  <div id="mob-scrim" onclick="mobDrawer(null)"></div>
+  <div id="mob-scrim" onclick="mobOverlayClose()"></div>
   <!-- One tab strip for both panels: they occupy the same place when open. -->
   <div id="mob-tabs">
     <button id="mob-tab-sims" onclick="mobDrawer('sims')">SIMS</button>

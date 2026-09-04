@@ -1286,7 +1286,7 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
 /* Every piece of phone-only furniture is inert until the media query below
    turns it on. Without this they render as stray controls in the desktop
    header and workspace -- which is exactly what happened first time. */
-#mob-rail,#mob-tabs,#mob-scrim,#mob-ui-toggle,#hdr-more{display:none}
+#mob-rail,#mob-tabs,#mob-scrim,#mob-ui-toggle,#hdr-more,.hdr-menu-lbl{display:none}
 
 /* Touch ergonomics: these two apply at any width, because a finger is a
    finger. 44px is the figure Apple and Google both publish. */
@@ -1308,9 +1308,22 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   /* The hide control is fixed in the top corner, so the bar reserves that
      corner rather than putting a button underneath it. */
   #hdr{height:46px;background:var(--bar,var(--panel));border-bottom:none;
-    overflow:visible;padding:0 40px 0 0;gap:6px}
+    overflow:visible;padding:0;gap:6px}
+  body:has(#dh:not(.hidden)) #hdr{padding-right:40px}
   #hdr::before{content:"";width:8px;align-self:stretch;background:var(--amber);flex-shrink:0}
-  #hdr .hdr-home{display:none}
+  /* With no sim open the bar carries the app's name, and it is the way home --
+     the badge is that button on desktop and there was otherwise no route back
+     to the dashboard except two taps through the menu. A sim's title takes the
+     same space when there is one, and the sim's own close button is the way
+     back from there. */
+  #hdr .hdr-home{display:flex;align-items:center;gap:8px;background:transparent;
+    border:none;padding:0 4px;height:100%;flex-shrink:0}
+  body:has(#dh:not(.hidden)) #hdr .hdr-home{display:none}
+  #hdr .hdr-badge{background:transparent;color:#fff;height:auto;margin:0;padding:0;
+    border-radius:0;font-size:1rem;letter-spacing:3px;gap:8px}
+  :root[data-skin] body #hdr .hdr-badge{color:#fff}
+  #hdr #hdr-mark-plate{margin-right:6px;padding:3px}
+  #hdr #hdr-mark{height:20px}
   #hdr .dh-r1{flex:1;min-width:0;padding:0;gap:6px}
   /* The title's colour is written INLINE by updateTitleColor(), because it
      carries the sim's status -- dim for archived, gold for complete, the
@@ -1320,7 +1333,9 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
      below still covers the case where no sim is open and nothing is inline;
      it is written at skin specificity because
      `:root[data-skin="prime"] body #doc-title` outranks a plain #doc-title. */
-  #hdr{--title-active:#fff;--dim:rgba(255,255,255,.55)}
+  /* Scoped to the title row, NOT to #hdr: on the header these tokens leaked
+     into the app menu that hangs off it, and its labels went white on white. */
+  #hdr .dh-r1{--title-active:#fff;--dim:rgba(255,255,255,.55)}
   :root[data-skin] body #hdr #doc-title,#hdr #doc-title{color:#fff;font-size:16px;font-weight:600}
   :root[data-skin] body #hdr #doc-title::placeholder{color:rgba(255,255,255,.5)}
   #hdr #btn-close-doc{background:transparent;border:none;color:rgba(255,255,255,.72)}
@@ -1359,6 +1374,9 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   :root[data-skin="prime"] body #hdr .hdr-right .btn-p{color:var(--on-ac)}
   #hdr .hdr-right .btn-p .ic{color:inherit}
   #hdr .hdr-right .tsep{display:block;width:auto;height:1px;background:var(--border);margin:5px 8px}
+  /* Style and the four theme rows are one set, not five peers of Settings. */
+  .hdr-menu-lbl{display:block;color:var(--dim);font-size:0.62rem;letter-spacing:2px;
+    font-weight:700;padding:6px 12px 3px}
   #hdr .hdr-right #style-picker,#hdr .hdr-right .theme-picker{display:block;width:100%}
   /* Hover cannot open a menu on a touch screen. The theme options become rows
      in the sheet, and their trigger button -- an icon with no label -- goes. */
@@ -1403,6 +1421,12 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
 
   #ec{padding:14px 14px 20px;-webkit-overflow-scrolling:touch}
   #editor{max-width:none}
+
+  /* The status bar costs a band of the screen. Its word count is worth having
+     while writing; the zoom stepper is a mouse control on a device that
+     pinches, and with no sim open the bar reads "No sim open, 0 words". */
+  #sb .zc{display:none}
+  body:not(:has(#dh:not(.hidden))) #sb{display:none}
 
   /* The sim title row lives in the header on a phone, so it lost the one thing
      that used to hide it: being inside #dh, which is .hidden with no sim open.
@@ -1470,7 +1494,7 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   #mob-tabs button[aria-selected="true"]{color:var(--amber);border-bottom-color:var(--amber)}
   #mob-tab-close{flex:0 0 46px}
   #mob-scrim{display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.5)}
-  body.mob-open #mob-scrim{display:block}
+  body.mob-open #mob-scrim,body.mob-more #mob-scrim{display:block}
 
   /* The rail is the desktop collapsed sidebar at thumb scale. It takes layout
      space, so nothing it owns ever covers the writing. The tab is the only
@@ -1495,11 +1519,13 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   body.mob-open #mob-rail-tab{visibility:hidden}
 
   /* ── Clearing the furniture for writing ── */
+  /* Only offered with a sim open: there is no toolbar to clear on the
+     dashboard, and the corner is better given back to the bar. */
   #mob-ui-toggle{display:none;position:fixed;z-index:450;top:3px;right:4px;
     width:34px;height:40px;background:transparent;color:rgba(255,255,255,.72);
     border:none;font-family:inherit;font-size:1.05rem;line-height:1;
     align-items:center;justify-content:center;padding:0}
-  body.mob-ws #mob-ui-toggle{display:flex}
+  body.mob-ws:has(#dh:not(.hidden)) #mob-ui-toggle{display:flex}
   body.mob-hide #hdr,body.mob-hide #dh,body.mob-hide #mob-rail{display:none}
   /* With the bar gone there is nothing behind it, so it takes a quiet surface
      of its own rather than moving. */
