@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-04',
     changes: [
+      'The menu behind the grid button on a phone is now a proper LCARS panel: readable rows rather than washed-out outlined buttons, the theme choices listed directly instead of behind a hover menu that a touchscreen cannot open, and it closes once you pick something.',
       'The Command Dashboard now fits a phone screen: the statistics sit in a grid rather than running off the side, and each row of the sim tables reads as a block instead of a table too wide to see.',
       'The writing screen now works properly on a phone. The header and the sim title share one bar, the toolbar groups its buttons under Insert, Format and Tools so they all fit, and the sims list and sim details open together as one panel from a tab on the right-hand edge.',
       'A new button in the top corner of a phone screen hides the header and the toolbar so a sim has the whole screen, and brings them back from the same place.',
@@ -9583,6 +9584,19 @@ function mobInit() {
   // Choosing something from the tree is the end of the drawer's job.
   const tree = document.getElementById('nav-tree');
   if (tree) tree.addEventListener('click', () => { if (isMobileLayout()) mobDrawer(null); });
+
+  // Choosing something from the menu is the end of its job. The style picker
+  // is the exception: its own panel opens inside the sheet, so closing the
+  // sheet on that tap would take the panel with it.
+  const menu = document.querySelector('#hdr .hdr-right');
+  if (menu) menu.addEventListener('click', e => {
+    if (!isMobileLayout()) return;
+    if (e.target.closest('#btn-style') || e.target.closest('#style-menu')) return;
+    if (!e.target.closest('button')) return;
+    document.body.classList.remove('mob-more');
+    const b = document.getElementById('hdr-more');
+    if (b) b.setAttribute('aria-expanded', 'false');
+  });
 
   // Tapping the sim closes whichever overlay is open, the way tapping the page
   // closes a menu everywhere else.

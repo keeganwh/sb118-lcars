@@ -1333,19 +1333,42 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
     background:transparent;border:none;color:rgba(255,255,255,.72);
     width:38px;height:44px;flex-shrink:0;padding:0}
   #hdr-more .ic{width:19px;height:19px}
+  /* The app menu is a sheet of LCARS rows, not the desktop's pill buttons in
+     a box. Written at skin specificity throughout: Delta Prime restyles .btn
+     and .btn-s, and the first attempt inherited its outlined-pill look and
+     --dim text, which read as a list of disabled controls. */
   #hdr .hdr-right{position:absolute;top:46px;right:0;z-index:520;
-    display:none;flex-direction:column;align-items:stretch;gap:4px;padding:8px;
-    background:var(--panel);border:1px solid var(--border);border-radius:0 0 0 10px;
-    box-shadow:0 10px 30px rgba(0,0,0,.45);min-width:200px;max-width:82vw}
+    display:none;flex-direction:column;align-items:stretch;gap:1px;padding:6px;
+    background:var(--panel);border:1px solid var(--border);
+    border-top:3px solid var(--amber);border-right:none;border-radius:0 0 0 16px;
+    box-shadow:0 14px 34px rgba(0,0,0,.4);width:min(270px,86vw);
+    max-height:calc(100dvh - 56px);overflow-y:auto}
   body.mob-more #hdr .hdr-right{display:flex}
-  #hdr .hdr-right .btn{justify-content:flex-start;text-align:left;padding:10px 12px;font-size:0.87rem}
-  #hdr .hdr-right .tsep{display:none}
-  #hdr .hdr-right #style-picker,#hdr .hdr-right .theme-picker{display:block}
-  #hdr .hdr-right #style-picker .btn,#hdr .hdr-right .theme-picker .btn{width:100%}
-  /* A hover-opened dropdown is unreachable on touch; show it inline instead. */
-  .theme-picker .theme-dropdown{position:static;display:flex;box-shadow:none;
-    border:none;background:transparent;padding:0;min-width:0}
-  .theme-opt{padding:10px 14px;font-size:0.83rem}
+  :root[data-skin] body #hdr .hdr-right .btn,#hdr .hdr-right .btn,
+  :root[data-skin] body #hdr .hdr-right .theme-opt,#hdr .hdr-right .theme-opt{
+    display:flex;align-items:center;gap:10px;width:100%;
+    justify-content:flex-start;text-align:left;
+    background:transparent;border:none;border-radius:8px;
+    color:var(--text);font-family:inherit;font-size:0.9rem;font-weight:600;
+    letter-spacing:.3px;padding:12px 12px;min-height:44px}
+  #hdr .hdr-right .btn .ic,#hdr .hdr-right .theme-opt .ic{
+    width:18px;height:18px;color:var(--amber);flex-shrink:0}
+  /* The active view keeps the one accent fill, as it does on desktop. */
+  :root[data-skin] body #hdr .hdr-right .btn-p,#hdr .hdr-right .btn-p{
+    background:var(--amber);color:var(--panel-hdr-tx)}
+  :root[data-skin="prime"] body #hdr .hdr-right .btn-p{color:var(--on-ac)}
+  #hdr .hdr-right .btn-p .ic{color:inherit}
+  #hdr .hdr-right .tsep{display:block;width:auto;height:1px;background:var(--border);margin:5px 8px}
+  #hdr .hdr-right #style-picker,#hdr .hdr-right .theme-picker{display:block;width:100%}
+  /* Hover cannot open a menu on a touch screen. The theme options become rows
+     in the sheet, and their trigger button -- an icon with no label -- goes. */
+  #hdr .hdr-right #btn-theme{display:none}
+  #hdr .theme-dropdown{position:static;display:flex;flex-direction:column;
+    background:transparent;border:none;box-shadow:none;padding:0;min-width:0}
+  /* The style picker keeps its button and opens in place rather than as a
+     268px panel hanging off the side of the screen. */
+  #hdr .hdr-right #style-menu{position:static;min-width:0;width:100%;
+    margin-top:4px;padding:10px;border-radius:10px;gap:10px}
 
   /* ── Toolbar: one quiet row, nothing boxed. The grouping into Copy, Bold,
      Italic, Insert, Format, Tools is done in markup by mobSyncChrome(). ── */
