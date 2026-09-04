@@ -139,6 +139,55 @@ body{background:var(--bg);color:var(--text);padding:0 0 60px}
 .c-tab .ic{width:14px;height:14px;stroke-width:2.8}
 .c-stripe{position:absolute;right:0;top:0;bottom:0;width:3px;background:var(--amber);opacity:.5}
 
+
+/* ════ A's tab, four ways to say what it opens ═════════════════════════════
+   The chevron alone communicates "this opens" but not "opens what". Each
+   variant below keeps A's language — one filled accent shape, nothing else
+   outlined — and adds the missing noun differently. */
+.mini{height:190px;border:1px solid var(--border);border-radius:10px;overflow:hidden;
+  display:flex;flex-direction:column;background:var(--bg);margin-bottom:6px}
+.mini .body-txt{font-size:11pt}
+.opt{padding:16px 14px 0}
+.opt h3{font-size:0.9rem;color:var(--text);margin-bottom:3px;font-weight:600}
+.opt .why{color:var(--dim);font-size:0.8rem;line-height:1.5;margin-bottom:8px;max-width:52ch}
+
+/* 1 — word set vertically under the chevron: no extra width, but the word is
+       rotated, which costs a beat to read. */
+.tab-word{width:26px;height:86px;background:var(--amber);color:var(--panel-hdr-tx);
+  border:none;border-radius:8px 0 0 8px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:5px;padding:0;
+  font-family:inherit;font-weight:700;font-size:0.6rem;letter-spacing:1.5px}
+.tab-word .rt{writing-mode:vertical-rl;transform:rotate(180deg)}
+.tab-word .ic{width:13px;height:13px;stroke-width:2.6}
+
+/* 2 — an icon instead of a word: reads at a glance in any language, but only
+       once you have learned that this icon means the sims list. */
+.tab-icon{width:26px;height:66px;background:var(--amber);color:var(--panel-hdr-tx);
+  border:none;border-radius:8px 0 0 8px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:6px;padding:0}
+.tab-icon .ic{width:14px;height:14px;stroke-width:2.5}
+
+/* 3 — a wider tab carrying the word the right way up. Unambiguous; costs
+       about 14px of writing width, and is the heaviest shape on the screen. */
+.tab-wide{width:40px;height:62px;background:var(--amber);color:var(--panel-hdr-tx);
+  border:none;border-radius:10px 0 0 10px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:3px;padding:0;
+  font-family:inherit;font-weight:700;font-size:0.58rem;letter-spacing:.5px}
+.tab-wide .ic{width:13px;height:13px;stroke-width:2.6}
+
+/* 4 — the button stays a chevron; the word sits under it as a quiet label on
+       the rail itself. Control and caption are separate objects, so the
+       filled shape stays small. */
+.rail-wide{width:40px}
+.rail-labelled{display:flex;flex-direction:column;align-items:center;gap:8px;
+  padding-top:10px}
+.tab-plain{width:26px;height:44px;background:var(--amber);color:var(--panel-hdr-tx);
+  border:none;border-radius:8px 0 0 8px;display:flex;align-items:center;
+  justify-content:center;padding:0}
+.tab-plain .ic{width:15px;height:15px;stroke-width:2.6}
+.rail-cap{writing-mode:vertical-rl;transform:rotate(180deg);color:var(--dim);
+  font-size:0.6rem;letter-spacing:2px;font-weight:700}
+
 .note{padding:20px 14px 0;color:var(--dim);font-size:0.83rem;line-height:1.55;max-width:52ch}
 .note strong{color:var(--text)}
 </style>
@@ -334,6 +383,127 @@ body{background:var(--bg);color:var(--text);padding:0 0 60px}
       </div>
     </div>
     <div class="c-stripe"></div>
+  </div>
+</div>
+
+
+<div class="case">
+  <h2>A · what the tab should say</h2>
+  <p class="why">A on its own, with four ways of naming what the chevron opens.
+  All keep A's rule: one filled accent shape on the screen, nothing else
+  outlined.</p>
+
+  <div class="opt">
+    <h3>1 · Chevron over the word, set vertically</h3>
+    <p class="why">Costs no writing width. The word is rotated, so it takes a
+    beat to read the first time — but only the first time.</p>
+      <div class="mini">
+        <div class="a-bar">
+          <div class="a-mark"></div>
+          <div class="a-title">Ghosts in the Drift</div>
+          <button class="a-ib"><svg class="ic"><use href="#i-settings"/></svg></button>
+          <button class="a-ib">&#8597;</button>
+        </div>
+        <div class="a-tools">
+          <button class="a-tb"><svg class="ic"><use href="#i-copy"/></svg></button>
+          <button class="a-tb"><strong>B</strong></button>
+          <button class="a-tb"><em>I</em></button>
+          <button class="a-tb">Insert <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+          <button class="a-tb">Format <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+        </div>
+        <div class="a-wrap">
+          <div class="body-txt">
+            <p><strong>((USS Astraeus - Bridge))</strong></p>
+            <p><strong>Lt. Cmdr. Yavin:</strong> ::Leaning over the tactical rail.:: That is not a debris field.</p>
+          </div>
+          <div class="a-rail"><button class="tab-word"><svg class="ic"><use href="#i-chevron-left"/></svg><span class="rt">SIMS</span></button></div>
+        </div>
+      </div>
+  </div>
+
+  <div class="opt">
+    <h3>2 · Chevron over an icon</h3>
+    <p class="why">Reads at a glance and in any language, but the icon has to be
+    learned once — a list glyph does not say <em>sims</em> by itself.</p>
+      <div class="mini">
+        <div class="a-bar">
+          <div class="a-mark"></div>
+          <div class="a-title">Ghosts in the Drift</div>
+          <button class="a-ib"><svg class="ic"><use href="#i-settings"/></svg></button>
+          <button class="a-ib">&#8597;</button>
+        </div>
+        <div class="a-tools">
+          <button class="a-tb"><svg class="ic"><use href="#i-copy"/></svg></button>
+          <button class="a-tb"><strong>B</strong></button>
+          <button class="a-tb"><em>I</em></button>
+          <button class="a-tb">Insert <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+          <button class="a-tb">Format <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+        </div>
+        <div class="a-wrap">
+          <div class="body-txt">
+            <p><strong>((USS Astraeus - Bridge))</strong></p>
+            <p><strong>Lt. Cmdr. Yavin:</strong> ::Leaning over the tactical rail.:: That is not a debris field.</p>
+          </div>
+          <div class="a-rail"><button class="tab-icon"><svg class="ic"><use href="#i-chevron-left"/></svg><svg class="ic"><use href="#i-file-text"/></svg></button></div>
+        </div>
+      </div>
+  </div>
+
+  <div class="opt">
+    <h3>3 · A wider tab, word the right way up</h3>
+    <p class="why">Unambiguous, no learning, no rotation. Costs about 14px of
+    writing width and makes the tab the heaviest object on screen.</p>
+      <div class="mini">
+        <div class="a-bar">
+          <div class="a-mark"></div>
+          <div class="a-title">Ghosts in the Drift</div>
+          <button class="a-ib"><svg class="ic"><use href="#i-settings"/></svg></button>
+          <button class="a-ib">&#8597;</button>
+        </div>
+        <div class="a-tools">
+          <button class="a-tb"><svg class="ic"><use href="#i-copy"/></svg></button>
+          <button class="a-tb"><strong>B</strong></button>
+          <button class="a-tb"><em>I</em></button>
+          <button class="a-tb">Insert <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+          <button class="a-tb">Format <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+        </div>
+        <div class="a-wrap">
+          <div class="body-txt">
+            <p><strong>((USS Astraeus - Bridge))</strong></p>
+            <p><strong>Lt. Cmdr. Yavin:</strong> ::Leaning over the tactical rail.:: That is not a debris field.</p>
+          </div>
+          <div class="a-rail rail-wide"><button class="tab-wide"><svg class="ic"><use href="#i-chevron-left"/></svg><span>SIMS</span></button></div>
+        </div>
+      </div>
+  </div>
+
+  <div class="opt">
+    <h3>4 · Chevron button, quiet label under it</h3>
+    <p class="why">Splits the job: the filled shape stays small and is the
+    control, the word beneath is a caption on the rail rather than part of the
+    button. Reads as label-plus-control instead of a large sticker.</p>
+      <div class="mini">
+        <div class="a-bar">
+          <div class="a-mark"></div>
+          <div class="a-title">Ghosts in the Drift</div>
+          <button class="a-ib"><svg class="ic"><use href="#i-settings"/></svg></button>
+          <button class="a-ib">&#8597;</button>
+        </div>
+        <div class="a-tools">
+          <button class="a-tb"><svg class="ic"><use href="#i-copy"/></svg></button>
+          <button class="a-tb"><strong>B</strong></button>
+          <button class="a-tb"><em>I</em></button>
+          <button class="a-tb">Insert <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+          <button class="a-tb">Format <svg class="ic"><use href="#i-chevron-down"/></svg></button>
+        </div>
+        <div class="a-wrap">
+          <div class="body-txt">
+            <p><strong>((USS Astraeus - Bridge))</strong></p>
+            <p><strong>Lt. Cmdr. Yavin:</strong> ::Leaning over the tactical rail.:: That is not a debris field.</p>
+          </div>
+          <div class="a-rail rail-labelled"><button class="tab-plain"><svg class="ic"><use href="#i-chevron-left"/></svg></button><span class="rail-cap">SIMS</span></div>
+        </div>
+      </div>
   </div>
 </div>
 
