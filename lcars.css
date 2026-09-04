@@ -1477,12 +1477,19 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
      filled shape it needs -- no column drawn behind it. */
   #mob-rail{display:flex;width:26px;flex-shrink:0;align-items:flex-start;
     justify-content:center;padding-top:10px;background:transparent}
+  /* Ink on an amber fill follows .hdr-badge, the app's existing answer: white,
+     black in high contrast, the accent's own ink under Delta Prime. NOT
+     --panel-hdr-tx: in Classic dark that token IS the accent, because there
+     the panel header is dark rather than amber -- which painted amber on
+     amber and left the tab a blank orange block. */
   #mob-rail-tab{width:26px;height:86px;background:var(--amber);
-    color:var(--panel-hdr-tx);border:none;border-radius:8px 0 0 8px;
+    color:#fff;border:none;border-radius:8px 0 0 8px;
     display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:5px;padding:0;font-family:inherit;font-weight:700;font-size:0.6rem;
     letter-spacing:1.5px;cursor:pointer}
   #mob-rail-tab .ic{width:13px;height:13px;stroke-width:2.6}
+  body.hc #mob-rail-tab{color:#000}
+  :root[data-skin="prime"] body #mob-rail-tab{color:var(--on-ac)}
   /* The chevron says it opens; the word says what. */
   .mob-rail-label{writing-mode:vertical-rl;transform:rotate(180deg)}
   body.mob-open #mob-rail-tab{visibility:hidden}

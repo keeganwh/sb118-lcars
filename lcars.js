@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-04',
     changes: [
+      'Fixed: the SIMS tab on a phone was a blank orange block in the Classic dark theme — its label and arrow were being painted in the same colour as the tab itself.',
       'The menu behind the grid button on a phone is now a proper LCARS panel: readable rows rather than washed-out outlined buttons, the theme choices listed directly instead of behind a hover menu that a touchscreen cannot open, and it closes once you pick something.',
       'The Command Dashboard now fits a phone screen: the statistics sit in a grid rather than running off the side, and each row of the sim tables reads as a block instead of a table too wide to see.',
       'The writing screen now works properly on a phone. The header and the sim title share one bar, the toolbar groups its buttons under Insert, Format and Tools so they all fit, and the sims list and sim details open together as one panel from a tab on the right-hand edge.',
