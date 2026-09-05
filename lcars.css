@@ -1509,7 +1509,16 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
      and the drawer can never slide in -- which is exactly what happened when
      the two were written as one rule. */
   #sidebar,#cp,
-  :root[data-skin] body #sidebar,:root[data-skin] body #cp{background:var(--panel)}
+  :root[data-skin] body #sidebar,:root[data-skin] body #cp,
+  /* The Epic vibe frosts these two: 55% translucent over backdrop-filter
+     (lcars.css:765). That is right on a desktop, where they sit over the
+     app's own lit field -- but as a drawer the thing behind them is the 50%
+     black scrim, so the blur samples THAT and the panel reads dark grey
+     instead of white. Both the translucency and the blur have to go here.
+     Two attribute selectors, because [data-skin][data-vibe] #sidebar
+     outranks [data-skin] body #sidebar -- three classes to two. */
+  :root[data-skin][data-vibe] body #sidebar,
+  :root[data-skin][data-vibe] body #cp{background:var(--panel);backdrop-filter:none}
   body.mob-sims #sidebar,body.mob-details #cp{transform:none}
   /* The desktop collapse is a different idea and must not reach the drawer. */
   #sidebar.collapsed .sb-top,#cp.collapsed .cp-top{padding:0 14px;justify-content:flex-start}
