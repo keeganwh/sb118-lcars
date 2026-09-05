@@ -10,6 +10,9 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-04',
     changes: [
+      'Fixed: on the Character Manifest, tapping Characters to open the list zoomed the page in on an iPhone — the filter box it puts the cursor into was below the size iOS zooms at.',
+      'The sim toolbar on a phone now reads Copy, Bold, Italic, Format, Insert, Tools, and the Tools panel is split into Auto Format, Visual Aids and View rather than nine toggles in one block.',
+      'The phone menu no longer repeats Dark, Light and High Contrast: Style covers them with finer control, and Settings has them for the classic look.',
       'On a phone the app name is back in the bar when no sim is open, and tapping it goes to the Dashboard — the badge does that on a computer, and there was no way home without going through the menu.',
       'The app menu on a phone now dims the page behind it like the sims panel does, groups its contents under Go To and Appearance, and closes when you tap away.',
       'Tidier on a phone: the button that hides the controls only appears when a sim is open, the status bar hides itself when there is nothing to report, and the zoom buttons — which are for a mouse — are gone.',
@@ -9495,8 +9498,31 @@ let _mobApplied = null;   // last layout applied, so the moves run once per chan
 
 // The buttons that move into the phone toolbar's two extra groups, in the
 // order they should read there.
-const MOB_FMT_IDS   = ['tbb-cf','tbb-s','tbb-link','tbb-ind','tbb-outd','tbb-ul'];
-const MOB_TOOLS_IDS = ['tbb-src','tbb-pil','tbb-bn','tbb-bl','tbb-it','tbb-oi','tbb-am','tbb-cm','tbb-th'];
+const MOB_FMT_IDS = ['tbb-cf','tbb-s','tbb-link','tbb-ind','tbb-outd','tbb-ul'];
+// Several of these are icon-only in the desktop toolbar and lean on their
+// tooltip, which a touchscreen never shows. In the panel there is room for the
+// word, so one is added on the way in and taken off on the way back.
+const MOB_BTN_LABELS = {
+  'tbb-cf':'Clear formatting', 'tbb-s':'Strikethrough', 'tbb-link':'Link',
+  'tbb-ind':'Indent', 'tbb-outd':'Outdent', 'tbb-ul':'Bullet list',
+  'tbb-src':'HTML source', 'tbb-pil':'Paragraph marks',
+};
+function _mobLabel(el) {
+  const text = MOB_BTN_LABELS[el.id];
+  if (!text || el.querySelector('.tb-btn-lbl')) return;
+  const s = document.createElement('span');
+  s.className = 'tb-btn-lbl';
+  s.textContent = text;
+  el.appendChild(s);
+}
+// Tools holds three unrelated sets, so it is built as three labelled rows
+// rather than nine toggles in one wrap.
+const MOB_TOOLS_GROUPS = [
+  ['AUTO FORMAT', ['tbb-bn','tbb-bl','tbb-it','tbb-oi']],
+  ['VISUAL AIDS', ['tbb-am','tbb-cm','tbb-th']],
+  ['VIEW',        ['tbb-src','tbb-pil']],
+];
+const MOB_TOOLS_IDS = MOB_TOOLS_GROUPS.flatMap(g => g[1]);
 
 function _mobRemember(el) {
   if (!el || _mobHome.has(el)) return;
@@ -9526,10 +9552,29 @@ function mobSyncChrome() {
     if (titleRow && hdr && more) hdr.insertBefore(titleRow, more);
     const fmt = document.getElementById('tb-dd-fmt');
     const tools = document.getElementById('tb-dd-tools');
-    if (fmt)   MOB_FMT_IDS.forEach(id => { const el = document.getElementById(id); if (el) fmt.appendChild(el); });
-    if (tools) MOB_TOOLS_IDS.forEach(id => { const el = document.getElementById(id); if (el) tools.appendChild(el); });
+    if (fmt) MOB_FMT_IDS.forEach(id => {
+      const el = document.getElementById(id); if (!el) return;
+      _mobLabel(el); fmt.appendChild(el);
+    });
+    if (tools) {
+      tools.querySelectorAll('.tb-dd-lbl').forEach(l => l.remove());
+      MOB_TOOLS_GROUPS.forEach(([label, ids]) => {
+        const l = document.createElement('span');
+        l.className = 'tb-dd-lbl';
+        l.textContent = label;
+        tools.appendChild(l);
+        ids.forEach(id => {
+          const el = document.getElementById(id); if (!el) return;
+          _mobLabel(el); tools.appendChild(el);
+        });
+      });
+    }
   } else {
     nodes.forEach(_mobRestore);
+    // The group labels belong to the phone panel only, and the buttons have
+    // just gone home, so nothing is left for them to head.
+    document.querySelectorAll('#tb-dd-tools .tb-dd-lbl').forEach(l => l.remove());
+    document.querySelectorAll('.tb-btn-lbl').forEach(l => l.remove());
     // A drawer left open, or the furniture left hidden, would be invisible
     // state once the desktop layout comes back.
     mobDrawer(null);
