@@ -6,7 +6,7 @@ backend:vercel-serverless
 lib:none
 ```
 
-_The whole stack at a glance. Current app version: **4.24**._
+_The whole stack at a glance. Current app version: **4.25**._
 
 ## The short version
 

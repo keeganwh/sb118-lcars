@@ -11,7 +11,7 @@ For more depth: `TECH_STACK.md` (stack), `ROADMAP.md` (what's next), `USER_PROTO
 
 - **Vanilla web app, no build step, no npm, no framework.** The app is `LCARS.html` (~480 lines of markup), `lcars.css` (~1,580) and `lcars.js` (~9,700). `lcars-render.js` holds the sim render pass and is loaded by the app *and* by `share.html`, the standalone read-only viewer (with its own `share.js`) served at `/s/<token>`.
 - **Vercel** hosts it; **Supabase** holds accounts and synced data. Both are reached over plain `fetch` — no SDK, no CDN script.
-- Current app version: **4.24**. `APP_VERSION` and the `VERSIONS` array are at the top of `lcars.js`, right after `const SKEY` (line ~5).
+- Current app version: **4.25**. `APP_VERSION` and the `VERSIONS` array are at the top of `lcars.js`, right after `const SKEY` (line ~5).
 
 ## Architecture in brief
 

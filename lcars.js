@@ -4,27 +4,8 @@
 const ZWS = String.fromCharCode(0x200B); // zero-width space used as caret anchor after marker spans
 const SKEY = 'lcars_v1';
 
-const APP_VERSION = '4.24';
+const APP_VERSION = '4.25';
 const VERSIONS = [
-  {
-    version: 'pending',
-    date: '2026-09-04',
-    changes: [
-      'Fixed: the sims panel on a phone looked greyed out, as though it were behind something. On the Epic mood it was frosted glass, which is right beside the editor on a computer but on a phone meant it was showing the dimmed page through itself; it was also using the recessed colour it wears as a sidebar rather than the colour of a panel sitting on top.',
-      'Fixed: on the Character Manifest, tapping Characters to open the list zoomed the page in on an iPhone — the filter box it puts the cursor into was below the size iOS zooms at.',
-      'The sim toolbar on a phone now reads Copy, Bold, Italic, Format, Insert, Tools. The Tools panel is split into Auto Format, Visual Aids and View rather than nine toggles in one block, and the Format panel pairs its buttons a row at a time — Indent and Outdent side by side, where they belong.',
-      'The phone menu no longer repeats Dark, Light and High Contrast: Style covers them with finer control, and Settings has them for the classic look.',
-      'On a phone the app name is back in the bar when no sim is open, and tapping it goes to the Dashboard — the badge does that on a computer, and there was no way home without going through the menu.',
-      'The app menu on a phone now dims the page behind it like the sims panel does, groups its contents under Go To and Appearance, and closes when you tap away.',
-      'Tidier on a phone: the button that hides the controls only appears when a sim is open, the status bar hides itself when there is nothing to report, and the zoom buttons — which are for a mouse — are gone.',
-      'Fixed: the SIMS tab on a phone was a blank orange block in the Classic dark theme — its label and arrow were being painted in the same colour as the tab itself.',
-      'The menu behind the grid button on a phone is now a proper LCARS panel: readable rows rather than washed-out outlined buttons, the theme choices listed directly instead of behind a hover menu that a touchscreen cannot open, and it closes once you pick something.',
-      'The Command Dashboard now fits a phone screen: the statistics sit in a grid rather than running off the side, and each row of the sim tables reads as a block instead of a table too wide to see.',
-      'The writing screen now works properly on a phone. The header and the sim title share one bar, the toolbar groups its buttons under Insert, Format and Tools so they all fit, and the sims list and sim details open together as one panel from a tab on the right-hand edge.',
-      'A new button in the top corner of a phone screen hides the header and the toolbar so a sim has the whole screen, and brings them back from the same place.',
-      'Tapping a text box on an iPhone no longer zooms the page in.',
-    ],
-  },
   {
     version: '4.0',
     date: '2026-06-29',
@@ -316,9 +297,22 @@ const VERSIONS = [
     ],
   },
   {
-    version: 'pending',
-    date: '2026-08-24',
+    version: '4.25',
+    date: '2026-09-05',
     changes: [
+      'The writing screen now works properly on a phone. The header and the sim title share one bar, the toolbar groups its buttons under Insert, Format and Tools so they all fit, and the sims list and sim details open together as one panel from a tab on the right-hand edge.',
+      'The Command Dashboard now fits a phone screen: the statistics sit in a grid rather than running off the side, and each row of the sim tables reads as a block instead of a table too wide to see.',
+      'A new button in the top corner of a phone screen hides the header and the toolbar so a sim has the whole screen, and brings them back from the same place.',
+      'The sim toolbar on a phone now reads Copy, Bold, Italic, Format, Insert, Tools. The Tools panel is split into Auto Format, Visual Aids and View rather than nine toggles in one block, and the Format panel pairs its buttons a row at a time — Indent and Outdent side by side, where they belong.',
+      'The menu behind the grid button on a phone is now a proper LCARS panel: readable rows rather than washed-out outlined buttons, the theme choices listed directly instead of behind a hover menu that a touchscreen cannot open, and it closes once you pick something.',
+      'The app menu on a phone now dims the page behind it like the sims panel does, groups its contents under Go To and Appearance, and closes when you tap away.',
+      'On a phone the app name is back in the bar when no sim is open, and tapping it goes to the Dashboard — the badge does that on a computer, and there was no way home without going through the menu.',
+      'The phone menu no longer repeats Dark, Light and High Contrast: Style covers them with finer control, and Settings has them for the classic look.',
+      'Tidier on a phone: the button that hides the controls only appears when a sim is open, the status bar hides itself when there is nothing to report, and the zoom buttons — which are for a mouse — are gone.',
+      'Tapping a text box on an iPhone no longer zooms the page in.',
+      'Fixed: on the Character Manifest, tapping Characters to open the list zoomed the page in on an iPhone — the filter box it puts the cursor into was below the size iOS zooms at.',
+      'Fixed: the SIMS tab on a phone was a blank orange block in the Classic dark theme — its label and arrow were being painted in the same colour as the tab itself.',
+      'Fixed: the sims panel on a phone looked greyed out, as though it were behind something. On the Epic mood it was frosted glass, which is right beside the editor on a computer but on a phone meant it was showing the dimmed page through itself; it was also using the recessed colour it wears as a sidebar rather than the colour of a panel sitting on top.',
       'Fixed: aliases you had set up were not picked up reliably. Only an alias containing a space or a full stop was ever really registered, so a one-word or lowercase alias, or one starting with punctuation, still went bold but was missed when LCARS worked out who was in a sim, which colour to give them and whether the sim was yours. Every alias now counts, matched whatever the capitalisation, and a longer alias wins over a shorter one inside it',
       'Changed: the Character Manifest is now called Characters, everywhere it is named, and lives at /characters. Old links and bookmarks to /manifest still work and quietly move you to the new address',
       'Removed: Service History and Ribbons. SB118 HQ already keeps your character record and your ribbons, and holding a second copy here meant two places to update and two places to disagree. Anything you had entered is cleared from LCARS on this update — your record on the wiki is untouched',
