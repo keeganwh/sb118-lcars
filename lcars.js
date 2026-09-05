@@ -7,6 +7,25 @@ const SKEY = 'lcars_v1';
 const APP_VERSION = '4.24';
 const VERSIONS = [
   {
+    version: 'pending',
+    date: '2026-09-04',
+    changes: [
+      'Fixed: the sims panel on a phone looked greyed out, as though it were behind something. On the Epic mood it was frosted glass, which is right beside the editor on a computer but on a phone meant it was showing the dimmed page through itself; it was also using the recessed colour it wears as a sidebar rather than the colour of a panel sitting on top.',
+      'Fixed: on the Character Manifest, tapping Characters to open the list zoomed the page in on an iPhone — the filter box it puts the cursor into was below the size iOS zooms at.',
+      'The sim toolbar on a phone now reads Copy, Bold, Italic, Format, Insert, Tools. The Tools panel is split into Auto Format, Visual Aids and View rather than nine toggles in one block, and the Format panel pairs its buttons a row at a time — Indent and Outdent side by side, where they belong.',
+      'The phone menu no longer repeats Dark, Light and High Contrast: Style covers them with finer control, and Settings has them for the classic look.',
+      'On a phone the app name is back in the bar when no sim is open, and tapping it goes to the Dashboard — the badge does that on a computer, and there was no way home without going through the menu.',
+      'The app menu on a phone now dims the page behind it like the sims panel does, groups its contents under Go To and Appearance, and closes when you tap away.',
+      'Tidier on a phone: the button that hides the controls only appears when a sim is open, the status bar hides itself when there is nothing to report, and the zoom buttons — which are for a mouse — are gone.',
+      'Fixed: the SIMS tab on a phone was a blank orange block in the Classic dark theme — its label and arrow were being painted in the same colour as the tab itself.',
+      'The menu behind the grid button on a phone is now a proper LCARS panel: readable rows rather than washed-out outlined buttons, the theme choices listed directly instead of behind a hover menu that a touchscreen cannot open, and it closes once you pick something.',
+      'The Command Dashboard now fits a phone screen: the statistics sit in a grid rather than running off the side, and each row of the sim tables reads as a block instead of a table too wide to see.',
+      'The writing screen now works properly on a phone. The header and the sim title share one bar, the toolbar groups its buttons under Insert, Format and Tools so they all fit, and the sims list and sim details open together as one panel from a tab on the right-hand edge.',
+      'A new button in the top corner of a phone screen hides the header and the toolbar so a sim has the whole screen, and brings them back from the same place.',
+      'Tapping a text box on an iPhone no longer zooms the page in.',
+    ],
+  },
+  {
     version: '4.0',
     date: '2026-06-29',
     changes: [
@@ -2810,9 +2829,9 @@ function renderDashboard() {
           const date = d.updatedAt ? new Date(d.updatedAt).toLocaleDateString() : '—';
           return `<tr>
             <td><span class="dash-link" onclick="openDoc('${d.id}')">${esc(d.title||'Untitled')}</span></td>
-            <td style="color:var(--dim);font-size:0.8rem">${m?esc(m.name):'—'}</td>
-            <td style="color:var(--dim);font-size:0.8rem">${words}</td>
-            <td style="color:var(--dim);font-size:0.8rem">${date}</td>
+            <td data-lbl="Mission" style="color:var(--dim);font-size:0.8rem">${m?esc(m.name):'—'}</td>
+            <td data-lbl="Words" style="color:var(--dim);font-size:0.8rem">${words||'—'}</td>
+            <td data-lbl="Edited" style="color:var(--dim);font-size:0.8rem">${date}</td>
           </tr>`;
         }).join('')}
       </table>` : ''}
@@ -2824,8 +2843,8 @@ function renderDashboard() {
           const m = d.missionId ? S.missions[d.missionId] : null;
           return `<tr>
             <td><span class="dash-link" onclick="openDoc('${d.id}')">${esc(d.title||'Untitled')}</span></td>
-            <td style="color:var(--dim);font-size:0.8rem">${m?esc(m.name):'—'}</td>
-            <td style="color:var(--dim);font-size:0.8rem">${d.postedAt||'—'}</td>
+            <td data-lbl="Mission" style="color:var(--dim);font-size:0.8rem">${m?esc(m.name):'—'}</td>
+            <td data-lbl="Posted" style="color:var(--dim);font-size:0.8rem">${d.postedAt||'—'}</td>
           </tr>`;
         }).join('')}
       </table>` : ''}
@@ -6471,6 +6490,10 @@ function showView(view, fromRoute) {
   });
 
   _routeView = view;
+  // The phone's rail and hide control belong to the workspace only -- they
+  // would otherwise sit over Settings and the Manifest, which have their own.
+  document.body.classList.toggle('mob-ws', view === 'dash');
+  if (typeof mobDrawer === 'function') mobDrawer(null);
   updateViewButtons();
   if (!fromRoute) syncRoute(view);
   if (view === 'settings') { const sc = document.getElementById('set-scroll'); if (sc) sc.scrollTop = 0; }
@@ -9448,3 +9471,210 @@ function applyPanelStates() {
     cpT.innerHTML = ic(S.settings.charsOpen === false ? 'chevron-left' : 'chevron-right');
   }
 }
+
+// ================================================================
+// MOBILE WORKSPACE
+// ----------------------------------------------------------------
+// The workspace is a desktop three-column layout. On a phone it becomes: one
+// bar (header + sim title), one quiet toolbar, the editor, and a rail on the
+// right that opens both sidebars as a single tabbed drawer.
+//
+// Nothing here is a second definition of an existing control. The sim title
+// row and six toolbar buttons are MOVED between their desktop homes and their
+// phone homes, so every button keeps its id, its handler and its on/off state,
+// and there is no second copy to forget to update. mobSyncChrome() records
+// where each node came from the first time it runs, and puts it back exactly
+// there above the breakpoint.
+//
+// Everything is width-based on purpose: "Request Desktop Website" is how a
+// tablet opts out of this layout, and it works by reporting a wide viewport.
+// See memory/session_lcars_2026-09-mobile-brief.md.
+// ================================================================
+
+const MOB_Q = window.matchMedia('(max-width:820px)');
+function isMobileLayout() { return MOB_Q.matches; }
+
+let _mobHome = null;      // node -> {parent, next}, captured once
+let _mobApplied = null;   // last layout applied, so the moves run once per change
+
+// The buttons that move into the phone toolbar's two extra groups, in the
+// order they should read there.
+// Ordered for the two-column panel, so each ROW holds things that belong
+// together: the two inline marks, then indent and outdent as the pair they
+// are, then the two that change a whole line. In the old order the grid split
+// Indent and Outdent across two rows.
+const MOB_FMT_IDS = ['tbb-s','tbb-link','tbb-ind','tbb-outd','tbb-ul','tbb-cf'];
+// Several of these are icon-only in the desktop toolbar and lean on their
+// tooltip, which a touchscreen never shows. In the panel there is room for the
+// word, so one is added on the way in and taken off on the way back.
+const MOB_BTN_LABELS = {
+  'tbb-cf':'Clear formatting', 'tbb-s':'Strikethrough', 'tbb-link':'Link',
+  'tbb-ind':'Indent', 'tbb-outd':'Outdent', 'tbb-ul':'Bullet list',
+  'tbb-src':'HTML source', 'tbb-pil':'Paragraph marks',
+};
+function _mobLabel(el) {
+  const text = MOB_BTN_LABELS[el.id];
+  if (!text || el.querySelector('.tb-btn-lbl')) return;
+  const s = document.createElement('span');
+  s.className = 'tb-btn-lbl';
+  s.textContent = text;
+  el.appendChild(s);
+}
+// Tools holds three unrelated sets, so it is built as three labelled rows
+// rather than nine toggles in one wrap.
+const MOB_TOOLS_GROUPS = [
+  ['AUTO FORMAT', ['tbb-bn','tbb-bl','tbb-it','tbb-oi']],
+  ['VISUAL AIDS', ['tbb-am','tbb-cm','tbb-th']],
+  ['VIEW',        ['tbb-src','tbb-pil']],
+];
+const MOB_TOOLS_IDS = MOB_TOOLS_GROUPS.flatMap(g => g[1]);
+
+function _mobRemember(el) {
+  if (!el || _mobHome.has(el)) return;
+  _mobHome.set(el, { parent: el.parentNode, next: el.nextSibling });
+}
+function _mobRestore(el) {
+  const home = el && _mobHome.get(el);
+  if (!home || !home.parent) return;
+  home.parent.insertBefore(el, home.next);
+}
+
+// Move the sim title row and the grouped buttons to wherever this width wants
+// them. Cheap and idempotent, but gated so it only runs on an actual change.
+function mobSyncChrome() {
+  const want = isMobileLayout() ? 'mobile' : 'desktop';
+  if (_mobApplied === want) return;
+  if (!_mobHome) _mobHome = new Map();
+
+  const titleRow = document.querySelector('#dh .dh-r1') || document.querySelector('#hdr .dh-r1');
+  const nodes = [titleRow].concat(
+    MOB_FMT_IDS.concat(MOB_TOOLS_IDS).map(id => document.getElementById(id)));
+  nodes.forEach(_mobRemember);
+
+  if (want === 'mobile') {
+    const hdr = document.getElementById('hdr');
+    const more = document.getElementById('hdr-more');
+    if (titleRow && hdr && more) hdr.insertBefore(titleRow, more);
+    const fmt = document.getElementById('tb-dd-fmt');
+    const tools = document.getElementById('tb-dd-tools');
+    if (fmt) MOB_FMT_IDS.forEach(id => {
+      const el = document.getElementById(id); if (!el) return;
+      _mobLabel(el); fmt.appendChild(el);
+    });
+    if (tools) {
+      tools.querySelectorAll('.tb-dd-lbl').forEach(l => l.remove());
+      MOB_TOOLS_GROUPS.forEach(([label, ids]) => {
+        const l = document.createElement('span');
+        l.className = 'tb-dd-lbl';
+        l.textContent = label;
+        tools.appendChild(l);
+        ids.forEach(id => {
+          const el = document.getElementById(id); if (!el) return;
+          _mobLabel(el); tools.appendChild(el);
+        });
+      });
+    }
+  } else {
+    nodes.forEach(_mobRestore);
+    // The group labels belong to the phone panel only, and the buttons have
+    // just gone home, so nothing is left for them to head.
+    document.querySelectorAll('#tb-dd-tools .tb-dd-lbl').forEach(l => l.remove());
+    document.querySelectorAll('.tb-btn-lbl').forEach(l => l.remove());
+    // A drawer left open, or the furniture left hidden, would be invisible
+    // state once the desktop layout comes back.
+    mobDrawer(null);
+    mobShowUI();
+    document.body.classList.remove('mob-more');
+  }
+  _mobApplied = want;
+}
+
+// ── The drawer. 'sims' and 'details' are the same panel position, so one tab
+//    strip serves both and only the class on <body> changes. ──
+function mobDrawer(which) {
+  const b = document.body;
+  b.classList.remove('mob-sims', 'mob-details', 'mob-open');
+  if (which) {
+    b.classList.remove('mob-more');
+    b.classList.add('mob-' + which, 'mob-open');
+    // Hiding the furniture and then opening the drawer left no way back to it.
+    mobShowUI();
+  }
+  const st = document.getElementById('mob-tab-sims');
+  const dt = document.getElementById('mob-tab-details');
+  if (st) st.setAttribute('aria-selected', String(which === 'sims'));
+  if (dt) dt.setAttribute('aria-selected', String(which === 'details'));
+  const rt = document.getElementById('mob-rail-tab');
+  if (rt) rt.setAttribute('aria-expanded', String(!!which));
+}
+
+// The scrim is shared by the drawer and the app menu, so it closes whichever
+// is up rather than knowing which one asked for it.
+function mobOverlayClose() {
+  mobDrawer(null);
+  document.body.classList.remove('mob-more');
+  const b = document.getElementById('hdr-more');
+  if (b) b.setAttribute('aria-expanded', 'false');
+}
+
+// ── Clearing the furniture. Deliberate, never automatic: anything that moves
+//    while a thumb is mid-sentence is a liability. ──
+function mobToggleUI() {
+  const hidden = document.body.classList.toggle('mob-hide');
+  const t = document.getElementById('mob-ui-toggle');
+  if (t) t.setAttribute('aria-pressed', String(hidden));
+  if (hidden) { mobDrawer(null); document.body.classList.remove('mob-more'); }
+}
+function mobShowUI() {
+  document.body.classList.remove('mob-hide');
+  const t = document.getElementById('mob-ui-toggle');
+  if (t) t.setAttribute('aria-pressed', 'false');
+}
+
+// ── The header's app buttons, folded behind one control ──
+function mobMore() {
+  mobDrawer(null);          // one overlay at a time; they share the scrim
+  const on = document.body.classList.toggle('mob-more');
+  const b = document.getElementById('hdr-more');
+  if (b) b.setAttribute('aria-expanded', String(on));
+}
+
+function mobInit() {
+  mobSyncChrome();
+  // showView() maintains this, but boot may paint before it first runs.
+  document.body.classList.toggle('mob-ws',
+    typeof _routeView === 'undefined' || _routeView === 'dash');
+  MOB_Q.addEventListener('change', mobSyncChrome);
+
+  // Choosing something from the tree is the end of the drawer's job.
+  const tree = document.getElementById('nav-tree');
+  if (tree) tree.addEventListener('click', () => { if (isMobileLayout()) mobDrawer(null); });
+
+  // Choosing something from the menu is the end of its job. The style picker
+  // is the exception: its own panel opens inside the sheet, so closing the
+  // sheet on that tap would take the panel with it.
+  const menu = document.querySelector('#hdr .hdr-right');
+  if (menu) menu.addEventListener('click', e => {
+    if (!isMobileLayout()) return;
+    if (e.target.closest('#btn-style') || e.target.closest('#style-menu')) return;
+    if (!e.target.closest('button')) return;
+    document.body.classList.remove('mob-more');
+    const b = document.getElementById('hdr-more');
+    if (b) b.setAttribute('aria-expanded', 'false');
+  });
+
+  // Tapping the sim closes whichever overlay is open, the way tapping the page
+  // closes a menu everywhere else.
+  document.addEventListener('click', e => {
+    if (!isMobileLayout()) return;
+    if (document.body.classList.contains('mob-more') &&
+        !e.target.closest('.hdr-right') && !e.target.closest('#hdr-more')) {
+      document.body.classList.remove('mob-more');
+      const b = document.getElementById('hdr-more');
+      if (b) b.setAttribute('aria-expanded', 'false');
+    }
+  });
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mobInit);
+else mobInit();

@@ -220,6 +220,8 @@ body.academy #editor .om{font-style:normal}
 .tbb-mkr{font-size:0.73rem!important;color:var(--dim)!important;border-color:var(--border)!important;letter-spacing:.3px;font-style:normal!important;font-weight:normal!important}
 /* Marker layout toggle */
 .tb-mkr-exp{display:none}
+/* The Format and Tools groups exist for the phone toolbar only. */
+.tb-mob-wrap{display:none}
 .dh-r2.mkr-expanded .tb-ins-wrap{display:none}
 .dh-r2.mkr-expanded .tb-mkr-exp{display:inline-block}
 /* Paste-clean banner */
@@ -1265,4 +1267,316 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
 @media (max-width:820px){
   #btn-dash{display:none}
   .hdr-home{gap:8px}
+}
+
+/* ── MOBILE WORKSPACE ─────────────────────────────────────────────────────
+   The workspace is a three-column desktop layout and had no responsive rules
+   at all. Designed and settled by mockup on a real phone; the reasoning, the
+   options rejected and the landmines are in
+   memory/session_lcars_2026-09-mobile-brief.md.
+
+   Everything here is WIDTH-based on purpose. The browser's own "Request
+   Desktop Website" is how a tablet or a phone opts out, and it works by
+   reporting a wide viewport -- so a layout rule keyed off pointer:coarse
+   would take that choice away. Only tap-target size and the 16px font floor
+   below are allowed to ask about the pointer.
+
+   Kept last in the file so it outranks the :root[data-skin="prime"] blocks. */
+
+/* Every piece of phone-only furniture is inert until the media query below
+   turns it on. Without this they render as stray controls in the desktop
+   header and workspace -- which is exactly what happened first time. */
+#mob-rail,#mob-tabs,#mob-scrim,#mob-ui-toggle,#hdr-more,.hdr-menu-lbl{display:none}
+
+/* Touch ergonomics: these two apply at any width, because a finger is a
+   finger. 44px is the figure Apple and Google both publish. */
+@media (pointer:coarse){
+  .tbb,.panel-toggle{min-height:44px;min-width:40px;
+    display:inline-flex;align-items:center;justify-content:center}
+  .tbb{padding:6px 10px}
+  /* iOS Safari zooms the page whenever a focused control is under 16px. Floor
+     the control -- never maximum-scale, which takes pinch-zoom from everyone,
+     including people who need it.
+
+     !important, deliberately. This is a device constraint, not a preference:
+     any rule anywhere that sets a smaller size on a focusable control is a bug
+     on a phone. Enumerating selectors was tried and failed -- `#cm-filter
+     input` at 0.8rem outranked a bare `input`, and the Manifest's Characters
+     button focuses that field, so opening the list zoomed the page. The next
+     such rule someone adds would have broken it again. */
+  input,select,textarea{font-size:16px!important}
+}
+
+@media (max-width:820px){
+
+  /* ── One bar. The sim title row is moved into the header by mobSyncChrome()
+     so the header, the title and the toolbar are two bands instead of three;
+     the accent survives as one slim block on the bar's leading edge. ── */
+  /* The hide control is fixed in the top corner, so the bar reserves that
+     corner rather than putting a button underneath it. */
+  #hdr{height:46px;background:var(--bar,var(--panel));border-bottom:none;
+    overflow:visible;padding:0;gap:6px}
+  body:has(#dh:not(.hidden)) #hdr{padding-right:40px}
+  #hdr::before{content:"";width:8px;align-self:stretch;background:var(--amber);flex-shrink:0}
+  /* With no sim open the bar carries the app's name, and it is the way home --
+     the badge is that button on desktop and there was otherwise no route back
+     to the dashboard except two taps through the menu. A sim's title takes the
+     same space when there is one, and the sim's own close button is the way
+     back from there. */
+  #hdr .hdr-home{display:flex;align-items:center;gap:8px;background:transparent;
+    border:none;padding:0 4px;height:100%;flex-shrink:0}
+  body:has(#dh:not(.hidden)) #hdr .hdr-home{display:none}
+  #hdr .hdr-badge{background:transparent;color:#fff;height:auto;margin:0;padding:0;
+    border-radius:0;font-size:1rem;letter-spacing:3px;gap:8px}
+  :root[data-skin] body #hdr .hdr-badge{color:#fff}
+  #hdr #hdr-mark-plate{margin-right:6px;padding:3px}
+  #hdr #hdr-mark{height:20px}
+  #hdr .dh-r1{flex:1;min-width:0;padding:0;gap:6px}
+  /* The title's colour is written INLINE by updateTitleColor(), because it
+     carries the sim's status -- dim for archived, gold for complete, the
+     --title-active token otherwise. No stylesheet rule can outrank an inline
+     style, so the bar redefines the tokens instead. That keeps the status
+     distinction working and makes it legible on the dark bar. The bare rule
+     below still covers the case where no sim is open and nothing is inline;
+     it is written at skin specificity because
+     `:root[data-skin="prime"] body #doc-title` outranks a plain #doc-title. */
+  /* Scoped to the title row, NOT to #hdr: on the header these tokens leaked
+     into the app menu that hangs off it, and its labels went white on white. */
+  #hdr .dh-r1{--title-active:#fff;--dim:rgba(255,255,255,.55)}
+  :root[data-skin] body #hdr #doc-title,#hdr #doc-title{color:#fff;font-size:16px;font-weight:600}
+  :root[data-skin] body #hdr #doc-title::placeholder{color:rgba(255,255,255,.5)}
+  #hdr #btn-close-doc{background:transparent;border:none;color:rgba(255,255,255,.72)}
+  /* Classic light has no dark bar surface of its own to borrow. */
+  body.light #hdr{background:#2B2521}
+
+  /* The app buttons fold behind one control rather than scrolling off the
+     edge. The buttons themselves are untouched -- only their container moves. */
+  #hdr-more{display:inline-flex;align-items:center;justify-content:center;
+    background:transparent;border:none;color:rgba(255,255,255,.72);
+    width:38px;height:44px;flex-shrink:0;padding:0}
+  #hdr-more .ic{width:19px;height:19px}
+  /* The app menu is a sheet of LCARS rows, not the desktop's pill buttons in
+     a box. Written at skin specificity throughout: Delta Prime restyles .btn
+     and .btn-s, and the first attempt inherited its outlined-pill look and
+     --dim text, which read as a list of disabled controls. */
+  #hdr .hdr-right{position:absolute;top:46px;right:0;z-index:520;
+    display:none;flex-direction:column;align-items:stretch;gap:1px;padding:6px;
+    background:var(--panel);border:1px solid var(--border);
+    border-top:3px solid var(--amber);border-right:none;border-radius:0 0 0 16px;
+    box-shadow:0 14px 34px rgba(0,0,0,.4);width:min(270px,86vw);
+    max-height:calc(100dvh - 56px);overflow-y:auto}
+  body.mob-more #hdr .hdr-right{display:flex}
+  :root[data-skin] body #hdr .hdr-right .btn,#hdr .hdr-right .btn,
+  :root[data-skin] body #hdr .hdr-right .theme-opt,#hdr .hdr-right .theme-opt{
+    display:flex;align-items:center;gap:10px;width:100%;
+    justify-content:flex-start;text-align:left;
+    background:transparent;border:none;border-radius:8px;
+    color:var(--text);font-family:inherit;font-size:0.9rem;font-weight:600;
+    letter-spacing:.3px;padding:12px 12px;min-height:44px}
+  #hdr .hdr-right .btn .ic,#hdr .hdr-right .theme-opt .ic{
+    width:18px;height:18px;color:var(--amber);flex-shrink:0}
+  /* The active view keeps the one accent fill, as it does on desktop. */
+  :root[data-skin] body #hdr .hdr-right .btn-p,#hdr .hdr-right .btn-p{
+    background:var(--amber);color:var(--panel-hdr-tx)}
+  :root[data-skin="prime"] body #hdr .hdr-right .btn-p{color:var(--on-ac)}
+  #hdr .hdr-right .btn-p .ic{color:inherit}
+  #hdr .hdr-right .tsep{display:block;width:auto;height:1px;background:var(--border);margin:5px 8px}
+  /* Style and the four theme rows are one set, not five peers of Settings. */
+  .hdr-menu-lbl{display:block;color:var(--dim);font-size:0.62rem;letter-spacing:2px;
+    font-weight:700;padding:6px 12px 3px}
+  #hdr .hdr-right #style-picker{display:block;width:100%}
+  /* Hover cannot open a menu on a touch screen. The theme options become rows
+     in the sheet, and their trigger button -- an icon with no label -- goes. */
+  /* The whole theme picker goes. Dark/Light/High Contrast duplicate what
+     Style offers under Delta Prime and what Settings offers on the classic
+     skin, in both cases with finer control -- and as four flat rows here they
+     read as peers of Settings rather than as one choice. */
+  #hdr .hdr-right .theme-picker{display:none}
+  /* The style picker keeps its button and opens in place rather than as a
+     268px panel hanging off the side of the screen. */
+  #hdr .hdr-right #style-menu{position:static;min-width:0;width:100%;
+    margin-top:4px;padding:10px;border-radius:10px;gap:10px}
+
+  /* ── Toolbar: one quiet row, nothing boxed. The grouping into Copy, Bold,
+     Italic, Insert, Format, Tools is done in markup by mobSyncChrome(). ── */
+  #dh{padding:0 4px;border-bottom:1px solid var(--border)}
+  #dh .dh-r2{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;
+    border-top:none;min-height:44px;gap:2px}
+  #dh .dh-r2::-webkit-scrollbar{display:none}
+  #dh .dh-r2 .tsep{display:none}
+  /* Copy is a .btn, not a .tbb -- it would be the one outlined pill left in a
+     row where nothing else is boxed. */
+  #dh .dh-r2 #btn-copy{border-color:transparent;background:transparent;color:var(--dim);
+    padding:9px;min-height:44px}
+  #dh .dh-r2 .tbb,#dh .dh-r2 .tbb-names{border-color:transparent!important;
+    background:transparent;color:var(--dim)!important;font-size:0.83rem!important;
+    letter-spacing:0;padding:9px}
+  #dh .dh-r2 .tbb.on,#dh .dh-r2 .tbb.fmt-on{color:var(--amber)!important;background:transparent}
+  #dh .dh-r2-right{margin-left:0}
+  /* Expanded marker mode is a desktop affordance: five wide buttons cannot sit
+     in a phone toolbar, so the Insert dropdown is used at every width. */
+  #dh .dh-r2.mkr-expanded .tb-ins-wrap{display:inline-block}
+  #dh .dh-r2 .tb-mkr-exp{display:none!important}
+  #dh .dh-r2 .tb-mob-wrap{display:inline-block}
+  /* Order is set here rather than in the markup so the desktop toolbar, where
+     Insert sits among the marker buttons, is left alone. */
+  #dh .dh-r2 #tb-fmt-wrap{order:1}
+  #dh .dh-r2 #tb-ins-wrap{order:2}
+  #dh .dh-r2 #tb-tools-wrap{order:3}
+  #dh .dh-r2-right{display:none}
+  /* Menus anchor to the toolbar's edges, so one can never open off-screen. */
+  #dh{position:relative}
+  /* The wrap is position:relative on desktop, which would anchor the menu to
+     a 70px button. Static-ing it lets the menu anchor to #dh and span the
+     toolbar, so a menu can never open off the edge of the screen. */
+  #dh .dh-r2 .tb-dd-wrap{position:static}
+  #dh .tb-dd{left:4px;right:4px;min-width:0;flex-direction:row;flex-wrap:wrap}
+  #dh .tb-dd .tbb{width:auto;flex:1 1 auto;text-align:center;justify-content:center}
+  /* Nine unrelated toggles in one wrap was a wall. Format and Tools lay out on
+     two columns so rows pair evenly instead of leaving an item stranded on a
+     line of its own, and a label spans both to head its group. Insert keeps a
+     plain wrap -- its markers are wide and of very different lengths. */
+  #dh #tb-dd-fmt.open,#dh #tb-dd-tools.open{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+  #dh #tb-dd-fmt .tbb,#dh #tb-dd-tools .tbb{flex:none;width:auto;
+    justify-content:flex-start;text-align:left;gap:7px;padding:9px 10px}
+  .tb-btn-lbl{font-size:0.8rem;letter-spacing:0}
+  .tb-dd-lbl{grid-column:1 / -1;color:var(--dim);font-size:0.62rem;letter-spacing:2px;
+    font-weight:700;padding:6px 4px 2px}
+  .tb-dd-lbl:first-child{padding-top:2px}
+
+  #ec{padding:14px 14px 20px;-webkit-overflow-scrolling:touch}
+  #editor{max-width:none}
+
+  /* The status bar costs a band of the screen. Its word count is worth having
+     while writing; the zoom stepper is a mouse control on a device that
+     pinches, and with no sim open the bar reads "No sim open, 0 words". */
+  #sb .zc{display:none}
+  body:not(:has(#dh:not(.hidden))) #sb{display:none}
+
+  /* The sim title row lives in the header on a phone, so it lost the one thing
+     that used to hide it: being inside #dh, which is .hidden with no sim open.
+     It showed an empty "Sim Title..." box on the dashboard. Ask #dh directly
+     rather than adding a second piece of state to keep in step. */
+  #hdr .dh-r1{display:none}
+  body:has(#dh:not(.hidden)) #hdr .dh-r1{display:flex}
+
+  /* ── Dashboard. Built for a wide screen: a five-across stat strip and
+     four-column tables, both of which ran off the side of a phone. ── */
+  #dashboard{padding:16px 14px 24px}
+  .dash-title{font-size:1.05rem;letter-spacing:1px;margin-bottom:14px}
+  /* The five stats wrap instead of running off the side. Only the FLOW is
+     changed, never the paint: Delta Prime gives the strip its own pill shapes
+     and a solid hero tile, and a grid here would have flattened them. Written
+     at skin specificity as well, because
+     `:root[data-skin="prime"] body .dash-stats` sets display and would
+     otherwise outrank a bare .dash-stats and leave the row unwrapped -- which
+     is exactly what it did first time. */
+  .dash-stats,:root[data-skin] body .dash-stats{flex-wrap:wrap;width:100%}
+  .dash-stat-item,:root[data-skin] body .dash-stat-item{flex:1 1 28%;min-width:0;padding:10px 8px}
+  .dash-stat-num{font-size:1.2rem}
+  :root[data-skin] body .dash-stat-item:first-child .dash-stat-num{font-size:1.6rem}
+  .dash-stat-lbl{font-size:0.62rem;letter-spacing:.5px}
+
+  /* Each row becomes a block: the title on its own line, the rest beneath it
+     as labelled fragments. A four-column table cannot be made to fit, and
+     scrolling it sideways would hide the columns that say when and where. */
+  .dash-table,.dash-table tbody,.dash-table tr,.dash-table td{display:block;width:auto}
+  .dash-table tr:first-child{display:none}   /* the header row, now redundant */
+  .dash-table tr{padding:10px 0;border-bottom:1px solid var(--border)}
+  .dash-table td{padding:0;border:none}
+  .dash-table td:first-child{font-size:0.95rem;margin-bottom:3px}
+  .dash-table td:not(:first-child){display:inline-block;margin-right:12px}
+  .dash-table td[data-lbl]::before{content:attr(data-lbl) ": ";opacity:.65}
+  .dash-actions .dash-action{flex:1 1 100%;min-width:0}
+  .dash-header-row{gap:0}
+
+  /* ── The two rails become one drawer, opened from a rail on the right ── */
+  #rh-left,#rh-right{display:none}
+  /* The drawer is a FOREGROUND panel here, so it takes --panel like every
+     other raised surface. On the desktop these two are recessed rails beside
+     the editor and take --panel2 (--rail under Delta Prime) to sit back --
+     carrying that over made the open drawer look dimmed against its own tab
+     strip, worst in Prime light where the two surfaces are 28 points apart.
+     Skin specificity because :root[data-skin="prime"] body #sidebar sets the
+     rail colour at lcars.css:817. The shadow says "above the scrim". */
+  #sidebar,#cp{position:fixed;top:0;bottom:0;right:0;left:auto;
+    width:min(300px,82%)!important;max-width:none;z-index:600;
+    transform:translateX(103%);transition:transform .2s ease;
+    border:none;border-left:3px solid var(--amber);padding-top:46px;
+    box-shadow:-14px 0 34px rgba(0,0,0,.4)}
+  /* Background ONLY at skin specificity. The transform must stay in the rule
+     above at plain specificity, or it outranks `body.mob-sims #sidebar` below
+     and the drawer can never slide in -- which is exactly what happened when
+     the two were written as one rule. */
+  #sidebar,#cp,
+  :root[data-skin] body #sidebar,:root[data-skin] body #cp,
+  /* The Epic vibe frosts these two: 55% translucent over backdrop-filter
+     (lcars.css:765). That is right on a desktop, where they sit over the
+     app's own lit field -- but as a drawer the thing behind them is the 50%
+     black scrim, so the blur samples THAT and the panel reads dark grey
+     instead of white. Both the translucency and the blur have to go here.
+     Two attribute selectors, because [data-skin][data-vibe] #sidebar
+     outranks [data-skin] body #sidebar -- three classes to two. */
+  :root[data-skin][data-vibe] body #sidebar,
+  :root[data-skin][data-vibe] body #cp{background:var(--panel);backdrop-filter:none}
+  body.mob-sims #sidebar,body.mob-details #cp{transform:none}
+  /* The desktop collapse is a different idea and must not reach the drawer. */
+  #sidebar.collapsed .sb-top,#cp.collapsed .cp-top{padding:0 14px;justify-content:flex-start}
+  #sidebar.collapsed #nav-tree,#sidebar.collapsed .sb-bottom,
+  #sidebar.collapsed .sb-top .panel-label,#cp.collapsed #sim-details,
+  #cp.collapsed .cp-top .panel-label{display:revert}
+  #sb-toggle,#cp-toggle{display:none}
+  /* The tab strip already names the panel; the panel's own label repeated it. */
+  #sidebar .sb-top .panel-label{display:none}
+  /* With its label and its collapse toggle both gone, the details panel's
+     header band held nothing at all. The sidebar's keeps Search, Sort and
+     Details, so it stays. */
+  #cp .cp-top{display:none}
+
+  #mob-tabs{display:none;position:fixed;top:0;right:0;z-index:601;height:46px;
+    width:min(300px,82%);background:var(--panel);align-items:stretch}
+  body.mob-open #mob-tabs{display:flex}
+  #mob-tabs button{flex:1;background:transparent;color:var(--dim);border:none;
+    border-bottom:2px solid var(--border);font-family:inherit;font-weight:bold;
+    font-size:0.68rem;letter-spacing:1px;padding:0 4px;white-space:nowrap}
+  #mob-tabs button[aria-selected="true"]{color:var(--amber);border-bottom-color:var(--amber)}
+  #mob-tab-close{flex:0 0 46px}
+  #mob-scrim{display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.5)}
+  body.mob-open #mob-scrim,body.mob-more #mob-scrim{display:block}
+
+  /* The rail is the desktop collapsed sidebar at thumb scale. It takes layout
+     space, so nothing it owns ever covers the writing. The tab is the only
+     filled shape it needs -- no column drawn behind it. */
+  #mob-rail{display:flex;width:26px;flex-shrink:0;align-items:flex-start;
+    justify-content:center;padding-top:10px;background:transparent}
+  /* Ink on an amber fill follows .hdr-badge, the app's existing answer: white,
+     black in high contrast, the accent's own ink under Delta Prime. NOT
+     --panel-hdr-tx: in Classic dark that token IS the accent, because there
+     the panel header is dark rather than amber -- which painted amber on
+     amber and left the tab a blank orange block. */
+  #mob-rail-tab{width:26px;height:86px;background:var(--amber);
+    color:#fff;border:none;border-radius:8px 0 0 8px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:5px;padding:0;font-family:inherit;font-weight:700;font-size:0.6rem;
+    letter-spacing:1.5px;cursor:pointer}
+  #mob-rail-tab .ic{width:13px;height:13px;stroke-width:2.6}
+  body.hc #mob-rail-tab{color:#000}
+  :root[data-skin="prime"] body #mob-rail-tab{color:var(--on-ac)}
+  /* The chevron says it opens; the word says what. */
+  .mob-rail-label{writing-mode:vertical-rl;transform:rotate(180deg)}
+  body.mob-open #mob-rail-tab{visibility:hidden}
+
+  /* ── Clearing the furniture for writing ── */
+  /* Only offered with a sim open: there is no toolbar to clear on the
+     dashboard, and the corner is better given back to the bar. */
+  #mob-ui-toggle{display:none;position:fixed;z-index:450;top:3px;right:4px;
+    width:34px;height:40px;background:transparent;color:rgba(255,255,255,.72);
+    border:none;font-family:inherit;font-size:1.05rem;line-height:1;
+    align-items:center;justify-content:center;padding:0}
+  body.mob-ws:has(#dh:not(.hidden)) #mob-ui-toggle{display:flex}
+  body.mob-hide #hdr,body.mob-hide #dh,body.mob-hide #mob-rail{display:none}
+  /* With the bar gone there is nothing behind it, so it takes a quiet surface
+     of its own rather than moving. */
+  body.mob-hide #mob-ui-toggle{background:var(--panel);color:var(--amber);
+    border:1px solid var(--border);border-radius:6px}
 }

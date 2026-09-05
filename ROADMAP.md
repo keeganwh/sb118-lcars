@@ -124,18 +124,16 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 
 **Top score [+5]. Category: Component Revision + New Component.**
 
-**Why these together:** doing them apart means laying out the sim details panel twice. Restructure the markup first, then make the whole workspace responsive over the new structure in the same pass.
+**Why these together:** the original reasoning was that doing them apart means laying out the sim details panel twice. **In the event the mobile half shipped first** (2026-09-05), because the reorder needs a field order from the user and nothing in the mobile layout depended on it. The panel is laid out generically on a phone — it is the drawer's second tab — so reordering its fields does not require the mobile work to be redone.
 
 - [ ] **[+5] Reorganise the sim details panel.** _Revision._
       Reorder the fields and tools from **most fundamental to most specific** — what someone needs first, first. Fix the alignment and visual consistency, which have drifted as things were added.
       _Done when: the panel reads in a sensible order and its rows line up._
 
-- [ ] **[+4] Mobile optimisation of the workspace.** _New Component — never done._
-      The header, Settings and the Manifest were made responsive in session 2. **The editor, the toolbar and the two resizable sidebars were never touched** — the whole workspace view, in other words.
-      **Observed on a real phone, v4.23:**
-      1. *The page zooms in when a field is focused.* Almost certainly iOS Safari's auto-zoom, which fires on any focused input under 16px. `.mi` / `.ms` are `0.87rem` and `#search-input` is `0.8rem` against a 15px UI base — about 13px and 12px. Fix is to **floor form controls at 16px on coarse pointers**, not to disable zoom with `maximum-scale`, which breaks pinch-zoom for everyone. Not verified on device — confirm before building on it.
-      2. *Buttons do not all fit.* Expected, and covered by the work above.
-      _Done when: a sim can be read, written and copied out on a phone without pinch-zooming._
+- [x] **[+4] Mobile optimisation of the workspace.** _New Component. Shipped 2026-09-05; changelog entry pending._
+      Under 820px the workspace is now one bar (header + sim title), one grouped toolbar (Copy, Bold, Italic, Format, Insert, Tools), the editor, and a right-hand rail that opens both sidebars as a single tabbed drawer, plus a control that clears the furniture for writing. The dashboard, the app menu and the Manifest's zoom-on-focus bug went with it.
+      **Read `memory/session_lcars_2026-09-mobile.md` before touching any of it** — the decisions, the options tried and rejected, and what the build actually cost (six rounds of skin-specificity traps, and the `data-vibe` axis that no skin sweep covered).
+      _Done when: a sim can be read, written and copied out on a phone without pinch-zooming._ **Met, confirmed on the user's own phone.**
 
 > **Landmine for this batch:** responsive rules go in the one `RESPONSIVE` section at the foot of `lcars.css`, **after** the skin overrides — anything earlier is silently outranked by the `:root[data-skin="prime"]` blocks. Breakpoint is 820px.
 
