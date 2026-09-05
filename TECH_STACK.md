@@ -42,7 +42,7 @@ Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same 
 | File | Role |
 |------|------|
 | `LCARS.html` | Markup and the pre-paint skin script (~400 lines). |
-| `lcars.css` | All styling (~1,240 lines). The `RESPONSIVE` section at the foot must stay last. |
+| `lcars.css` | All styling (~1,580 lines). The `RESPONSIVE` section at the foot must stay last, and now carries the whole mobile workspace. |
 | `lcars.js` | All behaviour (~9,500 lines), including `APP_VERSION` and `VERSIONS`. |
 | `lcars-render.js` | The sim render pass (`lrToReadingHtml()`), shared by the app and the share viewer. Loaded **before** `lcars.js`. |
 | `share.html`, `share.js` | The standalone read-only viewer at `/s/<token>`. |
@@ -71,7 +71,7 @@ No third-party JavaScript is loaded, ever. That is what keeps the single-file of
 
 - **A writer who never linked an account and forgets their PIN still needs the maintainer.** That is the accepted residual case, and the `/admin` PIN-reset queue is what narrows it; linking is nudged once, and retention is expected to be low.
 - **Supabase free tier** is ~500 MB of database, enough for roughly 250–500 writers at 1–2 MB each, and pauses a project after ~1 week idle. An admin usage overview is Batch 5, which is what will make this measurable rather than estimated.
-- **Mobile** — the header, Settings and the Manifest are responsive; the editor, toolbar and the two resizable sidebars are not yet. Batch 4.
+- **Mobile** — the whole app is responsive as of the Batch 4 mobile pass. Under 820px the workspace becomes one bar (header + sim title), one grouped toolbar, the editor, and a right-hand rail that opens both sidebars as a single tabbed drawer. **Everything that changes layout is width-based on purpose** — the browser's own "Request Desktop Website" is how a tablet opts out, and it works by reporting a wide viewport. See `memory/session_lcars_2026-09-mobile.md`.
 - **The payload blob is the central structural constraint.** `saveToCloud()` POSTs the entire payload on every save, so the cost of one sentence scales with everything ever written. It is why share links are snapshot copies, why two tabs of one account clobber each other, and why the Google Groups extension is blocked. The staged migration out of it is Batch 6.
 - **SB118 HQ is the shape of the future.** It owns accounts and character data. LCARS should not duplicate what HQ tracks — that is why the character wiki import was scrapped and why Service History and Ribbons are being removed. Keep an identity seam for HQ SSO; that is also why Google/Discord were rejected as a primary sign-in.
 - **A build step is now permitted in principle**, given the frozen download. It is still not wanted casually — the zero-dependency design is deliberate — but Yjs no longer has to be vendored to protect a file that has stopped changing.

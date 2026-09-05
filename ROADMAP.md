@@ -124,18 +124,16 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 
 **Top score [+5]. Category: Component Revision + New Component.**
 
-**Why these together:** doing them apart means laying out the sim details panel twice. Restructure the markup first, then make the whole workspace responsive over the new structure in the same pass. **The mobile half is already designed** — see the brief linked below; nothing in it depends on how the details panel is reordered.
+**Why these together:** the original reasoning was that doing them apart means laying out the sim details panel twice. **In the event the mobile half shipped first** (2026-09-05), because the reorder needs a field order from the user and nothing in the mobile layout depended on it. The panel is laid out generically on a phone — it is the drawer's second tab — so reordering its fields does not require the mobile work to be redone.
 
 - [ ] **[+5] Reorganise the sim details panel.** _Revision._
       Reorder the fields and tools from **most fundamental to most specific** — what someone needs first, first. Fix the alignment and visual consistency, which have drifted as things were added.
       _Done when: the panel reads in a sensible order and its rows line up._
 
-- [ ] **[+4] Mobile optimisation of the workspace.** _New Component — never done._
-      The header, Settings and the Manifest were made responsive in session 2. **The editor, the toolbar and the two resizable sidebars were never touched** — the whole workspace view, in other words.
-      **The design is settled and must not be re-litigated — read `memory/session_lcars_2026-09-mobile-brief.md` first.** A planning session (2026-09-04) built mockups, tested them on a real phone over four rounds, and settled the toolbar position, its grouping, the hide control, both sidebars as one right-hand drawer, and the visual treatment. The brief carries the decisions, the reasoning, the options that were tried and rejected, and the landmines found on the way.
-      **Working mockups:** `test/mobile-mockups/` on branch `claude/mobile-optimization-planning-my6upp` — `index.html` is the design, `looks.html` records why it looks that way. **Throwaway: delete the folder when this ships.**
-      The 16px auto-zoom guess from v4.23 is confirmed and fixed in the mockup; the rest of that note is superseded by the brief.
-      _Done when: a sim can be read, written and copied out on a phone without pinch-zooming._
+- [x] **[+4] Mobile optimisation of the workspace.** _New Component. Shipped 2026-09-05; changelog entry pending._
+      Under 820px the workspace is now one bar (header + sim title), one grouped toolbar (Copy, Bold, Italic, Format, Insert, Tools), the editor, and a right-hand rail that opens both sidebars as a single tabbed drawer, plus a control that clears the furniture for writing. The dashboard, the app menu and the Manifest's zoom-on-focus bug went with it.
+      **Read `memory/session_lcars_2026-09-mobile.md` before touching any of it** — the decisions, the options tried and rejected, and what the build actually cost (six rounds of skin-specificity traps, and the `data-vibe` axis that no skin sweep covered).
+      _Done when: a sim can be read, written and copied out on a phone without pinch-zooming._ **Met, confirmed on the user's own phone.**
 
 > **Landmine for this batch:** responsive rules go in the one `RESPONSIVE` section at the foot of `lcars.css`, **after** the skin overrides — anything earlier is silently outranked by the `:root[data-skin="prime"]` blocks. Breakpoint is 820px.
 

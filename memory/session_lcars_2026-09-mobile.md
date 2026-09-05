@@ -1,13 +1,17 @@
-# Mobile optimisation — the brief going in (2026-09-04)
+# Mobile optimisation — planned, built and shipped (2026-09-04/05)
 
-_Planning session. **No app code was changed.** Everything here was settled by
-building mockups and testing them on a real phone, so treat it as decided
-rather than as suggestions. Read before starting `ROADMAP.md` Batch 4._
+_**SHIPPED.** Designed by mockup, tested on a real phone over four rounds, then
+built and taken through six rounds of on-device review. Read before touching
+anything in the `RESPONSIVE` section of `lcars.css`, the phone toolbar, or the
+header._
 
-The mockups are on branch `claude/mobile-optimization-planning-my6upp` at
-`test/mobile-mockups/` — `index.html` is the working design, `looks.html` the
-look book that records why it looks the way it does. **Both are throwaway:
-delete the folder when the real work ships.**
+The mockups did their job and were deleted with the build; they are in git
+history at `test/mobile-mockups/` if the reasoning is ever wanted (branch
+`claude/mobile-optimization-planning-my6upp`, before the final commits).
+
+**Still outstanding from Batch 4: the sim details panel reorder.** It is a
+field-order decision the user has not made yet, and nothing in the mobile
+layout depends on it.
 
 ## The framing that matters
 
@@ -71,17 +75,53 @@ including people who need it.
 - `.mi`/`.ms` are 0.87rem and `#search-input` 0.8rem against a 15px base —
   ~13px and ~12px, under iOS Safari's 16px auto-zoom threshold.
 
-## Still open (neither blocks the build)
+## What the build actually took, beyond the design
+
+The design was right; the cost was elsewhere. Six of the review rounds were
+CSS specificity and one class of untested state:
+
+- **Skin specificity beat "last in the file" six times.** The sim title
+  rendered dark-on-dark, the app menu's labels went white-on-white, the stat
+  strip refused to wrap, and once the drawer stopped opening entirely because a
+  `transform` was folded into a skin-specificity rule and outranked
+  `body.mob-sims #sidebar`. That last one still passed its colour assertion —
+  it was measuring an element that never appeared. **A screenshot caught what
+  the assertion could not.**
+- **`data-vibe` is a third axis nobody was sweeping.** The sims drawer looked
+  dark grey instead of white, intermittently. Cause: Epic gives `#sidebar` and
+  `#cp` a 55% translucent background over `backdrop-filter: blur(18px)`
+  (`lcars.css:765`), so as a drawer it frosted the 50% black scrim behind it.
+  Every skin test ran in Calm. I gave the user a confident wrong diagnosis
+  twice before finding it.
+- **The 16px zoom floor lost to an id.** `#cm-filter input` at 0.8rem outranked
+  a bare `input`, and the Manifest's Characters button focuses that field — so
+  opening the character list zoomed the page. It is now
+  `input,select,textarea{font-size:16px!important}` under `pointer:coarse`,
+  deliberately blunt: this is a device constraint, and enumerating selectors is
+  what failed. A sweep asserts every visible control in every view clears 16px.
+- **Moving the sim title row out of `#dh` broke what was hiding it.** `#dh`
+  carries `.hidden` with no sim open, so an empty "Sim Title…" box appeared on
+  the dashboard. It now asks `#dh` directly via `:has()` rather than tracking a
+  second copy of "is a sim open".
+- **Phone-only furniture needs an explicit default `display:none`.** Without
+  it the rail, scrim, tab strip and toggle rendered as stray controls in the
+  desktop header. Caught by screenshotting desktop, not by any assertion.
+
+## Still open
 
 - **The Tools panel is nine items behind a vague word** — auto-format toggles,
   visual aids, source view and paragraph markers. The weakest grouping in the
   design. A naming and membership question, not a layout one.
 - Which side the rail ends up on, if the right-hand edge wears badly in use.
 
-## The order of work
+## How it was verified
 
-The user's instruction: do the **sim details panel reorder first**, then the
-mobile pass over the new structure — same session, per Batch 4's own reasoning
-that doing them apart means laying that panel out twice. The reorder is a
-field-order decision, not a structural one, so nothing in this brief depends on
-its outcome.
+Playwright at 390px and 1280px on every round: the node moves and their restore
+on resize, the drawer, both toolbar menus, the header menu, the hide control,
+typing, and no horizontal overflow. Plus sweeps for control font size, and for
+surface colour across `skin × mode × vibe`. The four suites — fidelity 24,
+panels 5, templates 10, copy button 4 — were run on every commit that touched
+the app.
+
+**The lesson worth carrying: assertions confirmed things that were visibly
+broken.** Screenshot the result as well as measuring it.
