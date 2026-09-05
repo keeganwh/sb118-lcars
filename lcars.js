@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-04',
     changes: [
+      'Fixed: the sims panel on a phone looked greyed out, as though it were behind something. It was being painted in the recessed colour it uses as a sidebar on a computer, rather than the colour of a panel sitting on top.',
       'Fixed: on the Character Manifest, tapping Characters to open the list zoomed the page in on an iPhone — the filter box it puts the cursor into was below the size iOS zooms at.',
       'The sim toolbar on a phone now reads Copy, Bold, Italic, Format, Insert, Tools. The Tools panel is split into Auto Format, Visual Aids and View rather than nine toggles in one block, and the Format panel pairs its buttons a row at a time — Indent and Outdent side by side, where they belong.',
       'The phone menu no longer repeats Dark, Light and High Contrast: Style covers them with finer control, and Settings has them for the classic look.',

@@ -1492,10 +1492,24 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
 
   /* ── The two rails become one drawer, opened from a rail on the right ── */
   #rh-left,#rh-right{display:none}
+  /* The drawer is a FOREGROUND panel here, so it takes --panel like every
+     other raised surface. On the desktop these two are recessed rails beside
+     the editor and take --panel2 (--rail under Delta Prime) to sit back --
+     carrying that over made the open drawer look dimmed against its own tab
+     strip, worst in Prime light where the two surfaces are 28 points apart.
+     Skin specificity because :root[data-skin="prime"] body #sidebar sets the
+     rail colour at lcars.css:817. The shadow says "above the scrim". */
   #sidebar,#cp{position:fixed;top:0;bottom:0;right:0;left:auto;
     width:min(300px,82%)!important;max-width:none;z-index:600;
     transform:translateX(103%);transition:transform .2s ease;
-    border:none;border-left:3px solid var(--amber);padding-top:46px}
+    border:none;border-left:3px solid var(--amber);padding-top:46px;
+    box-shadow:-14px 0 34px rgba(0,0,0,.4)}
+  /* Background ONLY at skin specificity. The transform must stay in the rule
+     above at plain specificity, or it outranks `body.mob-sims #sidebar` below
+     and the drawer can never slide in -- which is exactly what happened when
+     the two were written as one rule. */
+  #sidebar,#cp,
+  :root[data-skin] body #sidebar,:root[data-skin] body #cp{background:var(--panel)}
   body.mob-sims #sidebar,body.mob-details #cp{transform:none}
   /* The desktop collapse is a different idea and must not reach the drawer. */
   #sidebar.collapsed .sb-top,#cp.collapsed .cp-top{padding:0 14px;justify-content:flex-start}
