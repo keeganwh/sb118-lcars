@@ -11,7 +11,7 @@ const VERSIONS = [
     date: '2026-09-04',
     changes: [
       'Fixed: on the Character Manifest, tapping Characters to open the list zoomed the page in on an iPhone — the filter box it puts the cursor into was below the size iOS zooms at.',
-      'The sim toolbar on a phone now reads Copy, Bold, Italic, Format, Insert, Tools, and the Tools panel is split into Auto Format, Visual Aids and View rather than nine toggles in one block.',
+      'The sim toolbar on a phone now reads Copy, Bold, Italic, Format, Insert, Tools. The Tools panel is split into Auto Format, Visual Aids and View rather than nine toggles in one block, and the Format panel pairs its buttons a row at a time — Indent and Outdent side by side, where they belong.',
       'The phone menu no longer repeats Dark, Light and High Contrast: Style covers them with finer control, and Settings has them for the classic look.',
       'On a phone the app name is back in the bar when no sim is open, and tapping it goes to the Dashboard — the badge does that on a computer, and there was no way home without going through the menu.',
       'The app menu on a phone now dims the page behind it like the sims panel does, groups its contents under Go To and Appearance, and closes when you tap away.',
@@ -9498,7 +9498,11 @@ let _mobApplied = null;   // last layout applied, so the moves run once per chan
 
 // The buttons that move into the phone toolbar's two extra groups, in the
 // order they should read there.
-const MOB_FMT_IDS = ['tbb-cf','tbb-s','tbb-link','tbb-ind','tbb-outd','tbb-ul'];
+// Ordered for the two-column panel, so each ROW holds things that belong
+// together: the two inline marks, then indent and outdent as the pair they
+// are, then the two that change a whole line. In the old order the grid split
+// Indent and Outdent across two rows.
+const MOB_FMT_IDS = ['tbb-s','tbb-link','tbb-ind','tbb-outd','tbb-ul','tbb-cf'];
 // Several of these are icon-only in the desktop toolbar and lean on their
 // tooltip, which a touchscreen never shows. In the panel there is room for the
 // word, so one is added on the way in and taken off on the way back.
