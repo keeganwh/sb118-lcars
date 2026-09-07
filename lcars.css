@@ -1116,7 +1116,13 @@ body.hc .contact-card-bar{color:#000}
   border:1px solid var(--border);border-radius:8px}
 .fb-chk{display:flex;align-items:center;gap:8px;font-size:0.8rem;cursor:pointer}
 .fb-chk input{flex-shrink:0}
+.fb-cap-hd{font-size:0.62rem;letter-spacing:2px;font-weight:700;color:var(--amber)}
+.fb-cap-sep{height:1px;background:var(--border);margin:4px 0}
 .fb-shot{display:block;color:var(--dim);font-size:0.78rem;margin-top:2px}
+/* The writer sees the screenshot before it goes: a capture of the whole tab
+   can catch more than they meant to send. */
+.fb-thumb{display:block;width:100%;border:1px solid var(--border);border-radius:6px;
+  margin:6px 0;max-height:220px;object-fit:contain;object-position:top;background:#000}
 #fb-shot{font-size:0.76rem;color:var(--dim);max-width:100%}
 .fb-send{align-self:flex-start}
 .fb-item{border:1px solid var(--border);border-radius:8px;padding:10px 12px}

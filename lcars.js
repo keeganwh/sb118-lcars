@@ -11,7 +11,8 @@ const VERSIONS = [
     date: '2026-09-07',
     changes: [
       'New App Feedback button in the header — and in the app menu on a phone — for reporting a bug or asking for a feature without leaving what you were doing',
-      'A report can carry a copy of the page you were looking at, so a problem can be seen rather than guessed at. You choose whether to attach it, sim text is left out by default, and you can see exactly what will be sent before you send it',
+      'A report can carry a screenshot. On a computer LCARS can take one of the tab for you — your browser asks you to confirm first, as it always does — and on a phone, or any browser that will not, you attach the screenshot you have already taken. Either way you see it before it is sent',
+      'It can also carry a copy of the page itself, which is what makes a problem reproducible rather than only visible. Sim text is left out by default, and you can see exactly what will be sent before you send it',
       'Replies from the team appear under My reports in the same panel, and the button badges when one arrives',
       'Super admins can now read App Feedback in the Admin view: bug reports and feature requests filed from inside the app, with the page capture attached, a status to set and one note back to the writer',
       'Archiving or deleting a report destroys its capture for good, so nothing a writer sent stays behind once it has been dealt with',
@@ -2157,17 +2158,25 @@ function fbPaintForm(keep) {
         ? 'What went wrong, and what were you doing when it happened?'
         : 'What would you like LCARS to do?'}">${esc(prev)}</textarea>
     <div class="fb-cap">
-      <label class="fb-chk"><input type="checkbox" id="fb-attach" checked onchange="fbPaintCapNote()"> Attach a copy of this page</label>
+      <span class="fb-cap-hd">A PICTURE OF THE PROBLEM</span>
+      ${fbCanShoot() ? `
+      <button class="btn btn-s" id="fb-shoot" onclick="fbCaptureShot()">${ic('camera')} Take a screenshot of this tab</button>
+      <span class="set-note" style="margin:0">Your browser will ask you to confirm — it never hands a page over without asking.</span>`
+      : `<span class="set-note" style="margin:0">This browser cannot take its own screenshot, so attach one you have taken yourself.</span>`}
+      <label class="fb-chk fb-shot" for="fb-shot">${fbCanShoot() ? 'Or attach' : 'Attach'} an image you already have:</label>
+      <input type="file" id="fb-shot" accept="image/*" onchange="fbPickShot(event)">
+      <div class="set-note" id="fb-shot-note" style="margin:0"></div>
+      <div id="fb-shot-prev"></div>
+      <div class="fb-cap-sep"></div>
+      <label class="fb-chk"><input type="checkbox" id="fb-attach" checked onchange="fbPaintCapNote()"> Also send a copy of the page itself</label>
       <label class="fb-chk"><input type="checkbox" id="fb-strip" checked onchange="fbPaintCapNote()"> Leave sim text out of it</label>
       <div class="set-note" id="fb-cap-note" style="margin:0"></div>
       <button class="btn btn-s" onclick="fbPreview()">${ic('search')} See what will be sent</button>
-      <label class="fb-chk fb-shot" for="fb-shot">Already taken a screenshot? Add it too:</label>
-      <input type="file" id="fb-shot" accept="image/*" onchange="fbPickShot(event)">
-      <div class="set-note" id="fb-shot-note" style="margin:0"></div>
     </div>
     <button class="btn btn-p fb-send" onclick="fbSend()">${ic('upload')} Send it</button>
     <div class="set-note" id="fb-msg" style="min-height:1.1em"></div>`;
   fbPaintCapNote();
+  if (_fbShot) fbShowShot();      // survives switching Bug <-> Feature request
 }
 
 function fbPaintCapNote() {
@@ -2177,7 +2186,7 @@ function fbPaintCapNote() {
   const strip = (document.getElementById('fb-strip') || {}).checked;
   const joint = fbOpenDocType() === 'joint';
   n.textContent = !on
-    ? 'Nothing but your words and the app version will be sent.'
+    ? 'Only your words, the app version and the style you are using.'
     : strip
       ? 'The layout of the page, the style you are using and the app version — but not the words of any sim.'
       : (joint
@@ -2187,14 +2196,102 @@ function fbPaintCapNote() {
 
 function fbPickShot(e) {
   const f = (e.target.files || [])[0] || null;
-  const note = document.getElementById('fb-shot-note');
   if (f && f.size > 5 * 1024 * 1024) {
-    e.target.value = ''; _fbShot = null;
+    e.target.value = ''; fbClearShot();
+    const note = document.getElementById('fb-shot-note');
     if (note) note.textContent = 'That image is over 5 MB — please attach a smaller one.';
     return;
   }
   _fbShot = f;
-  if (note) note.textContent = f ? ('Attached: ' + f.name) : '';
+  fbShowShot();
+}
+
+// ── The screenshot ────────────────────────────────────────────────────────
+// A REAL one: getDisplayMedia() hands over the pixels the compositor drew, so
+// what the admin sees is what the writer saw, down to the frosted panels and
+// the font the browser actually loaded. That is worth more than any redraw of
+// the DOM, which is why this is the primary attachment and the page copy is
+// the extra.
+//
+// It cannot be silent. Every browser that implements it insists on its own
+// confirm before giving a page away, and there is no flag that turns that off
+// -- so the button says so rather than looking broken. `preferCurrentTab` puts
+// this tab in front in the picker; browsers that ignore it just show the full
+// chooser.
+//
+// iOS Safari does not implement it at all, which is precisely where writers
+// already have a screenshot in their camera roll -- so the file input is not a
+// fallback there, it is the way it works.
+function fbCanShoot() {
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+}
+
+async function fbCaptureShot() {
+  const note = document.getElementById('fb-shot-note');
+  const say = t => { if (note) note.textContent = t; };
+  const panel = document.getElementById('fb-panel');
+  let stream = null;
+  // The panel is on top of the thing being reported. Hiding it for the frame
+  // is the difference between a screenshot of the bug and a screenshot of this
+  // form -- and `visibility` rather than `display` so nothing behind reflows.
+  panel.style.visibility = 'hidden';
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 1 }, audio: false, preferCurrentTab: true, selfBrowserSurface: 'include'
+    });
+    const v = document.createElement('video');
+    v.srcObject = stream; v.muted = true;
+    await v.play();
+    // One frame of grace: the first is routinely black, because the capture
+    // starts before the compositor has handed anything over.
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const cv = document.createElement('canvas');
+    cv.width = v.videoWidth; cv.height = v.videoHeight;
+    cv.getContext('2d').drawImage(v, 0, 0);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+    if (!blob) throw new Error('The screenshot came back empty.');
+    _fbShot = new File([blob], 'screenshot.png', { type: 'image/png' });
+    const inp = document.getElementById('fb-shot');
+    if (inp) inp.value = '';          // the two paths fill one slot, not two
+    fbShowShot();
+  } catch (e) {
+    fbClearShot();
+    say(e && e.name === 'NotAllowedError'
+      ? 'No screenshot taken — you can attach one instead.'
+      : 'That browser would not take a screenshot. Attach one instead.');
+  } finally {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    panel.style.visibility = '';
+  }
+}
+
+// Shown before it is sent, like everything else attached to a report: a
+// screenshot of the whole tab can catch more than the writer meant to send.
+function fbShowShot() {
+  const note = document.getElementById('fb-shot-note');
+  const prev = document.getElementById('fb-shot-prev');
+  if (!_fbShot) { fbClearShot(); return; }
+  if (note) note.textContent = _fbShot.name + ' · ' + fmtBytes(_fbShot.size);
+  if (prev) {
+    if (prev.dataset.url) URL.revokeObjectURL(prev.dataset.url);
+    const u = URL.createObjectURL(_fbShot);
+    prev.dataset.url = u;
+    prev.innerHTML = '<img class="fb-thumb" src="' + u + '" alt="The screenshot that will be sent">' +
+      '<button class="btn btn-s" onclick="fbClearShot()">' + ic('x') + ' Remove it</button>';
+  }
+}
+
+function fbClearShot() {
+  _fbShot = null;
+  const inp = document.getElementById('fb-shot');
+  if (inp) inp.value = '';
+  const note = document.getElementById('fb-shot-note');
+  if (note) note.textContent = '';
+  const prev = document.getElementById('fb-shot-prev');
+  if (prev) {
+    if (prev.dataset.url) { URL.revokeObjectURL(prev.dataset.url); delete prev.dataset.url; }
+    prev.innerHTML = '';
+  }
 }
 
 function fbOpenDocType() {

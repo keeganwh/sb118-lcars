@@ -125,7 +125,12 @@ async function ctxFor(browser, who, errors) {
 
 (async () => {
   const errors = [];
-  const browser = await chromium.launch({ args: ['--no-sandbox'],
+  // getDisplayMedia() always raises a picker. These flags make headless
+  // Chromium answer it with the current tab, which is what preferCurrentTab
+  // asks for -- they stand in for the click, they do not remove the prompt.
+  const browser = await chromium.launch({
+    args: ['--no-sandbox', '--auto-accept-this-tab-capture',
+           '--enable-usermedia-screen-capturing', '--allow-http-screen-capture'],
     executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
   const w = await ctxFor(browser, W, errors);
   const s = await ctxFor(browser, S, errors);
@@ -182,6 +187,25 @@ async function ctxFor(browser, who, errors) {
   await w.p.evaluate(id => { delete S.docs[id].docType; }, docId);
 
   await w.p.evaluate(() => { document.getElementById('fb-strip').checked = true; fbPaintCapNote(); });
+
+  // --- the screenshot ------------------------------------------------------
+  ok(await w.p.evaluate(() => fbCanShoot() && !!document.getElementById('fb-shoot')),
+     'a desktop browser is offered a real screenshot of the tab');
+  await w.p.evaluate(() => fbCaptureShot());
+  await w.p.waitForTimeout(1500);
+  const shot = await w.p.evaluate(() => _fbShot ? { n: _fbShot.name, t: _fbShot.type, s: _fbShot.size } : null);
+  ok(!!shot && shot.t === 'image/png' && shot.s > 1000, 'and it comes back as a real PNG of some size');
+  ok(await w.p.evaluate(() => !!document.querySelector('#fb-shot-prev .fb-thumb')),
+     'shown to the writer before it is sent, because a tab capture can catch more than they meant');
+  // The panel is over the thing being reported, so it must not be in the frame.
+  ok(await w.p.evaluate(() => document.getElementById('fb-panel').style.visibility === ''),
+     'and the panel is put back after being hidden for the frame');
+  await w.p.evaluate(() => fbClearShot());
+  ok(await w.p.evaluate(() => !_fbShot && !document.querySelector('#fb-shot-prev .fb-thumb')),
+     'the writer can drop the screenshot again');
+  await w.p.evaluate(() => fbCaptureShot());
+  await w.p.waitForTimeout(1500);
+
   await w.p.evaluate(() => { document.getElementById('fb-text').value = 'The toolbar vanished on a phone.'; });
   await w.p.evaluate(() => fbSend());
   await w.p.waitForTimeout(500);
@@ -198,6 +222,9 @@ async function ctxFor(browser, who, errors) {
   ok(rep.context && rep.context.skin && rep.context.viewport && rep.context.docType,
      'and the context block carries the state the report was filed in');
   ok(rep.status === 'new', 'it arrives as new');
+  ok(!!rep.capture_shot && rep.capture_shot.endsWith('.png')
+     && Object.keys(DB.objects).includes(rep.capture_shot),
+     'the screenshot is uploaded alongside the page copy and the row points at it');
 
   // An empty report is refused before it reaches the network.
   const before = DB.reports.length;
@@ -248,14 +275,15 @@ async function ctxFor(browser, who, errors) {
      'reading it clears the badge');
 
   // --- archiving destroys the capture -------------------------------------
-  const capPath = Object.keys(DB.objects)[0];
+  const capPath = rep.capture_page, shotPath = rep.capture_shot;
   await s.p.evaluate(() => loadFeedback());
   await s.p.waitForTimeout(400);
   await s.p.evaluate(id => fbConfirmArchive(id), rep.id);
   await s.p.waitForTimeout(200);
   await s.p.evaluate(() => doModal());
   await s.p.waitForTimeout(600);
-  ok(!DB.objects[capPath], 'archiving deletes the stored capture');
+  ok(!DB.objects[capPath] && !DB.objects[shotPath],
+     'archiving deletes the stored capture AND the screenshot — both, or the promise is not kept');
   ok(rep.archived_at && !rep.capture_page && rep.capture_purged_at,
      'and the row records that the capture is gone');
   ok(DB.order.indexOf('rm:' + capPath) < DB.order.indexOf('archive:' + rep.id),
