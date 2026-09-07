@@ -21,7 +21,10 @@ create schema if not exists storage;
 create table if not exists storage.buckets (id text primary key, name text, public boolean);
 create table if not exists storage.objects (
   id uuid primary key default gen_random_uuid(),
-  bucket_id text, name text, owner uuid
+  bucket_id text, name text, owner uuid,
+  -- Real Supabase carries the object size in here; admin_usage_overview() reads
+  -- it, so the stand-in has to have it too or the schema will not apply.
+  metadata jsonb default '{}'::jsonb
 );
 alter table storage.objects enable row level security;
 create or replace function storage.foldername(t text) returns text[]
