@@ -1138,6 +1138,17 @@ body.hc .contact-card-bar{color:#000}
 /* Sits on the button like the admin and invite badges do. */
 #fb-badge{margin-left:6px;padding:0 6px;border-radius:9px;background:var(--amber);
   color:var(--panel);font-size:0.66rem;font-weight:700}
+
+/* The capture viewer. Above the feedback panel and above the modal, because it
+   is opened FROM both and is the thing being looked at. The iframe is
+   sandboxed with nothing granted -- a capture is arbitrary DOM from somebody
+   else's browser. */
+#fb-view{position:fixed;inset:0;z-index:1100;display:flex;flex-direction:column;
+  background:var(--panel)}
+#fb-view.hidden{display:none}
+.fb-view-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;
+  border-bottom:3px solid var(--amber);flex-shrink:0}
+#fb-view-frame{flex:1;width:100%;border:0;background:#fff}
 .adm-w-role:disabled{opacity:0.5;cursor:not-allowed}
 #adm-w-filter{margin-bottom:4px}
 

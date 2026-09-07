@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'Page captures now open inside LCARS instead of in a new tab — the preview was coming up blank on iPhones, and an admin opening one was shown its source code rather than the page',
       'If a screenshot or page copy cannot be uploaded, the report itself is still sent — your words are never lost to a problem with the attachment',
       'New App Feedback button in the header — and in the app menu on a phone — for reporting a bug or asking for a feature without leaving what you were doing',
       'A report can carry a screenshot. On a computer LCARS can take one of the tab for you — your browser asks you to confirm first, as it always does — and on a phone, or any browser that will not, you attach the screenshot you have already taken. Either way you see it before it is sent',
@@ -1947,10 +1948,61 @@ function paintFeedback() {
   }).join('');
 }
 
+// ── Looking at a capture ──────────────────────────────────────────────────
+// Both viewers go through here, and neither hands the HTML to anything else to
+// render. Two separate failures said to stop doing that:
+//
+//   * Supabase Storage serves an uploaded page as text/plain, so opening the
+//     signed URL showed an admin the source code and offered them page.txt.
+//     The bytes were right; the host would not render them, and that is not
+//     ours to change.
+//   * window.open() + document.write() came up blank on iOS Safari, which is
+//     the platform most of these reports will be filed from.
+//
+// A sandboxed iframe renders it here instead, in an overlay, on every browser.
+// `sandbox` with nothing granted means no scripts, no forms, no access to this
+// page -- which matters because a capture is arbitrary DOM that came from
+// somebody else's browser. The scripts are stripped on the way in too; this is
+// the second lock on the same door.
+function fbViewCapture(html, title) {
+  let o = document.getElementById('fb-view');
+  if (!o) {
+    o = document.createElement('div');
+    o.id = 'fb-view';
+    document.body.appendChild(o);
+  }
+  o.innerHTML = `
+    <div class="fb-view-hd">
+      <span class="fb-ttl" id="fb-view-ttl"></span>
+      <button class="fb-x" onclick="fbCloseView()" title="Close" aria-label="Close">&times;</button>
+    </div>
+    <iframe id="fb-view-frame" sandbox referrerpolicy="no-referrer" title="Capture"></iframe>`;
+  o.querySelector('#fb-view-ttl').textContent = title || 'PAGE CAPTURE';
+  o.querySelector('#fb-view-frame').srcdoc = html;
+  o.classList.remove('hidden');
+}
+
+// An image is not a page: it gets shown as one, not stuffed into a document.
+function fbViewImage(url, title) {
+  fbViewCapture('<!doctype html><html><body style="margin:0;background:#111;display:flex;' +
+    'align-items:flex-start;justify-content:center">' +
+    '<img src="' + esc(url) + '" style="max-width:100%;height:auto" alt="Screenshot"></body></html>',
+    title || 'SCREENSHOT');
+}
+
+function fbCloseView() {
+  const o = document.getElementById('fb-view');
+  if (o) { o.classList.add('hidden'); o.innerHTML = ''; }
+}
+
 function fbOpenCapture(path) {
+  const isImg = /\.(png|jpe?g|gif|webp|heic|heif)$/i.test(path || '');
+  showToast('Opening…', 1200);
   fbSignedUrl(path)
-    .then(u => window.open(u, '_blank', 'noopener'))
-    .catch(e => showToast(e.message, 4200));
+    .then(u => isImg
+      ? fbViewImage(u)
+      : fetch(u).then(r => r.text()).then(h => fbViewCapture(h)))
+    .catch(e => showToast(e.message || 'That capture could not be opened.', 4200));
 }
 
 function fbSaveStatus(id) {
@@ -2377,11 +2429,8 @@ function fbBuildCapture(stripText) {
 function fbPreview() {
   const on = (document.getElementById('fb-attach') || {}).checked;
   if (!on) { showToast('Nothing is being attached.', 2600); return; }
-  const html = fbBuildCapture((document.getElementById('fb-strip') || {}).checked);
-  const w = window.open('', '_blank', 'noopener');
-  if (!w) { showToast('Your browser blocked the preview window.', 3600); return; }
-  w.document.write(html);
-  w.document.close();
+  fbViewCapture(fbBuildCapture((document.getElementById('fb-strip') || {}).checked),
+                'WHAT WILL BE SENT');
 }
 
 async function fbSend() {

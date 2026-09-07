@@ -82,13 +82,19 @@ async function ctxFor(browser, who, errors) {
     const body = route.request().postData();
     let out = {}, status = 200, headers = {};
     try {
-      if (url.includes('/storage/v1/object/sign/')) {
+      if (url.includes('/storage/v1/object/signed/')) {
+        // Supabase serves an uploaded page as text/plain -- which is exactly
+        // why the app renders it itself rather than opening the URL.
+        return route.fulfill({ status: 200, contentType: 'text/plain',
+                               body: DB.objects[DB.signedFor] || '<p>capture</p>' });
+      } else if (url.includes('/storage/v1/object/sign/')) {
+        DB.signedFor = decodeURIComponent(url.split('/object/sign/app-feedback/')[1] || '');
         out = { signedURL: '/object/signed/x?token=t' };
       } else if (url.includes('/storage/v1/object/app-feedback')) {
         const path = decodeURIComponent(url.split('/object/app-feedback/')[1] || '');
         if (m === 'POST') {
           if (DB.storageDown) { status = 400; out = { message: 'Bucket not found' }; }
-          else { DB.objects[path] = (body || '').length || 1; DB.order.push('upload:' + path); }
+          else { DB.objects[path] = body || 'x'; DB.order.push('upload:' + path); }
         }
         else if (m === 'DELETE') {
           (JSON.parse(body || '{}').prefixes || []).forEach(p => {
@@ -198,6 +204,15 @@ async function ctxFor(browser, who, errors) {
   await w.p.waitForTimeout(1500);
   const shot = await w.p.evaluate(() => _fbShot ? { n: _fbShot.name, t: _fbShot.type, s: _fbShot.size } : null);
   ok(!!shot && shot.t === 'image/png' && shot.s > 1000, 'and it comes back as a real PNG of some size');
+  // The preview must not depend on a popup: window.open + document.write came
+  // up blank on iOS Safari, which is where these reports get filed from.
+  await w.p.evaluate(() => fbPreview());
+  await w.p.waitForTimeout(300);
+  ok(await w.p.evaluate(() => {
+      const f = document.getElementById('fb-view-frame');
+      return !!f && f.hasAttribute('sandbox') && (f.srcdoc || '').includes('<!doctype html');
+     }), 'the writer’s preview renders in a sandboxed frame in the app, not in a popup');
+  await w.p.evaluate(() => fbCloseView());
   ok(await w.p.evaluate(() => !!document.querySelector('#fb-shot-prev .fb-thumb')),
      'shown to the writer before it is sent, because a tab capture can catch more than they meant');
   // The panel is over the thing being reported, so it must not be in the frame.
@@ -260,6 +275,15 @@ async function ctxFor(browser, who, errors) {
      'including the one whose attachment never made it');
   ok(await s.p.evaluate(() => /Page capture/.test(document.getElementById('adm-fb').textContent)),
      'with its capture linked');
+  // Opening the signed URL showed an admin the source code and offered them a
+  // page.txt download, because Storage will not serve it as HTML.
+  await s.p.evaluate(id => fbOpenCapture(_fbReports.find(r => r.id === id).capture_page), rep.id);
+  await s.p.waitForTimeout(700);
+  ok(await s.p.evaluate(() => {
+      const f = document.getElementById('fb-view-frame');
+      return !!f && f.hasAttribute('sandbox') && (f.srcdoc || '').includes('<!doctype html');
+     }), 'and the admin sees it RENDERED in a sandboxed frame, not as source text');
+  await s.p.evaluate(() => fbCloseView());
   ok(await s.p.evaluate(() => /21|KB/.test(document.getElementById('adm-usage').textContent)),
      'and the usage overview alongside it');
 
