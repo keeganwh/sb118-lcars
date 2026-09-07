@@ -1073,6 +1073,24 @@ body.hc .contact-card-bar{color:#000}
   color:var(--red,#c66);font-size:0.6rem;letter-spacing:1px;text-transform:uppercase}
 .adm-w-going td{opacity:0.6}
 .adm-w-role{padding:3px 6px;font-size:0.76rem;min-width:120px}
+
+/* ── App Feedback, admin side ──
+   Same card shell as the reset queue, with a row of controls under each report:
+   the status, one note back to the writer, and the two ways to end it. */
+.adm-fb-bug{border-color:var(--red,#c66);color:var(--red,#c66)}
+.adm-fb-feature{border-color:var(--amber);color:var(--amber)}
+.adm-fb-ctx{font-size:0.72rem;color:var(--dim);margin-top:8px;font-family:var(--mono,monospace)}
+/* Console errors carried with the report. Pre-wrapped and broken, because a
+   stack trace is one long unbreakable string otherwise. */
+.adm-fb-errs{font-size:0.7rem;color:var(--red,#c66);margin-top:6px;white-space:pre-wrap;
+  overflow-wrap:anywhere;max-height:6.5em;overflow:auto}
+.adm-fb-caps{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center}
+.adm-fb-act{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center}
+.adm-fb-status{min-width:150px;padding:3px 6px;font-size:0.76rem}
+.adm-fb-note{flex:1 1 220px;font-size:0.8rem}
+.adm-fb-reply{margin-top:10px;font-size:0.8rem;line-height:1.6;padding:8px 10px;
+  border-left:3px solid var(--amber);overflow-wrap:anywhere}
+.adm-fb-reply .adm-req-foot{display:block}
 .adm-w-role:disabled{opacity:0.5;cursor:not-allowed}
 #adm-w-filter{margin-bottom:4px}
 
@@ -1238,6 +1256,10 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
      own box rather than pushing the page wider. */
   .adm-w-scroll{max-height:60vh}
   .adm-w-tbl{min-width:520px}
+  /* The feedback controls are a row on a desktop and a stack on a phone --
+     a status select and a note field side by side leave neither usable. */
+  .adm-fb-act .btn,.adm-fb-act .mi{flex:1 1 100%}
+  .adm-fb-note{font-size:16px}   /* iOS Safari zooms into any focused field under 16px */
 }
 
 /* Share dialog: four actions never fit on one phone-width row, and a Copy

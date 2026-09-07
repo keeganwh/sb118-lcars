@@ -7,6 +7,15 @@ const SKEY = 'lcars_v1';
 const APP_VERSION = '4.25';
 const VERSIONS = [
   {
+    version: 'pending',
+    date: '2026-09-07',
+    changes: [
+      'Super admins can now read App Feedback in the Admin view: bug reports and feature requests filed from inside the app, with the page capture attached, a status to set and one note back to the writer',
+      'Archiving or deleting a report destroys its capture for good, so nothing a writer sent stays behind once it has been dealt with',
+      'New Storage & Usage panel in the Admin view: what each account is storing and when they were last active',
+    ],
+  },
+  {
     version: '4.0',
     date: '2026-06-29',
     changes: [
@@ -1551,10 +1560,12 @@ function renderAdminView() {
           <div id="adm-list"><span class="set-note">Loading…</span></div>
         </div>
       </div>
+      ${isSuperAdmin() ? fbAdminCard() : ''}
       ${isSuperAdmin() ? adminRolesCard() : ''}
+      ${isSuperAdmin() ? adminUsageCard() : ''}
     </div>`;
 
-  if (isSuperAdmin()) loadWriters();
+  if (isSuperAdmin()) { loadWriters(); loadFeedback(); loadUsage(); }
 
   fetchResetRequests(open)
     .then(rows => paintResetRequests(rows, open))
@@ -1783,6 +1794,271 @@ function setRoleFromRow(wid, sel) {
       if (w && w.role !== sel.value) revert();
     }
   }, 200);
+}
+
+// ── App Feedback: the admin side ──────────────────────────────────────────
+// Super admins only, and that is enforced inside admin_list_feedback() rather
+// than here -- this page draws what the database is willing to hand over.
+//
+// A report's capture lives in the private app-feedback bucket, so it is read
+// over a signed URL rather than a public one, and DELETING or ARCHIVING has to
+// remove the object as well as the row. Postgres cannot delete a storage
+// object, so that is a two-step: the browser removes the files, then the
+// function clears the row. capture_purged_at records that it happened, and a
+// row that still names its paths is one whose purge did not finish.
+const FB_BUCKET = 'app-feedback';
+
+const FB_STATUS = [
+  { v: 'new',            l: 'New' },
+  { v: 'in_development', l: 'In development' },
+  { v: 'responded',      l: 'Responded' },
+  { v: 'later',          l: 'Saved for later' },
+  { v: 'ignored',        l: 'Ignored' },
+];
+function fbStatusLabel(v) { return (FB_STATUS.find(s => s.v === v) || {}).l || v; }
+
+function fbStoragePath(p) { return '/storage/v1/object/' + FB_BUCKET + '/' + p; }
+
+async function fbUpload(path, blob, type) {
+  const r = await supaFetch(fbStoragePath(path), {
+    method: 'POST', body: blob, headers: { 'Content-Type': type, 'x-upsert': 'true' }
+  });
+  if (!r.ok) throw new Error('The capture could not be uploaded.');
+  return path;
+}
+
+// Signed rather than public: a capture can hold unposted sim text.
+async function fbSignedUrl(path) {
+  const r = await supaFetch('/storage/v1/object/sign/' + FB_BUCKET + '/' + path,
+    { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }) });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j || !j.signedURL) throw new Error('That capture could not be opened.');
+  return SUPA_URL + '/storage/v1' + j.signedURL;
+}
+
+async function fbDeleteObjects(paths) {
+  const list = (paths || []).filter(Boolean);
+  if (!list.length) return;
+  await supaFetch('/storage/v1/object/' + FB_BUCKET,
+    { method: 'DELETE', body: JSON.stringify({ prefixes: list }) });
+}
+
+let _fbReports = [];
+let _fbArchived = false;
+
+function fbAdminCard() {
+  return `
+    <div class="set-card">
+      <div class="msec">APP FEEDBACK</div>
+      <div class="set-block">
+        <span class="set-note" style="margin:0 0 10px">Bug reports and feature requests filed from inside the
+          app. A note you write here appears on the writer's own copy of their report — it is the only way
+          they hear back.</span>
+        <div class="adm-tabs">
+          <button class="btn ${_fbArchived ? 'btn-s' : 'btn-p'}" onclick="fbAdminTab(false)">${ic('alert')} Open</button>
+          <button class="btn ${_fbArchived ? 'btn-p' : 'btn-s'}" onclick="fbAdminTab(true)">${ic('archive')} Including archived</button>
+        </div>
+        <div id="adm-fb"><span class="set-note">Loading…</span></div>
+      </div>
+    </div>`;
+}
+
+function fbAdminTab(arch) { _fbArchived = arch; renderAdminView(); }
+
+function loadFeedback() {
+  if (!isSuperAdmin()) return;
+  supaRpc('admin_list_feedback', { p_include_archived: _fbArchived })
+    .then(rows => { _fbReports = rows || []; paintFeedback(); })
+    .catch(e => {
+      const el = document.getElementById('adm-fb');
+      if (el) el.innerHTML = '<span class="set-note" style="color:var(--red,#c66)">' + esc(e.message) + '</span>';
+    });
+}
+
+// The context blob is small and deliberately flat, so it is shown as it is
+// rather than being interpreted. Half the value of a report is knowing which
+// skin, mode and vibe the writer was in when it happened.
+function fbContextLine(c) {
+  if (!c || typeof c !== 'object') return '';
+  const bits = [];
+  if (c.view)     bits.push(c.view);
+  if (c.skin)     bits.push(c.skin + '/' + (c.mode || '?') + '/' + (c.vibe || '?'));
+  if (c.viewport) bits.push(c.viewport);
+  if (c.docType)  bits.push(c.docType === 'joint' ? 'joint sim open' : 'sim open');
+  if (c.platform) bits.push(c.platform);
+  return bits.join(' · ');
+}
+
+function paintFeedback() {
+  const el = document.getElementById('adm-fb');
+  if (!el) return;
+  if (!_fbReports.length) {
+    el.innerHTML = '<span class="set-note">Nothing filed yet.</span>';
+    return;
+  }
+  el.innerHTML = _fbReports.map(f => {
+    const errs = (f.context && Array.isArray(f.context.errors)) ? f.context.errors : [];
+    return `
+    <div class="adm-req adm-fb${f.archived_at ? ' adm-req-done' : ''}">
+      <div class="adm-req-hdr">
+        <span class="adm-req-tag adm-fb-${f.kind}">${f.kind === 'bug' ? 'Bug' : 'Feature request'}</span>
+        <span class="adm-req-wid">${esc(f.writer_id || 'unknown')}${f.display_name ? ' · ' + esc(f.display_name) : ''}</span>
+        <span class="adm-req-when">${esc(fmtWhen(f.created_at))}${f.app_version ? ' · v' + esc(f.app_version) : ''}</span>
+        ${f.archived_at ? '<span class="adm-req-tag">Archived</span>' : ''}
+      </div>
+      <div class="adm-req-note">${esc(f.body)}</div>
+      <div class="adm-fb-ctx">${esc(fbContextLine(f.context))}</div>
+      ${errs.length ? `<div class="adm-fb-errs">${errs.map(e => esc(String(e))).join('<br>')}</div>` : ''}
+      <div class="adm-fb-caps">
+        ${f.capture_page ? `<button class="btn btn-s" onclick="fbOpenCapture('${esc(f.capture_page)}')">${ic('file-text')} Page capture</button>` : ''}
+        ${f.capture_shot ? `<button class="btn btn-s" onclick="fbOpenCapture('${esc(f.capture_shot)}')">${ic('image')} Screenshot</button>` : ''}
+        ${(!f.capture_page && !f.capture_shot) ? `<span class="set-note" style="margin:0">${f.capture_purged_at ? 'Capture destroyed.' : 'No capture attached.'}</span>` : ''}
+      </div>
+      ${f.archived_at ? '' : `
+      <div class="adm-fb-act">
+        <select class="mi adm-fb-status" id="fb-st-${f.id}">
+          ${FB_STATUS.map(s => `<option value="${s.v}"${f.status === s.v ? ' selected' : ''}>${s.l}</option>`).join('')}
+        </select>
+        <input class="mi adm-fb-note" id="fb-nt-${f.id}" placeholder="A note back to the writer (optional)…"
+               autocomplete="off" maxlength="2000">
+        <button class="btn btn-p" onclick="fbSaveStatus('${f.id}')">${ic('check')} Save</button>
+        <button class="btn btn-s" onclick="fbConfirmArchive('${f.id}')">${ic('archive')} Archive</button>
+        <button class="btn btn-s" onclick="fbConfirmDelete('${f.id}')">${ic('trash')} Delete</button>
+      </div>`}
+      ${f.admin_note ? `<div class="adm-fb-reply"><strong>${esc(fbStatusLabel(f.status))}</strong> — ${esc(f.admin_note)}
+        <span class="adm-req-foot">${esc(f.status_by || '')} ${esc(fmtWhen(f.status_at))}</span></div>`
+        : `<div class="adm-req-foot">${esc(fbStatusLabel(f.status))}${f.status_at ? ' · ' + esc(fmtWhen(f.status_at)) : ''}</div>`}
+    </div>`;
+  }).join('');
+}
+
+function fbOpenCapture(path) {
+  fbSignedUrl(path)
+    .then(u => window.open(u, '_blank', 'noopener'))
+    .catch(e => showToast(e.message, 4200));
+}
+
+function fbSaveStatus(id) {
+  const st = document.getElementById('fb-st-' + id);
+  const nt = document.getElementById('fb-nt-' + id);
+  if (!st) return;
+  supaRpc('admin_feedback_status', {
+    p_id: id, p_status: st.value, p_note: (nt && nt.value.trim()) || null
+  }).then(() => { showToast('Report updated'); loadFeedback(); })
+    .catch(e => showToast(e.message, 5200));
+}
+
+// Archive and delete both promise the capture is destroyed, so both purge the
+// storage objects FIRST. If the row call then fails the objects are gone and
+// the row still names them, which is visible and re-runnable -- the other order
+// would leave bytes nobody could find.
+async function fbPurge(f, fn) {
+  await fbDeleteObjects([f.capture_page, f.capture_shot]);
+  await supaRpc(fn, { p_id: f.id });
+}
+
+function fbConfirmArchive(id) {
+  const f = _fbReports.find(x => x.id === id);
+  if (!f) return;
+  openModal('Archive this report', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 10px">The report and your reply stay as a record, and it leaves the open list.</p>
+      <p style="margin:0;color:var(--dim);font-size:0.8rem">The capture is destroyed — the stored page and any
+        screenshot are deleted for good. Open them first if you still need them.</p>
+    </div>`, () => {
+      fbPurge(f, 'admin_feedback_archive')
+        .then(() => { closeModal(); showToast('Report archived'); loadFeedback(); })
+        .catch(e => showToast(e.message, 5200));
+      return false;
+    }, { ok: 'Archive it' });
+}
+
+function fbConfirmDelete(id) {
+  const f = _fbReports.find(x => x.id === id);
+  if (!f) return;
+  openModal('Delete this report', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 10px">The report, your reply and the capture all go. Nothing is kept, and the
+        writer's own copy disappears with it.</p>
+      <p style="margin:0;color:var(--dim);font-size:0.8rem">This cannot be undone. Archive instead if you
+        want the record but not the capture.</p>
+    </div>`, () => {
+      fbPurge(f, 'admin_feedback_delete')
+        .then(() => { closeModal(); showToast('Report deleted'); loadFeedback(); })
+        .catch(e => showToast(e.message, 5200));
+      return false;
+    }, { ok: 'Delete it' });
+}
+
+// ── Usage overview ────────────────────────────────────────────────────────
+// What the fleet's data actually costs, per writer. Ships alongside feedback
+// because both landed in one schema migration.
+let _usage = [];
+
+function adminUsageCard() {
+  return `
+    <div class="set-card">
+      <div class="msec">STORAGE &amp; USAGE</div>
+      <div class="set-block">
+        <span class="set-note" style="margin:0 0 10px">What each account is storing. Sizes are what the
+          database actually holds after compression, so they read smaller than the raw text.</span>
+        <div id="adm-usage"><span class="set-note">Loading…</span></div>
+      </div>
+    </div>`;
+}
+
+function loadUsage() {
+  if (!isSuperAdmin()) return;
+  supaRpc('admin_usage_overview')
+    .then(rows => { _usage = rows || []; paintUsage(); })
+    .catch(e => {
+      const el = document.getElementById('adm-usage');
+      if (el) el.innerHTML = '<span class="set-note" style="color:var(--red,#c66)">' + esc(e.message) + '</span>';
+    });
+}
+
+function fmtBytes(n) {
+  n = Number(n) || 0;
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB';
+  return (n / 1048576).toFixed(1) + ' MB';
+}
+
+function fmtAgo(iso) {
+  if (!iso) return 'never';
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (d <= 0) return 'today';
+  if (d === 1) return 'yesterday';
+  if (d < 31) return d + ' days ago';
+  return fmtJoined(iso);
+}
+
+function paintUsage() {
+  const el = document.getElementById('adm-usage');
+  if (!el) return;
+  if (!_usage.length) { el.innerHTML = '<span class="set-note">No accounts yet.</span>'; return; }
+  const total = _usage.reduce((a, u) => a + (Number(u.bytes) || 0), 0);
+  const docs  = _usage.reduce((a, u) => a + (Number(u.doc_count) || 0) + (Number(u.joint_count) || 0), 0);
+  el.innerHTML = `
+    <div class="adm-w-count">${_usage.length} account${_usage.length === 1 ? '' : 's'} ·
+      ${docs} sim${docs === 1 ? '' : 's'} · ${fmtBytes(total)} in total</div>
+    <div class="adm-w-scroll">
+      <table class="adm-w-tbl">
+        <thead><tr><th>Writer ID</th><th>Sims</th><th>Joint</th><th>Snapshots</th><th>Files</th><th>Total</th><th>Last active</th></tr></thead>
+        <tbody>
+          ${_usage.map(u => `
+            <tr>
+              <td class="adm-w-id">${esc(u.writer_id)}${u.display_name ? '<span class="adm-w-none"> ' + esc(u.display_name) + '</span>' : ''}</td>
+              <td>${u.doc_count}</td>
+              <td>${u.joint_count}</td>
+              <td>${u.snapshot_count}</td>
+              <td class="adm-w-when">${esc(fmtBytes(u.file_bytes))}</td>
+              <td class="adm-w-when">${esc(fmtBytes(u.bytes))}</td>
+              <td class="adm-w-when">${esc(fmtAgo(u.last_active))}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
 }
 
 // ── Asking for a reset ────────────────────────────────────────────────────
