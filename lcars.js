@@ -10,6 +10,9 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'New App Feedback button in the header — and in the app menu on a phone — for reporting a bug or asking for a feature without leaving what you were doing',
+      'A report can carry a copy of the page you were looking at, so a problem can be seen rather than guessed at. You choose whether to attach it, sim text is left out by default, and you can see exactly what will be sent before you send it',
+      'Replies from the team appear under My reports in the same panel, and the button badges when one arrives',
       'Super admins can now read App Feedback in the Admin view: bug reports and feature requests filed from inside the app, with the page capture attached, a status to set and one note back to the writer',
       'Archiving or deleting a report destroys its capture for good, so nothing a writer sent stays behind once it has been dealt with',
       'New Storage & Usage panel in the Admin view: what each account is storing and when they were last active',
@@ -1506,6 +1509,10 @@ async function refreshAdminBadge() {
 // Boot, and then a quiet poll while the app is open. Ten minutes: a PIN reset
 // is not urgent to the minute, and every moderator's browser is asking.
 async function initAdmin() {
+  // The feedback button is signed-in-only, and it is shown or hidden on every
+  // pass through here -- including the offline one, or it would survive a
+  // sign-out.
+  fbRefreshButton();
   if (!isCloud()) return;
   await loadMyRole();
   if (!isModerator()) return;
@@ -2059,6 +2066,303 @@ function paintUsage() {
         </tbody>
       </table>
     </div>`;
+}
+
+// ── App Feedback: the writer's side ───────────────────────────────────────
+// A side panel rather than a modal, and nothing behind it is disabled: the
+// whole point is that a writer can look at the thing that went wrong while
+// they describe it, and can carry on writing afterwards without having lost
+// their place.
+//
+// WHAT "ATTACH A SCREENSHOT" MEANS HERE. There is no zero-dependency way to
+// rasterise a page -- html2canvas is a CDN script this project will not take,
+// and getDisplayMedia() prompts for a tab and does not exist on iOS Safari.
+// So the capture is the page itself: the live DOM, serialised, with a link to
+// the stylesheet and the skin/mode/vibe attributes that were in force. It is
+// smaller than an image and worth more, because a rendering bug on this
+// project is nearly always a specificity fight between those three axes. A
+// writer who has already taken a screenshot on their phone can attach it as
+// well, which is the one thing the DOM copy cannot show.
+//
+// A capture holds whatever was on screen -- ON A JOINT SIM, THAT IS SOMEBODY
+// ELSE'S UNPOSTED WRITING. So it is shown before it is sent, sim text is
+// replaced with a placeholder by default, and the whole thing can be left off.
+let _fbTab = 'new';
+let _fbKind = 'bug';
+let _fbShot = null;      // File chosen by the writer, if any
+let _fbMine = [];
+
+function fbCanUse() { return isCloud() && !!(getAuth() || {}).access_token; }
+
+function fbRefreshButton() {
+  const btn = document.getElementById('btn-feedback');
+  if (!btn) return;
+  btn.classList.toggle('hidden', !fbCanUse());
+  if (fbCanUse()) fbRefreshBadge();
+}
+
+// The badge is the only way a writer learns an admin replied -- there is no
+// notification surface in this app, so the reply lives on their own copy of
+// the report and this says one has arrived.
+async function fbRefreshBadge() {
+  const badge = document.getElementById('fb-badge');
+  if (!badge || !fbCanUse()) return;
+  try {
+    const r = await supaFetch('/rest/v1/feedback_reports?select=id&admin_note=not.is.null&writer_seen_at=is.null',
+      { method: 'GET', headers: { 'Prefer': 'count=exact', 'Range': '0-0' } });
+    if (!r.ok) return;
+    const n = Number(((r.headers.get('content-range') || '').split('/')[1] || '0')) || 0;
+    badge.textContent = n > 9 ? '9+' : String(n);
+    badge.classList.toggle('hidden', n === 0);
+    document.getElementById('btn-feedback').classList.toggle('has-pending', n > 0);
+  } catch(e) { /* offline — it can wait */ }
+}
+
+function fbOpen() {
+  if (!fbCanUse()) { showToast('Sign in to send feedback.', 3200); return; }
+  document.body.classList.remove('mob-more');
+  document.getElementById('fb-panel').classList.remove('hidden');
+  fbTab(_fbTab);
+}
+
+function fbClose() {
+  document.getElementById('fb-panel').classList.add('hidden');
+}
+
+function fbTab(tab) {
+  _fbTab = tab;
+  const nb = document.getElementById('fb-tab-new'), mb = document.getElementById('fb-tab-mine');
+  if (nb && mb) {
+    nb.className = 'btn ' + (tab === 'new' ? 'btn-p' : 'btn-s');
+    mb.className = 'btn ' + (tab === 'mine' ? 'btn-p' : 'btn-s');
+  }
+  if (tab === 'new') fbPaintForm(); else fbLoadMine();
+}
+
+function fbSetKind(k) { _fbKind = k; fbPaintForm(true); }
+
+// `keep` preserves what has already been typed across a re-render -- changing
+// Bug to Feature request must not throw the description away.
+function fbPaintForm(keep) {
+  const el = document.getElementById('fb-body');
+  if (!el) return;
+  const prev = keep ? ((document.getElementById('fb-text') || {}).value || '') : '';
+  el.innerHTML = `
+    <div class="fb-kind">
+      <button class="btn ${_fbKind === 'bug' ? 'btn-p' : 'btn-s'}" onclick="fbSetKind('bug')">${ic('alert')} Bug</button>
+      <button class="btn ${_fbKind === 'feature' ? 'btn-p' : 'btn-s'}" onclick="fbSetKind('feature')">${ic('sparkles')} Feature request</button>
+    </div>
+    <textarea class="mi fb-text" id="fb-text" rows="7" maxlength="4000"
+      placeholder="${_fbKind === 'bug'
+        ? 'What went wrong, and what were you doing when it happened?'
+        : 'What would you like LCARS to do?'}">${esc(prev)}</textarea>
+    <div class="fb-cap">
+      <label class="fb-chk"><input type="checkbox" id="fb-attach" checked onchange="fbPaintCapNote()"> Attach a copy of this page</label>
+      <label class="fb-chk"><input type="checkbox" id="fb-strip" checked onchange="fbPaintCapNote()"> Leave sim text out of it</label>
+      <div class="set-note" id="fb-cap-note" style="margin:0"></div>
+      <button class="btn btn-s" onclick="fbPreview()">${ic('search')} See what will be sent</button>
+      <label class="fb-chk fb-shot" for="fb-shot">Already taken a screenshot? Add it too:</label>
+      <input type="file" id="fb-shot" accept="image/*" onchange="fbPickShot(event)">
+      <div class="set-note" id="fb-shot-note" style="margin:0"></div>
+    </div>
+    <button class="btn btn-p fb-send" onclick="fbSend()">${ic('upload')} Send it</button>
+    <div class="set-note" id="fb-msg" style="min-height:1.1em"></div>`;
+  fbPaintCapNote();
+}
+
+function fbPaintCapNote() {
+  const n = document.getElementById('fb-cap-note');
+  if (!n) return;
+  const on = (document.getElementById('fb-attach') || {}).checked;
+  const strip = (document.getElementById('fb-strip') || {}).checked;
+  const joint = fbOpenDocType() === 'joint';
+  n.textContent = !on
+    ? 'Nothing but your words and the app version will be sent.'
+    : strip
+      ? 'The layout of the page, the style you are using and the app version — but not the words of any sim.'
+      : (joint
+          ? 'Everything on screen, INCLUDING the sim text — and this is a joint sim, so that is your co-writers’ unposted writing as well as yours.'
+          : 'Everything on screen, including the text of the sim you have open.');
+}
+
+function fbPickShot(e) {
+  const f = (e.target.files || [])[0] || null;
+  const note = document.getElementById('fb-shot-note');
+  if (f && f.size > 5 * 1024 * 1024) {
+    e.target.value = ''; _fbShot = null;
+    if (note) note.textContent = 'That image is over 5 MB — please attach a smaller one.';
+    return;
+  }
+  _fbShot = f;
+  if (note) note.textContent = f ? ('Attached: ' + f.name) : '';
+}
+
+function fbOpenDocType() {
+  const d = curId ? S.docs[curId] : null;
+  return d ? (isJointDoc(d) ? 'joint' : 'solo') : 'none';
+}
+
+// The small block of state that turns "it looked wrong" into something
+// reproducible. Style is three axes on this project, not one, so all three are
+// recorded -- a bug that only happens in Epic has been shipped before.
+function fbContext() {
+  const r = document.documentElement;
+  return {
+    view:     (typeof _routeView !== 'undefined' && _routeView) || 'workspace',
+    skin:     r.getAttribute('data-skin') || '',
+    mode:     r.getAttribute('data-mode') || '',
+    vibe:     r.getAttribute('data-vibe') || '',
+    viewport: window.innerWidth + '×' + window.innerHeight,
+    docType:  fbOpenDocType(),
+    online:   navigator.onLine,
+    platform: navigator.userAgent.slice(0, 180),
+    errors:   _fbErrors.slice(-5),
+  };
+}
+
+// Errors are collected from the moment the app boots, because the writer files
+// the report after the thing went wrong, not during it.
+const _fbErrors = [];
+window.addEventListener('error', e => {
+  _fbErrors.push((e.message || 'error') + ' @ ' + (e.filename || '?') + ':' + (e.lineno || 0));
+  if (_fbErrors.length > 20) _fbErrors.shift();
+});
+window.addEventListener('unhandledrejection', e => {
+  _fbErrors.push('unhandled promise: ' + String((e.reason && e.reason.message) || e.reason || '').slice(0, 200));
+  if (_fbErrors.length > 20) _fbErrors.shift();
+});
+
+// The capture. A clone of the live app, with the scripts taken out and the
+// stylesheet pointed at the deployed copy, so it opens as a still page rather
+// than as a running one. The icon sprite comes along or every icon in it is an
+// empty box.
+function fbBuildCapture(stripText) {
+  const app = document.getElementById('app');
+  if (!app) return '';
+  const clone = app.cloneNode(true);
+  clone.querySelectorAll('script,iframe,object,embed').forEach(n => n.remove());
+  // Fields keep their value in a clone only if it is written to the attribute.
+  clone.querySelectorAll('input,textarea').forEach(n => {
+    if (n.type === 'password') { n.value = ''; n.setAttribute('value', ''); return; }
+    if (n.tagName === 'TEXTAREA') n.textContent = n.value || '';
+    else n.setAttribute('value', n.value || '');
+  });
+  if (stripText) {
+    clone.querySelectorAll('#editor').forEach(e => {
+      const n = (e.textContent || '').length;
+      e.innerHTML = '<div style="opacity:.6;font-style:italic">[' + n +
+        ' characters of sim text left out of this capture]</div>';
+    });
+  }
+  const r = document.documentElement;
+  const sprite = document.querySelector('body > svg[aria-hidden="true"]');
+  const base = location.origin.startsWith('http') ? location.origin : 'https://sb118-lcars.vercel.app';
+  return '<!doctype html><html data-skin="' + esc(r.getAttribute('data-skin') || '') +
+    '" data-mode="' + esc(r.getAttribute('data-mode') || '') +
+    '" data-vibe="' + esc(r.getAttribute('data-vibe') || '') +
+    '" style="--ac:' + esc(r.style.getPropertyValue('--ac') || '') + '">' +
+    '<head><meta charset="utf-8"><title>LCARS feedback capture</title>' +
+    '<link rel="stylesheet" href="' + base + '/lcars.css"></head>' +
+    '<body class="' + esc(document.body.className) + '">' +
+    (sprite ? sprite.outerHTML : '') + clone.outerHTML + '</body></html>';
+}
+
+// Shown in a new tab rather than inside the panel: the capture carries the
+// app's own stylesheet, and dropping that into the running page would restyle
+// the app underneath it.
+function fbPreview() {
+  const on = (document.getElementById('fb-attach') || {}).checked;
+  if (!on) { showToast('Nothing is being attached.', 2600); return; }
+  const html = fbBuildCapture((document.getElementById('fb-strip') || {}).checked);
+  const w = window.open('', '_blank', 'noopener');
+  if (!w) { showToast('Your browser blocked the preview window.', 3600); return; }
+  w.document.write(html);
+  w.document.close();
+}
+
+async function fbSend() {
+  const ta = document.getElementById('fb-text');
+  const msg = document.getElementById('fb-msg');
+  const body = (ta && ta.value.trim()) || '';
+  const say = (t, bad) => { if (msg) { msg.style.color = bad ? 'var(--red,#c66)' : 'var(--dim)'; msg.textContent = t; } };
+  if (!body) { say('Tell us what happened first.', true); if (ta) ta.focus(); return; }
+
+  const id = fbUuid();
+  const uidv = (getAuth() || {}).uid;
+  say('Sending…');
+  try {
+    let page = null, shot = null;
+    if ((document.getElementById('fb-attach') || {}).checked) {
+      const html = fbBuildCapture((document.getElementById('fb-strip') || {}).checked);
+      // A capture bigger than this is a sign something has gone wrong with it,
+      // and it is not worth a writer's upload either way.
+      if (html.length <= 3 * 1024 * 1024) {
+        page = await fbUpload(uidv + '/' + id + '/page.html',
+                              new Blob([html], { type: 'text/html' }), 'text/html');
+      }
+    }
+    if (_fbShot) {
+      const ext = (_fbShot.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+      shot = await fbUpload(uidv + '/' + id + '/shot.' + ext, _fbShot, _fbShot.type || 'image/png');
+    }
+    await supaRpc('feedback_submit', {
+      p_id: id, p_kind: _fbKind, p_body: body, p_app_version: APP_VERSION,
+      p_context: fbContext(), p_capture_page: page, p_capture_shot: shot
+    });
+    _fbShot = null;
+    showToast('Thank you — your report has been sent.', 3200);
+    fbTab('mine');
+  } catch(e) {
+    say(e.message || 'That could not be sent.', true);
+  }
+}
+
+// A v4 uuid without a dependency. The id is made here because the capture is
+// uploaded to a path containing it, before the row exists.
+function fbUuid() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+  return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
+}
+
+// My reports. This is where a reply lands -- there is no notification surface
+// in LCARS, so an answer goes on the writer's own copy of the thing they filed,
+// which is somewhere they already have a reason to look.
+function fbLoadMine() {
+  const el = document.getElementById('fb-body');
+  if (el) el.innerHTML = '<span class="set-note">Loading…</span>';
+  supaFetch('/rest/v1/feedback_reports?select=*&order=created_at.desc')
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('Your reports could not be read.')))
+    .then(rows => {
+      _fbMine = rows || [];
+      fbPaintMine();
+      if (_fbMine.some(f => f.admin_note && !f.writer_seen_at)) {
+        supaRpc('feedback_mark_seen').then(fbRefreshBadge).catch(() => {});
+      }
+    })
+    .catch(e => { if (el) el.innerHTML = '<span class="set-note" style="color:var(--red,#c66)">' + esc(e.message) + '</span>'; });
+}
+
+function fbPaintMine() {
+  const el = document.getElementById('fb-body');
+  if (!el) return;
+  if (!_fbMine.length) {
+    el.innerHTML = '<span class="set-note">You have not sent anything yet. Replies from the team appear here.</span>';
+    return;
+  }
+  el.innerHTML = _fbMine.map(f => `
+    <div class="fb-item">
+      <div class="fb-item-hd">
+        <span class="adm-req-tag adm-fb-${f.kind}">${f.kind === 'bug' ? 'Bug' : 'Feature request'}</span>
+        <span class="adm-req-when">${esc(fmtWhen(f.created_at))}</span>
+        <span class="fb-st fb-st-${esc(f.status)}">${esc(fbStatusLabel(f.status))}</span>
+      </div>
+      <div class="adm-req-note">${esc(f.body)}</div>
+      ${f.admin_note ? `<div class="fb-reply">${ic('shield')} ${esc(f.admin_note)}
+        <span class="adm-req-foot">${esc(fmtWhen(f.status_at))}</span></div>` : ''}
+    </div>`).join('');
 }
 
 // ── Asking for a reset ────────────────────────────────────────────────────
