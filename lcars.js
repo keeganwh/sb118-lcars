@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'If a screenshot or page copy cannot be uploaded, the report itself is still sent — your words are never lost to a problem with the attachment',
       'New App Feedback button in the header — and in the app menu on a phone — for reporting a bug or asking for a feature without leaving what you were doing',
       'A report can carry a screenshot. On a computer LCARS can take one of the tab for you — your browser asks you to confirm first, as it always does — and on a phone, or any browser that will not, you attach the screenshot you have already taken. Either way you see it before it is sent',
       'It can also carry a copy of the page itself, which is what makes a problem reproducible rather than only visible. Sim text is left out by default, and you can see exactly what will be sent before you send it',
@@ -1831,7 +1832,13 @@ async function fbUpload(path, blob, type) {
   const r = await supaFetch(fbStoragePath(path), {
     method: 'POST', body: blob, headers: { 'Content-Type': type, 'x-upsert': 'true' }
   });
-  if (!r.ok) throw new Error('The capture could not be uploaded.');
+  if (!r.ok) {
+    // Say what the server said. "The capture could not be uploaded" on its own
+    // sent a real test chasing the app when the answer was that the bucket did
+    // not exist yet.
+    const j = await r.json().catch(() => null);
+    throw new Error(supaErr(j, 'The capture could not be uploaded (' + r.status + ').'));
+  }
   return path;
 }
 
@@ -2387,8 +2394,13 @@ async function fbSend() {
   const id = fbUuid();
   const uidv = (getAuth() || {}).uid;
   say('Sending…');
+
+  // THE ATTACHMENTS MUST NEVER COST THE REPORT. A failed upload used to throw
+  // out of the whole send, so a writer who had just described a bug lost every
+  // word of it to a problem with the picture. The words are the report; the
+  // capture is an extra, and it is allowed to fail on its own.
+  let page = null, shot = null, lost = 0;
   try {
-    let page = null, shot = null;
     if ((document.getElementById('fb-attach') || {}).checked) {
       const html = fbBuildCapture((document.getElementById('fb-strip') || {}).checked);
       // A capture bigger than this is a sign something has gone wrong with it,
@@ -2398,16 +2410,22 @@ async function fbSend() {
                               new Blob([html], { type: 'text/html' }), 'text/html');
       }
     }
+  } catch(e) { lost++; }
+  try {
     if (_fbShot) {
       const ext = (_fbShot.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
       shot = await fbUpload(uidv + '/' + id + '/shot.' + ext, _fbShot, _fbShot.type || 'image/png');
     }
+  } catch(e) { lost++; }
+
+  try {
     await supaRpc('feedback_submit', {
       p_id: id, p_kind: _fbKind, p_body: body, p_app_version: APP_VERSION,
       p_context: fbContext(), p_capture_page: page, p_capture_shot: shot
     });
     _fbShot = null;
-    showToast('Thank you — your report has been sent.', 3200);
+    showToast(lost ? 'Report sent — but the attachment could not go with it.'
+                   : 'Thank you — your report has been sent.', lost ? 4600 : 3200);
     fbTab('mine');
   } catch(e) {
     say(e.message || 'That could not be sent.', true);

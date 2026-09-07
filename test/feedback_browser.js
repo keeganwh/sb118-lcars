@@ -86,7 +86,10 @@ async function ctxFor(browser, who, errors) {
         out = { signedURL: '/object/signed/x?token=t' };
       } else if (url.includes('/storage/v1/object/app-feedback')) {
         const path = decodeURIComponent(url.split('/object/app-feedback/')[1] || '');
-        if (m === 'POST') { DB.objects[path] = (body || '').length || 1; DB.order.push('upload:' + path); }
+        if (m === 'POST') {
+          if (DB.storageDown) { status = 400; out = { message: 'Bucket not found' }; }
+          else { DB.objects[path] = (body || '').length || 1; DB.order.push('upload:' + path); }
+        }
         else if (m === 'DELETE') {
           (JSON.parse(body || '{}').prefixes || []).forEach(p => {
             DB.order.push('rm:' + p); delete DB.objects[p];
@@ -234,11 +237,27 @@ async function ctxFor(browser, who, errors) {
   await w.p.waitForTimeout(300);
   ok(DB.reports.length === before, 'an empty report is not sent');
 
+  // A broken attachment must not cost the writer their words. This is the case
+  // a real test hit on a preview deployment: the storage bucket did not exist
+  // yet, and the whole report went with it.
+  DB.storageDown = true;
+  await w.p.evaluate(() => { fbTab('new'); });
+  await w.p.waitForTimeout(250);
+  await w.p.evaluate(() => { document.getElementById('fb-text').value = 'Second report, storage broken.'; fbSend(); });
+  await w.p.waitForTimeout(700);
+  const second = DB.reports.find(r => r.body === 'Second report, storage broken.');
+  ok(!!second, 'a report still sends when the capture cannot be uploaded');
+  ok(!!second && !second.capture_page && !second.capture_shot,
+     'and arrives with no capture rather than not arriving at all');
+  DB.storageDown = false;
+
   // --- the admin side ------------------------------------------------------
   await s.p.evaluate(() => openAdmin());
   await s.p.waitForTimeout(600);
   ok(await s.p.evaluate(() => /toolbar vanished/.test(document.getElementById('adm-fb').textContent)),
      'a super admin sees the report in the admin view');
+  ok(await s.p.evaluate(() => /storage broken/.test(document.getElementById('adm-fb').textContent)),
+     'including the one whose attachment never made it');
   ok(await s.p.evaluate(() => /Page capture/.test(document.getElementById('adm-fb').textContent)),
      'with its capture linked');
   ok(await s.p.evaluate(() => /21|KB/.test(document.getElementById('adm-usage').textContent)),
@@ -300,7 +319,7 @@ async function ctxFor(browser, who, errors) {
   await s.p.waitForTimeout(200);
   await s.p.evaluate(() => doModal());
   await s.p.waitForTimeout(600);
-  ok(DB.reports.length === 0, 'and a super admin can delete it outright');
+  ok(!DB.reports.some(r => r.id === rep.id), 'and a super admin can delete it outright');
 
   await browser.close();
   pass.forEach(l => console.log('PASS: ' + l));
