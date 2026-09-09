@@ -1117,7 +1117,6 @@ body.hc .contact-card-bar{color:#000}
 .fb-chk{display:flex;align-items:center;gap:8px;font-size:0.8rem;cursor:pointer}
 .fb-chk input{flex-shrink:0}
 .fb-cap-hd{font-size:0.62rem;letter-spacing:2px;font-weight:700;color:var(--amber)}
-.fb-cap-sep{height:1px;background:var(--border);margin:4px 0}
 .fb-shot{display:block;color:var(--dim);font-size:0.78rem;margin-top:2px}
 /* The writer sees the screenshot before it goes: a capture of the whole tab
    can catch more than they meant to send. */

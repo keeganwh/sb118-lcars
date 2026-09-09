@@ -184,28 +184,6 @@ async function ctxFor(browser, who, errors) {
       && getComputedStyle(document.getElementById('fb-panel')).position === 'fixed'),
      'and does not block the app behind it — no modal, no scrim, the editor still writable');
 
-  // The capture, with sim text left out (the default).
-  const capStripped = await w.p.evaluate(() => fbBuildCapture(true));
-  ok(!capStripped.includes('Secret unposted prose'), 'the default capture leaves the sim text out');
-  ok(/characters of sim text left out/.test(capStripped), 'and says so where the text was');
-  ok(capStripped.includes('data-vibe=') && capStripped.includes('data-skin='),
-     'the capture records skin, mode and vibe — style is three axes here, not one');
-  ok(capStripped.includes('<symbol') || capStripped.includes('symbol id='),
-     'the icon sprite travels with it, so the capture is not a grid of empty boxes');
-  ok(!/<script/i.test(capStripped), 'and no scripts come with it');
-  const capFull = await w.p.evaluate(() => fbBuildCapture(false));
-  ok(capFull.includes('Secret unposted prose'), 'unticking the box does send the sim text');
-
-  // The warning has to change when the open sim is joint -- that text is
-  // somebody else's writing.
-  await w.p.evaluate(id => { S.docs[id].docType = 'joint'; }, docId);
-  await w.p.evaluate(() => { document.getElementById('fb-strip').checked = false; fbPaintCapNote(); });
-  ok(/co-writers/.test(await w.p.evaluate(() => document.getElementById('fb-cap-note').textContent)),
-     'sending sim text from a joint sim warns that it is a co-writer’s writing too');
-  await w.p.evaluate(id => { delete S.docs[id].docType; }, docId);
-
-  await w.p.evaluate(() => { document.getElementById('fb-strip').checked = true; fbPaintCapNote(); });
-
   // --- the screenshot ------------------------------------------------------
   ok(await w.p.evaluate(() => fbCanShoot() && !!document.getElementById('fb-shoot')),
      'a desktop browser is offered a real screenshot of the tab');
@@ -213,15 +191,7 @@ async function ctxFor(browser, who, errors) {
   await w.p.waitForTimeout(1500);
   const shot = await w.p.evaluate(() => _fbShot ? { n: _fbShot.name, t: _fbShot.type, s: _fbShot.size } : null);
   ok(!!shot && shot.t === 'image/png' && shot.s > 1000, 'and it comes back as a real PNG of some size');
-  // The preview must not depend on a popup: window.open + document.write came
-  // up blank on iOS Safari, which is where these reports get filed from.
-  await w.p.evaluate(() => fbPreview());
-  await w.p.waitForTimeout(300);
-  ok(await w.p.evaluate(() => {
-      const f = document.getElementById('fb-view-frame');
-      return !!f && f.hasAttribute('sandbox') && (f.srcdoc || '').includes('<!doctype html');
-     }), 'the writer’s preview renders in a sandboxed frame in the app, not in a popup');
-  await w.p.evaluate(() => fbCloseView());
+
   ok(await w.p.evaluate(() => !!document.querySelector('#fb-shot-prev .fb-thumb')),
      'shown to the writer before it is sent, because a tab capture can catch more than they meant');
   // The panel is over the thing being reported, so it must not be in the frame.
@@ -240,18 +210,16 @@ async function ctxFor(browser, who, errors) {
   ok(DB.reports.length === 1 && DB.reports[0].body === 'The toolbar vanished on a phone.',
      'the report reaches the database');
   const rep = DB.reports[0];
-  ok(!!rep.capture_page && Object.keys(DB.objects).includes(rep.capture_page),
-     'the capture is uploaded and the row points at it');
-  ok(rep.capture_page.startsWith(W.uid + '/' + rep.id + '/'),
+  ok(!rep.capture_page, 'no page copy is sent — the screenshot is the attachment');
+  ok(!!rep.capture_shot && Object.keys(DB.objects).includes(rep.capture_shot),
+     'the screenshot is uploaded and the row points at it');
+  ok(rep.capture_shot.startsWith(W.uid + '/' + rep.id + '/'),
      'stored under the writer’s own folder, in the report’s own prefix');
-  ok(DB.order.indexOf('upload:' + rep.capture_page) < DB.order.indexOf('row:' + rep.id),
-     'the capture is uploaded before the row exists — the row names a path that is already there');
+  ok(DB.order.indexOf('upload:' + rep.capture_shot) < DB.order.indexOf('row:' + rep.id),
+     'it is uploaded before the row exists — the row names a path that is already there');
   ok(rep.context && rep.context.skin && rep.context.viewport && rep.context.docType,
      'and the context block carries the state the report was filed in');
   ok(rep.status === 'new', 'it arrives as new');
-  ok(!!rep.capture_shot && rep.capture_shot.endsWith('.png')
-     && Object.keys(DB.objects).includes(rep.capture_shot),
-     'the screenshot is uploaded alongside the page copy and the row points at it');
 
   // An empty report is refused before it reaches the network.
   const before = DB.reports.length;
@@ -271,8 +239,8 @@ async function ctxFor(browser, who, errors) {
   await w.p.waitForTimeout(700);
   const second = DB.reports.find(r => r.body === 'Second report, storage broken.');
   ok(!!second, 'a report still sends when the capture cannot be uploaded');
-  ok(!!second && !second.capture_page && !second.capture_shot,
-     'and arrives with no capture rather than not arriving at all');
+  ok(!!second && !second.capture_shot,
+     'and arrives with no screenshot rather than not arriving at all');
   DB.storageDown = false;
 
   // --- the admin side ------------------------------------------------------
@@ -282,16 +250,16 @@ async function ctxFor(browser, who, errors) {
      'a super admin sees the report in the admin view');
   ok(await s.p.evaluate(() => /storage broken/.test(document.getElementById('adm-fb').textContent)),
      'including the one whose attachment never made it');
-  ok(await s.p.evaluate(() => /Page capture/.test(document.getElementById('adm-fb').textContent)),
-     'with its capture linked');
-  // Opening the signed URL showed an admin the source code and offered them a
-  // page.txt download, because Storage will not serve it as HTML.
-  await s.p.evaluate(id => fbOpenCapture(_fbReports.find(r => r.id === id).capture_page), rep.id);
+  ok(await s.p.evaluate(() => /Screenshot/.test(document.getElementById('adm-fb').textContent)),
+     'with its screenshot linked');
+  // Opening the signed URL directly showed an admin raw bytes and an offer to
+  // download them; an <img> in a sandboxed frame renders the same everywhere.
+  await s.p.evaluate(id => fbOpenCapture(_fbReports.find(r => r.id === id).capture_shot), rep.id);
   await s.p.waitForTimeout(700);
   ok(await s.p.evaluate(() => {
       const f = document.getElementById('fb-view-frame');
-      return !!f && f.hasAttribute('sandbox') && (f.srcdoc || '').includes('<!doctype html');
-     }), 'and the admin sees it RENDERED in a sandboxed frame, not as source text');
+      return !!f && f.hasAttribute('sandbox') && (f.srcdoc || '').includes('<img');
+     }), 'and the admin sees the picture in a sandboxed frame, not a download prompt');
   await s.p.evaluate(() => fbCloseView());
   ok(await s.p.evaluate(() => /21|KB/.test(document.getElementById('adm-usage').textContent)),
      'and the usage overview alongside it');
@@ -352,18 +320,17 @@ async function ctxFor(browser, who, errors) {
   await w.p.evaluate(() => closeModal());
 
   // --- archiving destroys the capture -------------------------------------
-  const capPath = rep.capture_page, shotPath = rep.capture_shot;
+  const shotPath = rep.capture_shot;
   await s.p.evaluate(() => loadFeedback());
   await s.p.waitForTimeout(400);
   await s.p.evaluate(id => fbConfirmArchive(id), rep.id);
   await s.p.waitForTimeout(200);
   await s.p.evaluate(() => doModal());
   await s.p.waitForTimeout(600);
-  ok(!DB.objects[capPath] && !DB.objects[shotPath],
-     'archiving deletes the stored capture AND the screenshot — both, or the promise is not kept');
-  ok(rep.archived_at && !rep.capture_page && rep.capture_purged_at,
-     'and the row records that the capture is gone');
-  ok(DB.order.indexOf('rm:' + capPath) < DB.order.indexOf('archive:' + rep.id),
+  ok(!DB.objects[shotPath], 'archiving deletes the stored screenshot');
+  ok(rep.archived_at && !rep.capture_shot && rep.capture_purged_at,
+     'and the row records that the screenshot is gone');
+  ok(DB.order.indexOf('rm:' + shotPath) < DB.order.indexOf('archive:' + rep.id),
      'the object goes BEFORE the row is cleared — the other order orphans bytes nobody can find');
   ok(await s.p.evaluate(() => !/toolbar vanished/.test(document.getElementById('adm-fb').textContent)),
      'and the archived report leaves the open list');

@@ -2020,3 +2020,20 @@ end $$;
 
 revoke all on function public.admin_feedback_status(uuid, text, text) from public, anon;
 grant execute on function public.admin_feedback_status(uuid, text, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- feedback_reports.capture_page : retired, not dropped
+-- ---------------------------------------------------------------------------
+-- The page copy is gone from the app. It rendered badly, it was never asked
+-- for, and a real screenshot is a better answer to the same question -- it is
+-- guaranteed to look like what the writer was actually getting, which a redraw
+-- of the DOM is not.
+--
+-- The COLUMN stays. Dropping it would need its own deploy-then-migrate window
+-- for no gain: it is nullable, nothing writes it, and it costs nothing sitting
+-- there. Rows filed before the change still name a path, and the purge on
+-- archive and delete still clears it.
+comment on column public.feedback_reports.capture_page is
+  'Retired 2026-09-09. The app no longer writes this. Kept nullable so old rows
+   keep their path and the purge still clears it; dropping it would need a
+   deploy window it does not deserve.';

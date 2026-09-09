@@ -12,11 +12,10 @@ const VERSIONS = [
     changes: [
       'You can withdraw a report you have sent, at any point. It and anything attached to it are deleted outright',
       'Clearer statuses on a report: New, Implementing, Will revisit, Rejected. The old \'Responded\' is gone — a note from the team reaches you whatever the status says, so it never meant anything on its own',
-      'Page captures now open inside LCARS instead of in a new tab — the preview was coming up blank on iPhones, and an admin opening one was shown its source code rather than the page',
-      'If a screenshot or page copy cannot be uploaded, the report itself is still sent — your words are never lost to a problem with the attachment',
+      'Screenshots open inside LCARS rather than in a new tab, which was coming up blank on iPhones',
+      'If a screenshot cannot be uploaded, the report itself is still sent — your words are never lost to a problem with the attachment',
       'New App Feedback button in the header — and in the app menu on a phone — for reporting a bug or asking for a feature without leaving what you were doing',
       'A report can carry a screenshot. On a computer LCARS can take one of the tab for you — your browser asks you to confirm first, as it always does — and on a phone, or any browser that will not, you attach the screenshot you have already taken. Either way you see it before it is sent',
-      'It can also carry a copy of the page itself, which is what makes a problem reproducible rather than only visible. Sim text is left out by default, and you can see exactly what will be sent before you send it',
       'Replies from the team appear under My reports in the same panel, and the button badges when one arrives',
       'Super admins can now read App Feedback in the Admin view: bug reports and feature requests filed from inside the app, with the page capture attached, a status to set and one note back to the writer',
       'Archiving or deleting a report destroys its capture for good, so nothing a writer sent stays behind once it has been dealt with',
@@ -1938,9 +1937,8 @@ function paintFeedback() {
       <div class="adm-fb-ctx">${esc(fbContextLine(f.context))}</div>
       ${errs.length ? `<div class="adm-fb-errs">${errs.map(e => esc(String(e))).join('<br>')}</div>` : ''}
       <div class="adm-fb-caps">
-        ${f.capture_page ? `<button class="btn btn-s" onclick="fbOpenCapture('${esc(f.capture_page)}')">${ic('file-text')} Page capture</button>` : ''}
-        ${f.capture_shot ? `<button class="btn btn-s" onclick="fbOpenCapture('${esc(f.capture_shot)}')">${ic('image')} Screenshot</button>` : ''}
-        ${(!f.capture_page && !f.capture_shot) ? `<span class="set-note" style="margin:0">${f.capture_purged_at ? 'Capture destroyed.' : 'No capture attached.'}</span>` : ''}
+        ${f.capture_shot ? `<button class="btn btn-s" onclick="fbOpenCapture('${esc(f.capture_shot)}')">${ic('image')} Screenshot</button>`
+          : `<span class="set-note" style="margin:0">${f.capture_purged_at ? 'Screenshot destroyed.' : 'No screenshot attached.'}</span>`}
       </div>
       ${f.archived_at ? '' : `
       <div class="adm-fb-act">
@@ -1960,23 +1958,11 @@ function paintFeedback() {
   }).join('');
 }
 
-// ── Looking at a capture ──────────────────────────────────────────────────
-// Both viewers go through here, and neither hands the HTML to anything else to
-// render. Two separate failures said to stop doing that:
-//
-//   * Supabase Storage serves an uploaded page as text/plain, so opening the
-//     signed URL showed an admin the source code and offered them page.txt.
-//     The bytes were right; the host would not render them, and that is not
-//     ours to change.
-//   * window.open() + document.write() came up blank on iOS Safari, which is
-//     the platform most of these reports will be filed from.
-//
-// A sandboxed iframe renders it here instead, in an overlay, on every browser.
-// `sandbox` with nothing granted means no scripts, no forms, no access to this
-// page -- which matters because a capture is arbitrary DOM that came from
-// somebody else's browser. The scripts are stripped on the way in too; this is
-// the second lock on the same door.
-function fbViewCapture(html, title) {
+// ── Looking at a screenshot ───────────────────────────────────────────────
+// Shown in an overlay rather than by opening the signed URL, because Storage
+// serves what it likes and iOS Safari would not open a written-to window at
+// all. An <img> in a sandboxed frame renders the same everywhere.
+function fbViewImage(url, title) {
   let o = document.getElementById('fb-view');
   if (!o) {
     o = document.createElement('div');
@@ -1985,21 +1971,15 @@ function fbViewCapture(html, title) {
   }
   o.innerHTML = `
     <div class="fb-view-hd">
-      <span class="fb-ttl" id="fb-view-ttl"></span>
+      <span class="fb-ttl">${esc(title || 'SCREENSHOT')}</span>
       <button class="fb-x" onclick="fbCloseView()" title="Close" aria-label="Close">&times;</button>
     </div>
-    <iframe id="fb-view-frame" sandbox referrerpolicy="no-referrer" title="Capture"></iframe>`;
-  o.querySelector('#fb-view-ttl').textContent = title || 'PAGE CAPTURE';
-  o.querySelector('#fb-view-frame').srcdoc = html;
-  o.classList.remove('hidden');
-}
-
-// An image is not a page: it gets shown as one, not stuffed into a document.
-function fbViewImage(url, title) {
-  fbViewCapture('<!doctype html><html><body style="margin:0;background:#111;display:flex;' +
+    <iframe id="fb-view-frame" sandbox referrerpolicy="no-referrer" title="Screenshot"></iframe>`;
+  o.querySelector('#fb-view-frame').srcdoc =
+    '<!doctype html><html><body style="margin:0;background:#111;display:flex;' +
     'align-items:flex-start;justify-content:center">' +
-    '<img src="' + esc(url) + '" style="max-width:100%;height:auto" alt="Screenshot"></body></html>',
-    title || 'SCREENSHOT');
+    '<img src="' + esc(url) + '" style="max-width:100%;height:auto" alt="Screenshot"></body></html>';
+  o.classList.remove('hidden');
 }
 
 function fbCloseView() {
@@ -2008,13 +1988,10 @@ function fbCloseView() {
 }
 
 function fbOpenCapture(path) {
-  const isImg = /\.(png|jpe?g|gif|webp|heic|heif)$/i.test(path || '');
   showToast('Opening…', 1200);
   fbSignedUrl(path)
-    .then(u => isImg
-      ? fbViewImage(u)
-      : fetch(u).then(r => r.text()).then(h => fbViewCapture(h)))
-    .catch(e => showToast(e.message || 'That capture could not be opened.', 4200));
+    .then(u => fbViewImage(u))
+    .catch(e => showToast(e.message || 'That screenshot could not be opened.', 4200));
 }
 
 function fbSaveStatus(id) {
@@ -2238,31 +2215,10 @@ function fbPaintForm(keep) {
       <input type="file" id="fb-shot" accept="image/*" onchange="fbPickShot(event)">
       <div class="set-note" id="fb-shot-note" style="margin:0"></div>
       <div id="fb-shot-prev"></div>
-      <div class="fb-cap-sep"></div>
-      <label class="fb-chk"><input type="checkbox" id="fb-attach" checked onchange="fbPaintCapNote()"> Also send a copy of the page itself</label>
-      <label class="fb-chk"><input type="checkbox" id="fb-strip" checked onchange="fbPaintCapNote()"> Leave sim text out of it</label>
-      <div class="set-note" id="fb-cap-note" style="margin:0"></div>
-      <button class="btn btn-s" onclick="fbPreview()">${ic('search')} See what will be sent</button>
     </div>
     <button class="btn btn-p fb-send" onclick="fbSend()">${ic('upload')} Send it</button>
     <div class="set-note" id="fb-msg" style="min-height:1.1em"></div>`;
-  fbPaintCapNote();
   if (_fbShot) fbShowShot();      // survives switching Bug <-> Feature request
-}
-
-function fbPaintCapNote() {
-  const n = document.getElementById('fb-cap-note');
-  if (!n) return;
-  const on = (document.getElementById('fb-attach') || {}).checked;
-  const strip = (document.getElementById('fb-strip') || {}).checked;
-  const joint = fbOpenDocType() === 'joint';
-  n.textContent = !on
-    ? 'Only your words, the app version and the style you are using.'
-    : strip
-      ? 'The layout of the page, the style you are using and the app version — but not the words of any sim.'
-      : (joint
-          ? 'Everything on screen, INCLUDING the sim text — and this is a joint sim, so that is your co-writers’ unposted writing as well as yours.'
-          : 'Everything on screen, including the text of the sim you have open.');
 }
 
 function fbPickShot(e) {
@@ -2400,51 +2356,6 @@ window.addEventListener('unhandledrejection', e => {
   if (_fbErrors.length > 20) _fbErrors.shift();
 });
 
-// The capture. A clone of the live app, with the scripts taken out and the
-// stylesheet pointed at the deployed copy, so it opens as a still page rather
-// than as a running one. The icon sprite comes along or every icon in it is an
-// empty box.
-function fbBuildCapture(stripText) {
-  const app = document.getElementById('app');
-  if (!app) return '';
-  const clone = app.cloneNode(true);
-  clone.querySelectorAll('script,iframe,object,embed').forEach(n => n.remove());
-  // Fields keep their value in a clone only if it is written to the attribute.
-  clone.querySelectorAll('input,textarea').forEach(n => {
-    if (n.type === 'password') { n.value = ''; n.setAttribute('value', ''); return; }
-    if (n.tagName === 'TEXTAREA') n.textContent = n.value || '';
-    else n.setAttribute('value', n.value || '');
-  });
-  if (stripText) {
-    clone.querySelectorAll('#editor').forEach(e => {
-      const n = (e.textContent || '').length;
-      e.innerHTML = '<div style="opacity:.6;font-style:italic">[' + n +
-        ' characters of sim text left out of this capture]</div>';
-    });
-  }
-  const r = document.documentElement;
-  const sprite = document.querySelector('body > svg[aria-hidden="true"]');
-  const base = location.origin.startsWith('http') ? location.origin : 'https://sb118-lcars.vercel.app';
-  return '<!doctype html><html data-skin="' + esc(r.getAttribute('data-skin') || '') +
-    '" data-mode="' + esc(r.getAttribute('data-mode') || '') +
-    '" data-vibe="' + esc(r.getAttribute('data-vibe') || '') +
-    '" style="--ac:' + esc(r.style.getPropertyValue('--ac') || '') + '">' +
-    '<head><meta charset="utf-8"><title>LCARS feedback capture</title>' +
-    '<link rel="stylesheet" href="' + base + '/lcars.css"></head>' +
-    '<body class="' + esc(document.body.className) + '">' +
-    (sprite ? sprite.outerHTML : '') + clone.outerHTML + '</body></html>';
-}
-
-// Shown in a new tab rather than inside the panel: the capture carries the
-// app's own stylesheet, and dropping that into the running page would restyle
-// the app underneath it.
-function fbPreview() {
-  const on = (document.getElementById('fb-attach') || {}).checked;
-  if (!on) { showToast('Nothing is being attached.', 2600); return; }
-  fbViewCapture(fbBuildCapture((document.getElementById('fb-strip') || {}).checked),
-                'WHAT WILL BE SENT');
-}
-
 async function fbSend() {
   const ta = document.getElementById('fb-text');
   const msg = document.getElementById('fb-msg');
@@ -2456,22 +2367,11 @@ async function fbSend() {
   const uidv = (getAuth() || {}).uid;
   say('Sending…');
 
-  // THE ATTACHMENTS MUST NEVER COST THE REPORT. A failed upload used to throw
+  // THE SCREENSHOT MUST NEVER COST THE REPORT. A failed upload used to throw
   // out of the whole send, so a writer who had just described a bug lost every
   // word of it to a problem with the picture. The words are the report; the
-  // capture is an extra, and it is allowed to fail on its own.
-  let page = null, shot = null, lost = 0;
-  try {
-    if ((document.getElementById('fb-attach') || {}).checked) {
-      const html = fbBuildCapture((document.getElementById('fb-strip') || {}).checked);
-      // A capture bigger than this is a sign something has gone wrong with it,
-      // and it is not worth a writer's upload either way.
-      if (html.length <= 3 * 1024 * 1024) {
-        page = await fbUpload(uidv + '/' + id + '/page.html',
-                              new Blob([html], { type: 'text/html' }), 'text/html');
-      }
-    }
-  } catch(e) { lost++; }
+  // picture is an extra, and it is allowed to fail on its own.
+  let shot = null, lost = 0;
   try {
     if (_fbShot) {
       const ext = (_fbShot.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
@@ -2482,7 +2382,7 @@ async function fbSend() {
   try {
     await supaRpc('feedback_submit', {
       p_id: id, p_kind: _fbKind, p_body: body, p_app_version: APP_VERSION,
-      p_context: fbContext(), p_capture_page: page, p_capture_shot: shot
+      p_context: fbContext(), p_capture_page: null, p_capture_shot: shot
     });
     _fbShot = null;
     showToast(lost ? 'Report sent — but the attachment could not go with it.'
