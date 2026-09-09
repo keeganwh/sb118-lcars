@@ -7,6 +7,16 @@
 -- same thing, and either is safe: every statement here is re-runnable.
 --
 -- It depends on my_role(), which already exists.
+--
+-- ⚠ DO NOT RE-RUN THIS ONE ON ITS OWN once 2026-09-09-feedback-statuses.sql
+--   has been applied. This file carries the ORIGINAL admin_feedback_status(),
+--   and `create or replace` would put it back -- taking the new status names
+--   with it, so setting a report to Implementing would start failing. Verified,
+--   not assumed.
+--
+--   If you do it by accident: run 2026-09-09-feedback-statuses.sql again and it
+--   is repaired. Or just run supabase/schema.sql, which always ends in the
+--   current state whatever order things happened in -- that is the safe habit.
 
 -- ---------------------------------------------------------------------------
 -- feedback_reports : bug reports and feature requests filed from inside the app
