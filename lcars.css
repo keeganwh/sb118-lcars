@@ -1129,7 +1129,9 @@ body.hc .contact-card-bar{color:#000}
 .fb-item-hd{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .fb-st{font-size:0.66rem;letter-spacing:1px;text-transform:uppercase;color:var(--dim);
   margin-left:auto}
-.fb-st-in_development,.fb-st-responded{color:var(--amber)}
+.fb-st-implementing,.fb-st-in_development{color:var(--amber)}
+.fb-st-rejected,.fb-st-ignored{color:var(--dim)}
+.fb-item-act{display:flex;justify-content:flex-end;margin-top:8px}
 /* A reply is the one thing in this panel the writer did not write. It gets the
    accent rule so it reads as an answer rather than as more of their own text. */
 .fb-reply{margin-top:8px;font-size:0.82rem;line-height:1.6;padding:8px 10px;

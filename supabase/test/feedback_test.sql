@@ -134,9 +134,9 @@ select pg_temp.ok((select writer_id from public.admin_list_feedback()) = 'A111',
 
 -- --- actioning --------------------------------------------------------------
 select public.admin_feedback_status('11111111-1111-1111-1111-111111111111',
-                                    'in_development', 'Good catch -- fixing it.');
+                                    'implementing', 'Good catch -- fixing it.');
 select pg_temp.ok((select status from public.feedback_reports
-                    where id = '11111111-1111-1111-1111-111111111111') = 'in_development'
+                    where id = '11111111-1111-1111-1111-111111111111') = 'implementing'
               and (select admin_note from public.feedback_reports
                     where id = '11111111-1111-1111-1111-111111111111') is not null
               and (select status_by from public.feedback_reports
@@ -144,7 +144,7 @@ select pg_temp.ok((select status from public.feedback_reports
                   'a super admin sets a status and writes a note back');
 
 -- A status change without a note leaves the note alone.
-select public.admin_feedback_status('11111111-1111-1111-1111-111111111111', 'responded');
+select public.admin_feedback_status('11111111-1111-1111-1111-111111111111', 'will_revisit');
 select pg_temp.ok((select admin_note from public.feedback_reports
                     where id = '11111111-1111-1111-1111-111111111111')
                   = 'Good catch -- fixing it.',
@@ -162,12 +162,54 @@ select pg_temp.ok((select writer_seen_at from public.feedback_reports
 
 select pg_temp.be('a');
 do $$ begin
-  perform public.admin_feedback_status('11111111-1111-1111-1111-111111111111', 'ignored');
+  perform public.admin_feedback_status('11111111-1111-1111-1111-111111111111', 'rejected');
   raise exception 'FAIL: a writer actioned their own report';
 exception when others then
   if position('FAIL:' in sqlerrm) = 1 then raise; end if;
 end $$;
 select pg_temp.ok(true, 'a writer cannot action their own report');
+
+-- --- withdrawing ------------------------------------------------------------
+-- A writer can take their own report back. It goes entirely: half-deleting it
+-- would leave the sim text in the database, which is the thing most likely to
+-- be the reason for withdrawing.
+select pg_temp.be('a');
+select public.feedback_submit('33333333-3333-3333-3333-333333333333', 'feature',
+  'An idea I have thought better of.', '4.25', '{}'::jsonb, null, null);
+select pg_temp.ok((select count(*) from public.feedback_reports
+                    where id = '33333333-3333-3333-3333-333333333333') = 1,
+                  'a second report is filed');
+
+-- Not somebody else's, though.
+select pg_temp.be('b');
+do $$ begin
+  perform public.feedback_withdraw('33333333-3333-3333-3333-333333333333');
+  raise exception 'FAIL: another writer withdrew a report that was not theirs';
+exception when others then
+  if position('FAIL:' in sqlerrm) = 1 then raise; end if;
+end $$;
+select pg_temp.ok((select count(*) from public.feedback_reports
+                    where id = '33333333-3333-3333-3333-333333333333') = 1,
+                  'another writer cannot withdraw a report that is not theirs');
+
+select pg_temp.be('a');
+select public.feedback_withdraw('33333333-3333-3333-3333-333333333333');
+select pg_temp.ok((select count(*) from public.feedback_reports
+                    where id = '33333333-3333-3333-3333-333333333333') = 0,
+                  'the writer can withdraw their own report, and the row goes entirely');
+
+-- Withdrawing works whatever the team has done with it: it is their writing,
+-- and a status is not a claim on it.
+select public.feedback_submit('44444444-4444-4444-4444-444444444444', 'bug',
+  'Filed then withdrawn after actioning.', '4.25', '{}'::jsonb, null, null);
+select pg_temp.be('c');
+select public.admin_feedback_status('44444444-4444-4444-4444-444444444444',
+                                    'implementing', 'On it.');
+select pg_temp.be('a');
+select public.feedback_withdraw('44444444-4444-4444-4444-444444444444');
+select pg_temp.ok((select count(*) from public.feedback_reports
+                    where id = '44444444-4444-4444-4444-444444444444') = 0,
+                  'and can withdraw one the team has already actioned');
 
 -- --- archiving and deleting -------------------------------------------------
 select pg_temp.be('c');

@@ -10,6 +10,8 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'You can withdraw a report you have sent, at any point. It and anything attached to it are deleted outright',
+      'Clearer statuses on a report: New, Implementing, Will revisit, Rejected. The old \'Responded\' is gone — a note from the team reaches you whatever the status says, so it never meant anything on its own',
       'Page captures now open inside LCARS instead of in a new tab — the preview was coming up blank on iPhones, and an admin opening one was shown its source code rather than the page',
       'If a screenshot or page copy cannot be uploaded, the report itself is still sent — your words are never lost to a problem with the attachment',
       'New App Feedback button in the header — and in the app menu on a phone — for reporting a bug or asking for a feature without leaving what you were doing',
@@ -1818,14 +1820,24 @@ function setRoleFromRow(wid, sel) {
 // row that still names its paths is one whose purge did not finish.
 const FB_BUCKET = 'app-feedback';
 
+// What will HAPPEN to the report. There is deliberately no "responded": any
+// note an admin writes reaches the writer whatever the status is, so a status
+// meaning "I replied" only said what the note had already said.
 const FB_STATUS = [
-  { v: 'new',            l: 'New' },
-  { v: 'in_development', l: 'In development' },
-  { v: 'responded',      l: 'Responded' },
-  { v: 'later',          l: 'Saved for later' },
-  { v: 'ignored',        l: 'Ignored' },
+  { v: 'new',          l: 'New' },
+  { v: 'implementing', l: 'Implementing' },
+  { v: 'will_revisit', l: 'Will revisit' },
+  { v: 'rejected',     l: 'Rejected' },
 ];
-function fbStatusLabel(v) { return (FB_STATUS.find(s => s.v === v) || {}).l || v; }
+// The old names are still readable, because a row written before this change
+// can still be sitting in the queue when the app updates ahead of the database.
+const FB_STATUS_OLD = {
+  in_development: 'Implementing', later: 'Will revisit',
+  ignored: 'Rejected', responded: 'Will revisit',
+};
+function fbStatusLabel(v) {
+  return (FB_STATUS.find(s => s.v === v) || {}).l || FB_STATUS_OLD[v] || v;
+}
 
 function fbStoragePath(p) { return '/storage/v1/object/' + FB_BUCKET + '/' + p; }
 
@@ -1933,7 +1945,7 @@ function paintFeedback() {
       ${f.archived_at ? '' : `
       <div class="adm-fb-act">
         <select class="mi adm-fb-status" id="fb-st-${f.id}">
-          ${FB_STATUS.map(s => `<option value="${s.v}"${f.status === s.v ? ' selected' : ''}>${s.l}</option>`).join('')}
+          ${FB_STATUS.map(s => `<option value="${s.v}"${fbStatusLabel(f.status) === s.l ? ' selected' : ''}>${s.l}</option>`).join('')}
         </select>
         <input class="mi adm-fb-note" id="fb-nt-${f.id}" placeholder="A note back to the writer (optional)…"
                autocomplete="off" maxlength="2000">
@@ -2526,7 +2538,33 @@ function fbPaintMine() {
       <div class="adm-req-note">${esc(f.body)}</div>
       ${f.admin_note ? `<div class="fb-reply">${ic('shield')} ${esc(f.admin_note)}
         <span class="adm-req-foot">${esc(fmtWhen(f.status_at))}</span></div>` : ''}
+      <div class="fb-item-act">
+        <button class="btn btn-s" onclick="fbConfirmWithdraw('${f.id}')">${ic('trash')} Withdraw</button>
+      </div>
     </div>`).join('');
+}
+
+// Taking it back. Allowed at any status: it is their writing, and on a joint
+// sim the capture may hold a co-writer's too -- a status is not a claim on it.
+// The storage objects go first, as with every other purge here.
+function fbConfirmWithdraw(id) {
+  const f = _fbMine.find(x => x.id === id);
+  if (!f) return;
+  const acted = f.status !== 'new';
+  openModal('Withdraw this report', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 10px">Your report, anything attached to it${f.admin_note ? ' and the reply you were sent' : ''}
+        will be deleted. Nothing is kept.</p>
+      <p style="margin:0;color:var(--dim);font-size:0.8rem">${acted
+        ? 'The team has already looked at this one — withdrawing it means they lose what you told them, so only do it if you meant to.'
+        : 'Nobody has looked at it yet.'}</p>
+    </div>`, () => {
+      fbDeleteObjects([f.capture_page, f.capture_shot])
+        .then(() => supaRpc('feedback_withdraw', { p_id: id }))
+        .then(() => { closeModal(); showToast('Report withdrawn'); fbLoadMine(); fbRefreshBadge(); })
+        .catch(e => showToast(e.message || 'That could not be withdrawn.', 5200));
+      return false;
+    }, { ok: 'Withdraw it' });
 }
 
 // ── Asking for a reset ────────────────────────────────────────────────────

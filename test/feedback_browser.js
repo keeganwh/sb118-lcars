@@ -42,6 +42,8 @@ function rpc(fn, a, me) {
       return DB.reports.filter(r => a.p_include_archived || !r.archived_at);
     case 'admin_feedback_status': {
       if (who.role !== 'super_admin') throw new Error('Only a super admin can action feedback.');
+      if (!['new','implementing','will_revisit','rejected'].includes(a.p_status))
+        throw new Error('Unknown status: ' + a.p_status);
       const r = DB.reports.find(x => x.id === a.p_id);
       r.status = a.p_status;
       if (a.p_note) { r.admin_note = a.p_note; r.writer_seen_at = null; }
@@ -60,6 +62,13 @@ function rpc(fn, a, me) {
       DB.order.push('delete:' + a.p_id);
       DB.reports = DB.reports.filter(x => x.id !== a.p_id);
       return null;
+    case 'feedback_withdraw': {
+      const r = DB.reports.find(x => x.id === a.p_id);
+      if (!r || r.writer_uid !== me) throw new Error('That report is not yours, or is already gone.');
+      DB.order.push('withdraw:' + a.p_id);
+      DB.reports = DB.reports.filter(x => x.id !== a.p_id);
+      return null;
+    }
     case 'feedback_mark_seen':
       DB.reports.forEach(r => { if (r.writer_uid === me) r.writer_seen_at = new Date().toISOString(); });
       return null;
@@ -296,12 +305,12 @@ async function ctxFor(browser, who, errors) {
 
   // Actioning it, with a note back.
   await s.p.evaluate(id => {
-    document.getElementById('fb-st-' + id).value = 'in_development';
+    document.getElementById('fb-st-' + id).value = 'implementing';
     document.getElementById('fb-nt-' + id).value = 'Fixed in the next release.';
     fbSaveStatus(id);
   }, rep.id);
   await s.p.waitForTimeout(500);
-  ok(rep.status === 'in_development' && rep.admin_note === 'Fixed in the next release.',
+  ok(rep.status === 'implementing' && rep.admin_note === 'Fixed in the next release.',
      'the admin sets a status and writes a note back');
 
   // --- the reply reaches the writer ---------------------------------------
@@ -316,6 +325,31 @@ async function ctxFor(browser, who, errors) {
   await w.p.waitForTimeout(400);
   ok(await w.p.evaluate(() => document.getElementById('fb-badge').classList.contains('hidden')),
      'reading it clears the badge');
+
+  // --- withdrawing ---------------------------------------------------------
+  // The writer takes back the second report -- the one that arrived with no
+  // capture -- and it goes entirely.
+  await w.p.evaluate(() => { fbOpen(); fbTab('mine'); });
+  await w.p.waitForTimeout(500);
+  ok(await w.p.evaluate(() => /Withdraw/.test(document.getElementById('fb-body').textContent)),
+     'a writer can see a way to take a report back');
+  await w.p.evaluate(id => fbConfirmWithdraw(id), second.id);
+  await w.p.waitForTimeout(200);
+  // The warning has to change once somebody has acted on it.
+  ok(await w.p.evaluate(() => /Nobody has looked at it yet/.test(document.getElementById('mo-body').textContent)),
+     'and is told nobody has looked at an untouched one');
+  await w.p.evaluate(() => doModal());
+  await w.p.waitForTimeout(600);
+  ok(!DB.reports.some(r => r.id === second.id), 'withdrawing deletes the report outright');
+
+  // The one the admin actioned warns before it goes, and still goes.
+  await w.p.evaluate(() => fbLoadMine());
+  await w.p.waitForTimeout(500);
+  await w.p.evaluate(id => fbConfirmWithdraw(id), rep.id);
+  await w.p.waitForTimeout(200);
+  ok(await w.p.evaluate(() => /already looked at this one/.test(document.getElementById('mo-body').textContent)),
+     'and warned when the team has already acted on it');
+  await w.p.evaluate(() => closeModal());
 
   // --- archiving destroys the capture -------------------------------------
   const capPath = rep.capture_page, shotPath = rep.capture_shot;
