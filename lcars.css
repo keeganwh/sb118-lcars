@@ -1073,6 +1073,83 @@ body.hc .contact-card-bar{color:#000}
   color:var(--red,#c66);font-size:0.6rem;letter-spacing:1px;text-transform:uppercase}
 .adm-w-going td{opacity:0.6}
 .adm-w-role{padding:3px 6px;font-size:0.76rem;min-width:120px}
+
+/* ── App Feedback, admin side ──
+   Same card shell as the reset queue, with a row of controls under each report:
+   the status, one note back to the writer, and the two ways to end it. */
+.adm-fb-bug{border-color:var(--red,#c66);color:var(--red,#c66)}
+.adm-fb-feature{border-color:var(--amber);color:var(--amber)}
+.adm-fb-ctx{font-size:0.72rem;color:var(--dim);margin-top:8px;font-family:var(--mono,monospace)}
+/* Console errors carried with the report. Pre-wrapped and broken, because a
+   stack trace is one long unbreakable string otherwise. */
+.adm-fb-errs{font-size:0.7rem;color:var(--red,#c66);margin-top:6px;white-space:pre-wrap;
+  overflow-wrap:anywhere;max-height:6.5em;overflow:auto}
+.adm-fb-caps{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center}
+.adm-fb-act{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center}
+.adm-fb-status{min-width:150px;padding:3px 6px;font-size:0.76rem}
+.adm-fb-note{flex:1 1 220px;font-size:0.8rem}
+.adm-fb-reply{margin-top:10px;font-size:0.8rem;line-height:1.6;padding:8px 10px;
+  border-left:3px solid var(--amber);overflow-wrap:anywhere}
+.adm-fb-reply .adm-req-foot{display:block}
+
+/* ── App Feedback, the writer's side panel ──
+   Fixed to the right edge, above the app but with NO scrim: the app behind it
+   stays live and usable, which is the whole design. It sits below the modal's
+   z-index so a confirm raised from inside it still lands on top. */
+#fb-panel{position:fixed;top:0;right:0;z-index:700;width:min(420px,92vw);
+  height:100dvh;display:flex;flex-direction:column;
+  background:var(--panel);border-left:1px solid var(--border);
+  box-shadow:-14px 0 34px rgba(0,0,0,.34)}
+#fb-panel.hidden{display:none}
+.fb-hd{display:flex;align-items:center;gap:10px;padding:12px 14px;
+  border-bottom:3px solid var(--amber)}
+.fb-ttl{font-size:0.72rem;letter-spacing:2px;font-weight:700;color:var(--amber)}
+.fb-x{margin-left:auto;background:transparent;border:none;color:var(--dim);
+  font-size:1.5rem;line-height:1;cursor:pointer;padding:0 4px}
+.fb-tabs{padding:12px 14px 0;margin:0}
+.fb-body{flex:1;overflow-y:auto;padding:12px 14px 20px;display:flex;
+  flex-direction:column;gap:10px}
+.fb-kind{display:flex;gap:8px}
+.fb-kind .btn{flex:1}
+.fb-text{width:100%;resize:vertical;font-family:inherit;font-size:0.87rem;line-height:1.6}
+.fb-cap{display:flex;flex-direction:column;gap:8px;padding:10px;
+  border:1px solid var(--border);border-radius:8px}
+.fb-chk{display:flex;align-items:center;gap:8px;font-size:0.8rem;cursor:pointer}
+.fb-chk input{flex-shrink:0}
+.fb-cap-hd{font-size:0.62rem;letter-spacing:2px;font-weight:700;color:var(--amber)}
+.fb-shot{display:block;color:var(--dim);font-size:0.78rem;margin-top:2px}
+/* The writer sees the screenshot before it goes: a capture of the whole tab
+   can catch more than they meant to send. */
+.fb-thumb{display:block;width:100%;border:1px solid var(--border);border-radius:6px;
+  margin:6px 0;max-height:220px;object-fit:contain;object-position:top;background:#000}
+#fb-shot{font-size:0.76rem;color:var(--dim);max-width:100%}
+.fb-send{align-self:flex-start}
+.fb-item{border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.fb-item-hd{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.fb-st{font-size:0.66rem;letter-spacing:1px;text-transform:uppercase;color:var(--dim);
+  margin-left:auto}
+.fb-st-implementing,.fb-st-in_development{color:var(--amber)}
+.fb-st-rejected,.fb-st-ignored{color:var(--dim)}
+.fb-item-act{display:flex;justify-content:flex-end;margin-top:8px}
+/* A reply is the one thing in this panel the writer did not write. It gets the
+   accent rule so it reads as an answer rather than as more of their own text. */
+.fb-reply{margin-top:8px;font-size:0.82rem;line-height:1.6;padding:8px 10px;
+  border-left:3px solid var(--amber);overflow-wrap:anywhere}
+.fb-reply .ic{width:14px;height:14px;color:var(--amber)}
+/* Sits on the button like the admin and invite badges do. */
+#fb-badge{margin-left:6px;padding:0 6px;border-radius:9px;background:var(--amber);
+  color:var(--panel);font-size:0.66rem;font-weight:700}
+
+/* The capture viewer. Above the feedback panel and above the modal, because it
+   is opened FROM both and is the thing being looked at. The iframe is
+   sandboxed with nothing granted -- a capture is arbitrary DOM from somebody
+   else's browser. */
+#fb-view{position:fixed;inset:0;z-index:1100;display:flex;flex-direction:column;
+  background:var(--panel)}
+#fb-view.hidden{display:none}
+.fb-view-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;
+  border-bottom:3px solid var(--amber);flex-shrink:0}
+#fb-view-frame{flex:1;width:100%;border:0;background:#fff}
 .adm-w-role:disabled{opacity:0.5;cursor:not-allowed}
 #adm-w-filter{margin-bottom:4px}
 
@@ -1238,6 +1315,14 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
      own box rather than pushing the page wider. */
   .adm-w-scroll{max-height:60vh}
   .adm-w-tbl{min-width:520px}
+  /* The feedback controls are a row on a desktop and a stack on a phone --
+     a status select and a note field side by side leave neither usable. */
+  .adm-fb-act .btn,.adm-fb-act .mi{flex:1 1 100%}
+  /* The panel is the full width of a phone, and its text fields clear the
+     16px floor or iOS Safari zooms the whole app in on focus. */
+  #fb-panel{width:100vw;border-left:none}
+  .fb-text{font-size:16px}
+  .adm-fb-note{font-size:16px}   /* iOS Safari zooms into any focused field under 16px */
 }
 
 /* Share dialog: four actions never fit on one phone-width row, and a Copy

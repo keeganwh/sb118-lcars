@@ -98,10 +98,13 @@ psql -q -f "$HERE/harness.sql" >/dev/null 2>&1
 apply || { echo "schema.sql failed to apply"; exit 1; }
 echo "· applying it a second time (it must be re-runnable)"
 apply || { echo "schema.sql is not re-runnable"; exit 1; }
-echo "· running the joint-post checks"
+echo "· running the joint-post and feedback checks"
 echo
 
 out=$(psql -q -f "$HERE/jp_test.sql" 2>&1) || { echo "$out" | tail -20; exit 1; }
+fb=$(psql -q -f "$HERE/feedback_test.sql" 2>&1) || { echo "$fb" | tail -20; exit 1; }
+out="$out
+$fb"
 echo "$out" | grep -E 'PASS|FAIL|passed' | sed 's/^psql.*NOTICE:  //'
 
 if echo "$out" | grep -q FAIL; then exit 1; fi

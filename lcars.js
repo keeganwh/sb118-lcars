@@ -7,6 +7,22 @@ const SKEY = 'lcars_v1';
 const APP_VERSION = '4.25';
 const VERSIONS = [
   {
+    version: 'pending',
+    date: '2026-09-07',
+    changes: [
+      'You can withdraw a report you have sent, at any point. It and anything attached to it are deleted outright',
+      'Clearer statuses on a report: New, Implementing, Will revisit, Rejected. The old \'Responded\' is gone — a note from the team reaches you whatever the status says, so it never meant anything on its own',
+      'Screenshots open inside LCARS rather than in a new tab, which was coming up blank on iPhones',
+      'If a screenshot cannot be uploaded, the report itself is still sent — your words are never lost to a problem with the attachment',
+      'New App Feedback button in the header — and in the app menu on a phone — for reporting a bug or asking for a feature without leaving what you were doing',
+      'A report can carry a screenshot. On a computer LCARS can take one of the tab for you — your browser asks you to confirm first, as it always does — and on a phone, or any browser that will not, you attach the screenshot you have already taken. Either way you see it before it is sent',
+      'Replies from the team appear under My reports in the same panel, and the button badges when one arrives',
+      'Super admins can now read App Feedback in the Admin view: bug reports and feature requests filed from inside the app, with the page capture attached, a status to set and one note back to the writer',
+      'Archiving or deleting a report destroys its capture for good, so nothing a writer sent stays behind once it has been dealt with',
+      'New Storage & Usage panel in the Admin view: what each account is storing and when they were last active',
+    ],
+  },
+  {
     version: '4.0',
     date: '2026-06-29',
     changes: [
@@ -1497,6 +1513,10 @@ async function refreshAdminBadge() {
 // Boot, and then a quiet poll while the app is open. Ten minutes: a PIN reset
 // is not urgent to the minute, and every moderator's browser is asking.
 async function initAdmin() {
+  // The feedback button is signed-in-only, and it is shown or hidden on every
+  // pass through here -- including the offline one, or it would survive a
+  // sign-out.
+  fbRefreshButton();
   if (!isCloud()) return;
   await loadMyRole();
   if (!isModerator()) return;
@@ -1551,10 +1571,12 @@ function renderAdminView() {
           <div id="adm-list"><span class="set-note">Loading…</span></div>
         </div>
       </div>
+      ${isSuperAdmin() ? fbAdminCard() : ''}
       ${isSuperAdmin() ? adminRolesCard() : ''}
+      ${isSuperAdmin() ? adminUsageCard() : ''}
     </div>`;
 
-  if (isSuperAdmin()) loadWriters();
+  if (isSuperAdmin()) { loadWriters(); loadFeedback(); loadUsage(); }
 
   fetchResetRequests(open)
     .then(rows => paintResetRequests(rows, open))
@@ -1783,6 +1805,666 @@ function setRoleFromRow(wid, sel) {
       if (w && w.role !== sel.value) revert();
     }
   }, 200);
+}
+
+// ── App Feedback: the admin side ──────────────────────────────────────────
+// Super admins only, and that is enforced inside admin_list_feedback() rather
+// than here -- this page draws what the database is willing to hand over.
+//
+// A report's capture lives in the private app-feedback bucket, so it is read
+// over a signed URL rather than a public one, and DELETING or ARCHIVING has to
+// remove the object as well as the row. Postgres cannot delete a storage
+// object, so that is a two-step: the browser removes the files, then the
+// function clears the row. capture_purged_at records that it happened, and a
+// row that still names its paths is one whose purge did not finish.
+const FB_BUCKET = 'app-feedback';
+
+// What will HAPPEN to the report. There is deliberately no "responded": any
+// note an admin writes reaches the writer whatever the status is, so a status
+// meaning "I replied" only said what the note had already said.
+const FB_STATUS = [
+  { v: 'new',          l: 'New' },
+  { v: 'implementing', l: 'Implementing' },
+  { v: 'will_revisit', l: 'Will revisit' },
+  { v: 'rejected',     l: 'Rejected' },
+];
+// The old names are still readable, because a row written before this change
+// can still be sitting in the queue when the app updates ahead of the database.
+const FB_STATUS_OLD = {
+  in_development: 'Implementing', later: 'Will revisit',
+  ignored: 'Rejected', responded: 'Will revisit',
+};
+function fbStatusLabel(v) {
+  return (FB_STATUS.find(s => s.v === v) || {}).l || FB_STATUS_OLD[v] || v;
+}
+
+function fbStoragePath(p) { return '/storage/v1/object/' + FB_BUCKET + '/' + p; }
+
+async function fbUpload(path, blob, type) {
+  const r = await supaFetch(fbStoragePath(path), {
+    method: 'POST', body: blob, headers: { 'Content-Type': type, 'x-upsert': 'true' }
+  });
+  if (!r.ok) {
+    // Say what the server said. "The capture could not be uploaded" on its own
+    // sent a real test chasing the app when the answer was that the bucket did
+    // not exist yet.
+    const j = await r.json().catch(() => null);
+    throw new Error(supaErr(j, 'The capture could not be uploaded (' + r.status + ').'));
+  }
+  return path;
+}
+
+// Signed rather than public: a capture can hold unposted sim text.
+async function fbSignedUrl(path) {
+  const r = await supaFetch('/storage/v1/object/sign/' + FB_BUCKET + '/' + path,
+    { method: 'POST', body: JSON.stringify({ expiresIn: 3600 }) });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j || !j.signedURL) throw new Error('That capture could not be opened.');
+  return SUPA_URL + '/storage/v1' + j.signedURL;
+}
+
+async function fbDeleteObjects(paths) {
+  const list = (paths || []).filter(Boolean);
+  if (!list.length) return;
+  await supaFetch('/storage/v1/object/' + FB_BUCKET,
+    { method: 'DELETE', body: JSON.stringify({ prefixes: list }) });
+}
+
+let _fbReports = [];
+let _fbArchived = false;
+
+function fbAdminCard() {
+  return `
+    <div class="set-card">
+      <div class="msec">APP FEEDBACK</div>
+      <div class="set-block">
+        <span class="set-note" style="margin:0 0 10px">Bug reports and feature requests filed from inside the
+          app. A note you write here appears on the writer's own copy of their report — it is the only way
+          they hear back.</span>
+        <div class="adm-tabs">
+          <button class="btn ${_fbArchived ? 'btn-s' : 'btn-p'}" onclick="fbAdminTab(false)">${ic('alert')} Open</button>
+          <button class="btn ${_fbArchived ? 'btn-p' : 'btn-s'}" onclick="fbAdminTab(true)">${ic('archive')} Including archived</button>
+        </div>
+        <div id="adm-fb"><span class="set-note">Loading…</span></div>
+      </div>
+    </div>`;
+}
+
+function fbAdminTab(arch) { _fbArchived = arch; renderAdminView(); }
+
+function loadFeedback() {
+  if (!isSuperAdmin()) return;
+  supaRpc('admin_list_feedback', { p_include_archived: _fbArchived })
+    .then(rows => { _fbReports = rows || []; paintFeedback(); })
+    .catch(e => {
+      const el = document.getElementById('adm-fb');
+      if (el) el.innerHTML = '<span class="set-note" style="color:var(--red,#c66)">' + esc(e.message) + '</span>';
+    });
+}
+
+// The context blob is small and deliberately flat, so it is shown as it is
+// rather than being interpreted. Half the value of a report is knowing which
+// skin, mode and vibe the writer was in when it happened.
+function fbContextLine(c) {
+  if (!c || typeof c !== 'object') return '';
+  const bits = [];
+  if (c.view)     bits.push(c.view);
+  if (c.skin)     bits.push(c.skin + '/' + (c.mode || '?') + '/' + (c.vibe || '?'));
+  if (c.viewport) bits.push(c.viewport);
+  if (c.docType)  bits.push(c.docType === 'joint' ? 'joint sim open' : 'sim open');
+  if (c.platform) bits.push(c.platform);
+  return bits.join(' · ');
+}
+
+function paintFeedback() {
+  const el = document.getElementById('adm-fb');
+  if (!el) return;
+  if (!_fbReports.length) {
+    el.innerHTML = '<span class="set-note">Nothing filed yet.</span>';
+    return;
+  }
+  el.innerHTML = _fbReports.map(f => {
+    const errs = (f.context && Array.isArray(f.context.errors)) ? f.context.errors : [];
+    return `
+    <div class="adm-req adm-fb${f.archived_at ? ' adm-req-done' : ''}">
+      <div class="adm-req-hdr">
+        <span class="adm-req-tag adm-fb-${f.kind}">${f.kind === 'bug' ? 'Bug' : 'Feature request'}</span>
+        <span class="adm-req-wid">${esc(f.writer_id || 'unknown')}${f.display_name ? ' · ' + esc(f.display_name) : ''}</span>
+        <span class="adm-req-when">${esc(fmtWhen(f.created_at))}${f.app_version ? ' · v' + esc(f.app_version) : ''}</span>
+        ${f.archived_at ? '<span class="adm-req-tag">Archived</span>' : ''}
+      </div>
+      <div class="adm-req-note">${esc(f.body)}</div>
+      <div class="adm-fb-ctx">${esc(fbContextLine(f.context))}</div>
+      ${errs.length ? `<div class="adm-fb-errs">${errs.map(e => esc(String(e))).join('<br>')}</div>` : ''}
+      <div class="adm-fb-caps">
+        ${f.capture_shot ? `<button class="btn btn-s" onclick="fbOpenCapture('${esc(f.capture_shot)}')">${ic('image')} Screenshot</button>`
+          : `<span class="set-note" style="margin:0">${f.capture_purged_at ? 'Screenshot destroyed.' : 'No screenshot attached.'}</span>`}
+      </div>
+      ${f.archived_at ? '' : `
+      <div class="adm-fb-act">
+        <select class="mi adm-fb-status" id="fb-st-${f.id}">
+          ${FB_STATUS.map(s => `<option value="${s.v}"${fbStatusLabel(f.status) === s.l ? ' selected' : ''}>${s.l}</option>`).join('')}
+        </select>
+        <input class="mi adm-fb-note" id="fb-nt-${f.id}" placeholder="A note back to the writer (optional)…"
+               autocomplete="off" maxlength="2000">
+        <button class="btn btn-p" onclick="fbSaveStatus('${f.id}')">${ic('check')} Save</button>
+        <button class="btn btn-s" onclick="fbConfirmArchive('${f.id}')">${ic('archive')} Archive</button>
+        <button class="btn btn-s" onclick="fbConfirmDelete('${f.id}')">${ic('trash')} Delete</button>
+      </div>`}
+      ${f.admin_note ? `<div class="adm-fb-reply"><strong>${esc(fbStatusLabel(f.status))}</strong> — ${esc(f.admin_note)}
+        <span class="adm-req-foot">${esc(f.status_by || '')} ${esc(fmtWhen(f.status_at))}</span></div>`
+        : `<div class="adm-req-foot">${esc(fbStatusLabel(f.status))}${f.status_at ? ' · ' + esc(fmtWhen(f.status_at)) : ''}</div>`}
+    </div>`;
+  }).join('');
+}
+
+// ── Looking at a screenshot ───────────────────────────────────────────────
+// Shown in an overlay rather than by opening the signed URL, because Storage
+// serves what it likes and iOS Safari would not open a written-to window at
+// all. An <img> in a sandboxed frame renders the same everywhere.
+function fbViewImage(url, title) {
+  let o = document.getElementById('fb-view');
+  if (!o) {
+    o = document.createElement('div');
+    o.id = 'fb-view';
+    document.body.appendChild(o);
+  }
+  o.innerHTML = `
+    <div class="fb-view-hd">
+      <span class="fb-ttl">${esc(title || 'SCREENSHOT')}</span>
+      <button class="fb-x" onclick="fbCloseView()" title="Close" aria-label="Close">&times;</button>
+    </div>
+    <iframe id="fb-view-frame" sandbox referrerpolicy="no-referrer" title="Screenshot"></iframe>`;
+  o.querySelector('#fb-view-frame').srcdoc =
+    '<!doctype html><html><body style="margin:0;background:#111;display:flex;' +
+    'align-items:flex-start;justify-content:center">' +
+    '<img src="' + esc(url) + '" style="max-width:100%;height:auto" alt="Screenshot"></body></html>';
+  o.classList.remove('hidden');
+}
+
+function fbCloseView() {
+  const o = document.getElementById('fb-view');
+  if (o) { o.classList.add('hidden'); o.innerHTML = ''; }
+}
+
+function fbOpenCapture(path) {
+  showToast('Opening…', 1200);
+  fbSignedUrl(path)
+    .then(u => fbViewImage(u))
+    .catch(e => showToast(e.message || 'That screenshot could not be opened.', 4200));
+}
+
+function fbSaveStatus(id) {
+  const st = document.getElementById('fb-st-' + id);
+  const nt = document.getElementById('fb-nt-' + id);
+  if (!st) return;
+  supaRpc('admin_feedback_status', {
+    p_id: id, p_status: st.value, p_note: (nt && nt.value.trim()) || null
+  }).then(() => { showToast('Report updated'); loadFeedback(); })
+    .catch(e => showToast(e.message, 5200));
+}
+
+// Archive and delete both promise the capture is destroyed, so both purge the
+// storage objects FIRST. If the row call then fails the objects are gone and
+// the row still names them, which is visible and re-runnable -- the other order
+// would leave bytes nobody could find.
+async function fbPurge(f, fn) {
+  await fbDeleteObjects([f.capture_page, f.capture_shot]);
+  await supaRpc(fn, { p_id: f.id });
+}
+
+function fbConfirmArchive(id) {
+  const f = _fbReports.find(x => x.id === id);
+  if (!f) return;
+  openModal('Archive this report', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 10px">The report and your reply stay as a record, and it leaves the open list.</p>
+      <p style="margin:0;color:var(--dim);font-size:0.8rem">The capture is destroyed — the stored page and any
+        screenshot are deleted for good. Open them first if you still need them.</p>
+    </div>`, () => {
+      fbPurge(f, 'admin_feedback_archive')
+        .then(() => { closeModal(); showToast('Report archived'); loadFeedback(); })
+        .catch(e => showToast(e.message, 5200));
+      return false;
+    }, { ok: 'Archive it' });
+}
+
+function fbConfirmDelete(id) {
+  const f = _fbReports.find(x => x.id === id);
+  if (!f) return;
+  openModal('Delete this report', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 10px">The report, your reply and the capture all go. Nothing is kept, and the
+        writer's own copy disappears with it.</p>
+      <p style="margin:0;color:var(--dim);font-size:0.8rem">This cannot be undone. Archive instead if you
+        want the record but not the capture.</p>
+    </div>`, () => {
+      fbPurge(f, 'admin_feedback_delete')
+        .then(() => { closeModal(); showToast('Report deleted'); loadFeedback(); })
+        .catch(e => showToast(e.message, 5200));
+      return false;
+    }, { ok: 'Delete it' });
+}
+
+// ── Usage overview ────────────────────────────────────────────────────────
+// What the fleet's data actually costs, per writer. Ships alongside feedback
+// because both landed in one schema migration.
+let _usage = [];
+
+function adminUsageCard() {
+  return `
+    <div class="set-card">
+      <div class="msec">STORAGE &amp; USAGE</div>
+      <div class="set-block">
+        <span class="set-note" style="margin:0 0 10px">What each account is storing. Sizes are what the
+          database actually holds after compression, so they read smaller than the raw text.</span>
+        <div id="adm-usage"><span class="set-note">Loading…</span></div>
+      </div>
+    </div>`;
+}
+
+function loadUsage() {
+  if (!isSuperAdmin()) return;
+  supaRpc('admin_usage_overview')
+    .then(rows => { _usage = rows || []; paintUsage(); })
+    .catch(e => {
+      const el = document.getElementById('adm-usage');
+      if (el) el.innerHTML = '<span class="set-note" style="color:var(--red,#c66)">' + esc(e.message) + '</span>';
+    });
+}
+
+function fmtBytes(n) {
+  n = Number(n) || 0;
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB';
+  return (n / 1048576).toFixed(1) + ' MB';
+}
+
+function fmtAgo(iso) {
+  if (!iso) return 'never';
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (d <= 0) return 'today';
+  if (d === 1) return 'yesterday';
+  if (d < 31) return d + ' days ago';
+  return fmtJoined(iso);
+}
+
+function paintUsage() {
+  const el = document.getElementById('adm-usage');
+  if (!el) return;
+  if (!_usage.length) { el.innerHTML = '<span class="set-note">No accounts yet.</span>'; return; }
+  const total = _usage.reduce((a, u) => a + (Number(u.bytes) || 0), 0);
+  const docs  = _usage.reduce((a, u) => a + (Number(u.doc_count) || 0) + (Number(u.joint_count) || 0), 0);
+  el.innerHTML = `
+    <div class="adm-w-count">${_usage.length} account${_usage.length === 1 ? '' : 's'} ·
+      ${docs} sim${docs === 1 ? '' : 's'} · ${fmtBytes(total)} in total</div>
+    <div class="adm-w-scroll">
+      <table class="adm-w-tbl">
+        <thead><tr><th>Writer ID</th><th>Sims</th><th>Joint</th><th>Snapshots</th><th>Files</th><th>Total</th><th>Last active</th></tr></thead>
+        <tbody>
+          ${_usage.map(u => `
+            <tr>
+              <td class="adm-w-id">${esc(u.writer_id)}${u.display_name ? '<span class="adm-w-none"> ' + esc(u.display_name) + '</span>' : ''}</td>
+              <td>${u.doc_count}</td>
+              <td>${u.joint_count}</td>
+              <td>${u.snapshot_count}</td>
+              <td class="adm-w-when">${esc(fmtBytes(u.file_bytes))}</td>
+              <td class="adm-w-when">${esc(fmtBytes(u.bytes))}</td>
+              <td class="adm-w-when">${esc(fmtAgo(u.last_active))}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+// ── App Feedback: the writer's side ───────────────────────────────────────
+// A side panel rather than a modal, and nothing behind it is disabled: the
+// whole point is that a writer can look at the thing that went wrong while
+// they describe it, and can carry on writing afterwards without having lost
+// their place.
+//
+// WHAT "ATTACH A SCREENSHOT" MEANS HERE. There is no zero-dependency way to
+// rasterise a page -- html2canvas is a CDN script this project will not take,
+// and getDisplayMedia() prompts for a tab and does not exist on iOS Safari.
+// So the capture is the page itself: the live DOM, serialised, with a link to
+// the stylesheet and the skin/mode/vibe attributes that were in force. It is
+// smaller than an image and worth more, because a rendering bug on this
+// project is nearly always a specificity fight between those three axes. A
+// writer who has already taken a screenshot on their phone can attach it as
+// well, which is the one thing the DOM copy cannot show.
+//
+// A capture holds whatever was on screen -- ON A JOINT SIM, THAT IS SOMEBODY
+// ELSE'S UNPOSTED WRITING. So it is shown before it is sent, sim text is
+// replaced with a placeholder by default, and the whole thing can be left off.
+let _fbTab = 'new';
+let _fbKind = 'bug';
+let _fbShot = null;      // File chosen by the writer, if any
+let _fbMine = [];
+
+function fbCanUse() { return isCloud() && !!(getAuth() || {}).access_token; }
+
+function fbRefreshButton() {
+  const btn = document.getElementById('btn-feedback');
+  if (!btn) return;
+  btn.classList.toggle('hidden', !fbCanUse());
+  if (fbCanUse()) fbRefreshBadge();
+}
+
+// The badge is the only way a writer learns an admin replied -- there is no
+// notification surface in this app, so the reply lives on their own copy of
+// the report and this says one has arrived.
+async function fbRefreshBadge() {
+  const badge = document.getElementById('fb-badge');
+  if (!badge || !fbCanUse()) return;
+  try {
+    const r = await supaFetch('/rest/v1/feedback_reports?select=id&admin_note=not.is.null&writer_seen_at=is.null',
+      { method: 'GET', headers: { 'Prefer': 'count=exact', 'Range': '0-0' } });
+    if (!r.ok) return;
+    const n = Number(((r.headers.get('content-range') || '').split('/')[1] || '0')) || 0;
+    badge.textContent = n > 9 ? '9+' : String(n);
+    badge.classList.toggle('hidden', n === 0);
+    document.getElementById('btn-feedback').classList.toggle('has-pending', n > 0);
+  } catch(e) { /* offline — it can wait */ }
+}
+
+function fbOpen() {
+  if (!fbCanUse()) { showToast('Sign in to send feedback.', 3200); return; }
+  document.body.classList.remove('mob-more');
+  document.getElementById('fb-panel').classList.remove('hidden');
+  fbTab(_fbTab);
+}
+
+function fbClose() {
+  document.getElementById('fb-panel').classList.add('hidden');
+}
+
+function fbTab(tab) {
+  _fbTab = tab;
+  const nb = document.getElementById('fb-tab-new'), mb = document.getElementById('fb-tab-mine');
+  if (nb && mb) {
+    nb.className = 'btn ' + (tab === 'new' ? 'btn-p' : 'btn-s');
+    mb.className = 'btn ' + (tab === 'mine' ? 'btn-p' : 'btn-s');
+  }
+  if (tab === 'new') fbPaintForm(); else fbLoadMine();
+}
+
+function fbSetKind(k) { _fbKind = k; fbPaintForm(true); }
+
+// `keep` preserves what has already been typed across a re-render -- changing
+// Bug to Feature request must not throw the description away.
+function fbPaintForm(keep) {
+  const el = document.getElementById('fb-body');
+  if (!el) return;
+  const prev = keep ? ((document.getElementById('fb-text') || {}).value || '') : '';
+  el.innerHTML = `
+    <div class="fb-kind">
+      <button class="btn ${_fbKind === 'bug' ? 'btn-p' : 'btn-s'}" onclick="fbSetKind('bug')">${ic('alert')} Bug</button>
+      <button class="btn ${_fbKind === 'feature' ? 'btn-p' : 'btn-s'}" onclick="fbSetKind('feature')">${ic('sparkles')} Feature request</button>
+    </div>
+    <textarea class="mi fb-text" id="fb-text" rows="7" maxlength="4000"
+      placeholder="${_fbKind === 'bug'
+        ? 'What went wrong, and what were you doing when it happened?'
+        : 'What would you like LCARS to do?'}">${esc(prev)}</textarea>
+    <div class="fb-cap">
+      <span class="fb-cap-hd">A PICTURE OF THE PROBLEM</span>
+      ${fbCanShoot() ? `
+      <button class="btn btn-s" id="fb-shoot" onclick="fbCaptureShot()">${ic('camera')} Take a screenshot of this tab</button>
+      <span class="set-note" style="margin:0">Your browser will ask you to confirm — it never hands a page over without asking.</span>`
+      : `<span class="set-note" style="margin:0">This browser cannot take its own screenshot, so attach one you have taken yourself.</span>`}
+      <label class="fb-chk fb-shot" for="fb-shot">${fbCanShoot() ? 'Or attach' : 'Attach'} an image you already have:</label>
+      <input type="file" id="fb-shot" accept="image/*" onchange="fbPickShot(event)">
+      <div class="set-note" id="fb-shot-note" style="margin:0"></div>
+      <div id="fb-shot-prev"></div>
+    </div>
+    <button class="btn btn-p fb-send" onclick="fbSend()">${ic('upload')} Send it</button>
+    <div class="set-note" id="fb-msg" style="min-height:1.1em"></div>`;
+  if (_fbShot) fbShowShot();      // survives switching Bug <-> Feature request
+}
+
+function fbPickShot(e) {
+  const f = (e.target.files || [])[0] || null;
+  if (f && f.size > 5 * 1024 * 1024) {
+    e.target.value = ''; fbClearShot();
+    const note = document.getElementById('fb-shot-note');
+    if (note) note.textContent = 'That image is over 5 MB — please attach a smaller one.';
+    return;
+  }
+  _fbShot = f;
+  fbShowShot();
+}
+
+// ── The screenshot ────────────────────────────────────────────────────────
+// A REAL one: getDisplayMedia() hands over the pixels the compositor drew, so
+// what the admin sees is what the writer saw, down to the frosted panels and
+// the font the browser actually loaded. That is worth more than any redraw of
+// the DOM, which is why this is the primary attachment and the page copy is
+// the extra.
+//
+// It cannot be silent. Every browser that implements it insists on its own
+// confirm before giving a page away, and there is no flag that turns that off
+// -- so the button says so rather than looking broken. `preferCurrentTab` puts
+// this tab in front in the picker; browsers that ignore it just show the full
+// chooser.
+//
+// iOS Safari does not implement it at all, which is precisely where writers
+// already have a screenshot in their camera roll -- so the file input is not a
+// fallback there, it is the way it works.
+function fbCanShoot() {
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+}
+
+async function fbCaptureShot() {
+  const note = document.getElementById('fb-shot-note');
+  const say = t => { if (note) note.textContent = t; };
+  const panel = document.getElementById('fb-panel');
+  let stream = null;
+  // The panel is on top of the thing being reported. Hiding it for the frame
+  // is the difference between a screenshot of the bug and a screenshot of this
+  // form -- and `visibility` rather than `display` so nothing behind reflows.
+  panel.style.visibility = 'hidden';
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 1 }, audio: false, preferCurrentTab: true, selfBrowserSurface: 'include'
+    });
+    const v = document.createElement('video');
+    v.srcObject = stream; v.muted = true;
+    await v.play();
+    // One frame of grace: the first is routinely black, because the capture
+    // starts before the compositor has handed anything over.
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const cv = document.createElement('canvas');
+    cv.width = v.videoWidth; cv.height = v.videoHeight;
+    cv.getContext('2d').drawImage(v, 0, 0);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+    if (!blob) throw new Error('The screenshot came back empty.');
+    _fbShot = new File([blob], 'screenshot.png', { type: 'image/png' });
+    const inp = document.getElementById('fb-shot');
+    if (inp) inp.value = '';          // the two paths fill one slot, not two
+    fbShowShot();
+  } catch (e) {
+    fbClearShot();
+    say(e && e.name === 'NotAllowedError'
+      ? 'No screenshot taken — you can attach one instead.'
+      : 'That browser would not take a screenshot. Attach one instead.');
+  } finally {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    panel.style.visibility = '';
+  }
+}
+
+// Shown before it is sent, like everything else attached to a report: a
+// screenshot of the whole tab can catch more than the writer meant to send.
+function fbShowShot() {
+  const note = document.getElementById('fb-shot-note');
+  const prev = document.getElementById('fb-shot-prev');
+  if (!_fbShot) { fbClearShot(); return; }
+  if (note) note.textContent = _fbShot.name + ' · ' + fmtBytes(_fbShot.size);
+  if (prev) {
+    if (prev.dataset.url) URL.revokeObjectURL(prev.dataset.url);
+    const u = URL.createObjectURL(_fbShot);
+    prev.dataset.url = u;
+    prev.innerHTML = '<img class="fb-thumb" src="' + u + '" alt="The screenshot that will be sent">' +
+      '<button class="btn btn-s" onclick="fbClearShot()">' + ic('x') + ' Remove it</button>';
+  }
+}
+
+function fbClearShot() {
+  _fbShot = null;
+  const inp = document.getElementById('fb-shot');
+  if (inp) inp.value = '';
+  const note = document.getElementById('fb-shot-note');
+  if (note) note.textContent = '';
+  const prev = document.getElementById('fb-shot-prev');
+  if (prev) {
+    if (prev.dataset.url) { URL.revokeObjectURL(prev.dataset.url); delete prev.dataset.url; }
+    prev.innerHTML = '';
+  }
+}
+
+function fbOpenDocType() {
+  const d = curId ? S.docs[curId] : null;
+  return d ? (isJointDoc(d) ? 'joint' : 'solo') : 'none';
+}
+
+// The small block of state that turns "it looked wrong" into something
+// reproducible. Style is three axes on this project, not one, so all three are
+// recorded -- a bug that only happens in Epic has been shipped before.
+function fbContext() {
+  const r = document.documentElement;
+  return {
+    view:     (typeof _routeView !== 'undefined' && _routeView) || 'workspace',
+    skin:     r.getAttribute('data-skin') || '',
+    mode:     r.getAttribute('data-mode') || '',
+    vibe:     r.getAttribute('data-vibe') || '',
+    viewport: window.innerWidth + '×' + window.innerHeight,
+    docType:  fbOpenDocType(),
+    online:   navigator.onLine,
+    platform: navigator.userAgent.slice(0, 180),
+    errors:   _fbErrors.slice(-5),
+  };
+}
+
+// Errors are collected from the moment the app boots, because the writer files
+// the report after the thing went wrong, not during it.
+const _fbErrors = [];
+window.addEventListener('error', e => {
+  _fbErrors.push((e.message || 'error') + ' @ ' + (e.filename || '?') + ':' + (e.lineno || 0));
+  if (_fbErrors.length > 20) _fbErrors.shift();
+});
+window.addEventListener('unhandledrejection', e => {
+  _fbErrors.push('unhandled promise: ' + String((e.reason && e.reason.message) || e.reason || '').slice(0, 200));
+  if (_fbErrors.length > 20) _fbErrors.shift();
+});
+
+async function fbSend() {
+  const ta = document.getElementById('fb-text');
+  const msg = document.getElementById('fb-msg');
+  const body = (ta && ta.value.trim()) || '';
+  const say = (t, bad) => { if (msg) { msg.style.color = bad ? 'var(--red,#c66)' : 'var(--dim)'; msg.textContent = t; } };
+  if (!body) { say('Tell us what happened first.', true); if (ta) ta.focus(); return; }
+
+  const id = fbUuid();
+  const uidv = (getAuth() || {}).uid;
+  say('Sending…');
+
+  // THE SCREENSHOT MUST NEVER COST THE REPORT. A failed upload used to throw
+  // out of the whole send, so a writer who had just described a bug lost every
+  // word of it to a problem with the picture. The words are the report; the
+  // picture is an extra, and it is allowed to fail on its own.
+  let shot = null, lost = 0;
+  try {
+    if (_fbShot) {
+      const ext = (_fbShot.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+      shot = await fbUpload(uidv + '/' + id + '/shot.' + ext, _fbShot, _fbShot.type || 'image/png');
+    }
+  } catch(e) { lost++; }
+
+  try {
+    await supaRpc('feedback_submit', {
+      p_id: id, p_kind: _fbKind, p_body: body, p_app_version: APP_VERSION,
+      p_context: fbContext(), p_capture_page: null, p_capture_shot: shot
+    });
+    _fbShot = null;
+    showToast(lost ? 'Report sent — but the attachment could not go with it.'
+                   : 'Thank you — your report has been sent.', lost ? 4600 : 3200);
+    fbTab('mine');
+  } catch(e) {
+    say(e.message || 'That could not be sent.', true);
+  }
+}
+
+// A v4 uuid without a dependency. The id is made here because the capture is
+// uploaded to a path containing it, before the row exists.
+function fbUuid() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+  return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
+}
+
+// My reports. This is where a reply lands -- there is no notification surface
+// in LCARS, so an answer goes on the writer's own copy of the thing they filed,
+// which is somewhere they already have a reason to look.
+function fbLoadMine() {
+  const el = document.getElementById('fb-body');
+  if (el) el.innerHTML = '<span class="set-note">Loading…</span>';
+  supaFetch('/rest/v1/feedback_reports?select=*&order=created_at.desc')
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('Your reports could not be read.')))
+    .then(rows => {
+      _fbMine = rows || [];
+      fbPaintMine();
+      if (_fbMine.some(f => f.admin_note && !f.writer_seen_at)) {
+        supaRpc('feedback_mark_seen').then(fbRefreshBadge).catch(() => {});
+      }
+    })
+    .catch(e => { if (el) el.innerHTML = '<span class="set-note" style="color:var(--red,#c66)">' + esc(e.message) + '</span>'; });
+}
+
+function fbPaintMine() {
+  const el = document.getElementById('fb-body');
+  if (!el) return;
+  if (!_fbMine.length) {
+    el.innerHTML = '<span class="set-note">You have not sent anything yet. Replies from the team appear here.</span>';
+    return;
+  }
+  el.innerHTML = _fbMine.map(f => `
+    <div class="fb-item">
+      <div class="fb-item-hd">
+        <span class="adm-req-tag adm-fb-${f.kind}">${f.kind === 'bug' ? 'Bug' : 'Feature request'}</span>
+        <span class="adm-req-when">${esc(fmtWhen(f.created_at))}</span>
+        <span class="fb-st fb-st-${esc(f.status)}">${esc(fbStatusLabel(f.status))}</span>
+      </div>
+      <div class="adm-req-note">${esc(f.body)}</div>
+      ${f.admin_note ? `<div class="fb-reply">${ic('shield')} ${esc(f.admin_note)}
+        <span class="adm-req-foot">${esc(fmtWhen(f.status_at))}</span></div>` : ''}
+      <div class="fb-item-act">
+        <button class="btn btn-s" onclick="fbConfirmWithdraw('${f.id}')">${ic('trash')} Withdraw</button>
+      </div>
+    </div>`).join('');
+}
+
+// Taking it back. Allowed at any status: it is their writing, and on a joint
+// sim the capture may hold a co-writer's too -- a status is not a claim on it.
+// The storage objects go first, as with every other purge here.
+function fbConfirmWithdraw(id) {
+  const f = _fbMine.find(x => x.id === id);
+  if (!f) return;
+  const acted = f.status !== 'new';
+  openModal('Withdraw this report', `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 10px">Your report, anything attached to it${f.admin_note ? ' and the reply you were sent' : ''}
+        will be deleted. Nothing is kept.</p>
+      <p style="margin:0;color:var(--dim);font-size:0.8rem">${acted
+        ? 'The team has already looked at this one — withdrawing it means they lose what you told them, so only do it if you meant to.'
+        : 'Nobody has looked at it yet.'}</p>
+    </div>`, () => {
+      fbDeleteObjects([f.capture_page, f.capture_shot])
+        .then(() => supaRpc('feedback_withdraw', { p_id: id }))
+        .then(() => { closeModal(); showToast('Report withdrawn'); fbLoadMine(); fbRefreshBadge(); })
+        .catch(e => showToast(e.message || 'That could not be withdrawn.', 5200));
+      return false;
+    }, { ok: 'Withdraw it' });
 }
 
 // ── Asking for a reset ────────────────────────────────────────────────────

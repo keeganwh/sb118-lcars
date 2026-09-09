@@ -149,6 +149,12 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
     <button class="btn btn-s btn-sm hidden" onclick="jpShowInvites()" id="btn-jp-invites" title="Joint sim invitations"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg> Invites<span id="jp-invite-badge" class="hidden"></span></button>
     <button class="btn btn-s btn-sm hidden" onclick="openAdmin()" id="btn-admin" title="Moderator tools"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg> Admin<span id="admin-badge" class="hidden"></span></button>
     <button class="btn btn-s btn-sm" onclick="openSettings()" id="btn-settings" title="Settings"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg> Settings</button>
+    <!-- One definition, in both homes. This container IS the phone's app menu,
+         so the button needs no mobile copy and no move -- only a group label,
+         which is phone-only like the two above it. -->
+    <div class="tsep"></div>
+    <span class="hdr-menu-lbl">HELP US</span>
+    <button class="btn btn-s btn-sm hidden" onclick="fbOpen()" id="btn-feedback" title="Report a bug or ask for a feature"><svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg> App Feedback<span id="fb-badge" class="hidden"></span></button>
   </div>
 </div>
 
@@ -454,6 +460,22 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
 </div>
 
 </div><!-- /app -->
+
+<!-- APP FEEDBACK — a side panel, deliberately NOT a modal. There is no scrim
+     and nothing is disabled behind it: a writer reporting a bug needs to keep
+     looking at the thing that went wrong, and losing their place to file a
+     report is how reports stop being filed. -->
+<div id="fb-panel" class="hidden" role="dialog" aria-label="App feedback" aria-modal="false">
+  <div class="fb-hd">
+    <span class="fb-ttl">APP FEEDBACK</span>
+    <button class="fb-x" onclick="fbClose()" title="Close" aria-label="Close">&times;</button>
+  </div>
+  <div class="adm-tabs fb-tabs">
+    <button class="btn btn-p" id="fb-tab-new" onclick="fbTab('new')">Report something</button>
+    <button class="btn btn-s" id="fb-tab-mine" onclick="fbTab('mine')">My reports<span id="fb-mine-badge" class="hidden"></span></button>
+  </div>
+  <div class="fb-body" id="fb-body"></div>
+</div>
 
 <!-- MODAL -->
 <div id="mo" class="hidden" onclick="if(event.target===this)closeModal()">
