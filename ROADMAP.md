@@ -162,20 +162,24 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 
 **Top score [+4]. Category: Component Revision + New Component. Added 2026-09-10.**
 
+**SHIPPED 2026-09-10 on `claude/onboarding-whats-new-akf1s2`.** All three items are
+done and the entries are pending in the `VERSIONS` array, waiting on a version bump
+along with Batch 5's. See `memory/session_lcars_2026-09-onboarding.md`.
+
 **Why its own batch:** all three touch the same boot-time surface — `showWizard()`, `maybeShowStyleIntro()` and the Dashboard tiles — and the first item is a **removal** that the other two depend on. Nothing here touches the database.
 
-- [ ] **[+4] Rewrite the first-run tour, and show it to new writers only.** _Removing + revision._
+- [x] **[+4] Rewrite the first-run tour, and show it to new writers only.** _Removing + revision._
       **The returning-writer branch is dead content.** `WIZ.ret1` and `WIZ.ret2` are entirely the August 2026 platform migration — Gist sync is gone, the Google Docs importer is gone, go back to the old address and press *Move My Stuff*. That was a one-time message for one migration and it is now the permanent second option on the welcome screen for every new writer. **Delete the fork.** The Pages moved-banner still covers stragglers on its own, and Settings still has backup import, so nothing is lost.
       What replaces it: one path that **briefly explains the app's main features and sections, and nothing else** — no accounts pitch, no migration, no history.
       **"New" means no sims and no characters**, not merely an unset `wizardDone` flag: a returning writer signing in on a new device must not be shown it.
       _Done when: a writer with existing work never sees the tour, a genuinely new one gets a short tour of the app as it is today, and no part of it mentions Gist or the old address._
 
-- [ ] **[+3] Make the tour a spotlight overlay over the real UI.** _New Component._
+- [x] **[+3] Make the tour a spotlight overlay over the real UI.** _New Component._
       Point at the actual buttons rather than describing them: a dark overlay with a hole punched over the target's `getBoundingClientRect()`, and a tooltip anchored beside it. **The tour creates an example sim on start** (not if the writer skips), with sample text demonstrating markers, character names and locations — so the editor steps have real content to point at, and the writer sees the formatting work. Offer to keep or delete it at the end.
       **Two mobile complications, both from the Batch 4 pass:** under 820px many targets live inside collapsed things — the sims drawer, the app menu sheet, the grouped toolbar panels — so a step must open its container or be skipped. Controls keep their ids when `mobSyncChrome()` relocates them, so targeting by id works; it is *visibility* that needs handling, not identity.
       _Done when: the tour highlights live controls on both a desktop and a phone, with an example sim to demonstrate on, and never points at something that is not on screen._
 
-- [ ] **[+3] What's New and What's Planned, with a badge.** _New Component._
+- [x] **[+3] What's New and What's Planned, with a badge.** _New Component._
       A side panel — reuse the App Feedback panel pattern, which is non-blocking and already works on a phone — with two tabs:
       - **What's New:** the last ~5 **features**, each with the date it launched. **Features only** — not fixes, not adjustments. That is what the changelog in Settings → About is for, and this must not become a second copy of it. A curated `HIGHLIGHTS` array, not generated from `VERSIONS`.
       - **What's Planned:** a curated slice of this roadmap. No dates.
