@@ -10,7 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
-      'Getting Started is now a guided tour that points at the real thing. A dark overlay lights up one control at a time — the sims list, the sim title, the editor, the toolbar, the characters panel, the copy button — with a short note beside it, rather than a window describing the app from a distance. It works the same on a phone, opening the drawer or the menu a step needs and skipping anything not on that screen',
+      'Getting Started is now a guided tour that points at the real thing. A dark overlay lights up one control at a time — the sims list, the sim title, the editor, the toolbar, the characters panel, the copy button — with a short note beside it, rather than a window describing the app from a distance. It works the same on a phone, opening the drawer or the menu a step needs and skipping anything not on that screen. Reopen it whenever you like from Getting Started on the Dashboard, or from Settings',
       'The tour brings an example sim with it, already written, so the markers and the character colouring are there to look at instead of being described. At the end you choose whether to keep it or throw it away; skipping the tour never creates one',
       'New What\'s New button in the upper right of the Dashboard, with a dot on it once per release. It opens a panel beside the app — nothing behind it is disabled — with the last five things LCARS gained and the date each arrived, and a second tab listing what is being built next. Big things only; every fix and adjustment is still in Settings → About',
       'The one-off \'A new look — Delta Prime\' window is gone, and What\'s new in LCARS in the Style menu now opens the panel above. It was a second what\'s-new mechanism with its own version number, and that number had been stuck on 4.22 for three releases, so it had quietly stopped announcing anything',
@@ -3261,7 +3261,14 @@ const TOUR_EXAMPLE_HTML = [
 function tourStart() {
   tourEnd(true);                       // never two overlays
   closeStyleMenu();
+  fbClose();
+  wnClose();
   document.body.classList.remove('mob-more');
+  // Reopening the tour from Settings, Characters or Admin would otherwise
+  // point at a workspace that is hidden behind the view you are standing in --
+  // openDoc() does not navigate, it only paints -- and every step would find
+  // no box and skip itself.
+  showView('dash');
   _tourStep = 0;
   const el = document.createElement('div');
   el.id = 'tour';
