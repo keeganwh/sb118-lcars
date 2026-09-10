@@ -1117,6 +1117,33 @@ body.hc .contact-card-bar{color:#000}
   border-left:3px solid var(--amber);overflow-wrap:anywhere}
 .adm-fb-reply .adm-req-foot{display:block}
 
+/* ── The Getting Started tour: a spotlight over the real UI ──
+   #tour is a transparent, click-swallowing sheet. #tour-hole is the whole
+   mask: a box positioned over the target's rect wearing a huge box-shadow
+   spread, so everything outside it is dimmed and the target shows through.
+   No SVG, no clip-path, no dependency. Above the drawer (600), the modal
+   (1000) and the context menu (2000); below the toast. */
+#tour{position:fixed;inset:0;z-index:8900}
+#tour-hole{position:absolute;pointer-events:none;
+  box-shadow:0 0 0 9999px rgba(0,0,0,.68);
+  outline:2px solid var(--amber);outline-offset:2px;
+  transition:top .18s,left .18s,width .18s,height .18s}
+#tour-tip{position:absolute;width:min(360px,calc(100vw - 20px));
+  background:var(--panel);border:1px solid var(--border);border-radius:10px;
+  padding:16px 18px;box-shadow:0 10px 40px rgba(0,0,0,.5);
+  border-top:3px solid var(--amber)}
+.tour-count{font-size:0.6rem;letter-spacing:2px;font-weight:700;color:var(--amber);
+  margin-bottom:6px}
+.tour-ttl{font-size:1rem;font-weight:700;color:var(--text);margin-bottom:8px;line-height:1.35}
+.tour-body{font-size:0.84rem;line-height:1.65;color:var(--dim);overflow-wrap:anywhere}
+.tour-body strong{color:var(--text)}
+.tour-body code{font-size:0.8rem;background:rgba(128,128,128,.16);border-radius:3px;padding:0 4px}
+/* The phone-only aside: true on a phone, noise on a desktop, so it is added
+   to the body rather than written into it. */
+.tour-mob{margin-top:9px;padding-top:8px;border-top:1px solid var(--border);
+  font-size:0.78rem;line-height:1.55}
+.tour-act{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px}
+
 /* ── App Feedback, the writer's side panel ──
    Fixed to the right edge, above the app but with NO scrim: the app behind it
    stays live and usable, which is the whole design. It sits below the modal's
@@ -1346,6 +1373,11 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   /* The panel is the full width of a phone, and its text fields clear the
      16px floor or iOS Safari zooms the whole app in on focus. */
   #fb-panel,#wn-panel{width:100vw;border-left:none}
+  /* The tour card takes the width it can get, and its actions stop being a
+     row -- Back / Close / Next on one 390px line leaves each of them a tap
+     target too small to hit. */
+  #tour-tip{width:calc(100vw - 20px);padding:14px 15px}
+  .tour-act .btn{flex:1 1 auto;justify-content:center}
   .fb-text{font-size:16px}
   .adm-fb-note{font-size:16px}   /* iOS Safari zooms into any focused field under 16px */
 }
