@@ -10,6 +10,8 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'The Getting Started tour now shows itself only to writers who are genuinely new — no sims and no characters — so signing in on a new phone or laptop no longer greets you with an introduction to an app you already use',
+      'The \'I\'ve used LCARS before\' half of the Getting Started tour is gone. It was written for the one-off move from the old address in August and had become permanent furniture; the tour is now a single short walk through what the app does and where its sections are',
       'You can withdraw a report you have sent, at any point. It and anything attached to it are deleted outright',
       'Clearer statuses on a report: New, Implementing, Will revisit, Rejected. The old \'Responded\' is gone — a note from the team reaches you whatever the status says, so it never meant anything on its own',
       'Screenshots open inside LCARS rather than in a new tab, which was coming up blank on iPhones',
@@ -2934,13 +2936,25 @@ async function checkDeletionPending() {
 // ================================================================
 // GETTING STARTED WIZARD
 // ================================================================
-// Shown once after the first-run gate resolves, and reopenable any time from
-// the Dashboard. Two routes through it: writers new to LCARS entirely, and
-// writers arriving from the old GitHub Pages version who mainly need to know
-// what changed and how to bring their sims across.
+// Shown once to a genuinely NEW writer, and reopenable any time from the
+// Dashboard. One route through it: a short explanation of what the app is and
+// where its main sections are, and nothing else.
+//
+// The old second route -- "I've used LCARS before" -- was the August 2026
+// platform migration: Gist sync, the Google Docs importer, go back to the old
+// address and press Move My Stuff. That was a one-time message for one move
+// and it has been deleted. The Pages moved-banner still covers stragglers on
+// its own, and Settings still has backup import, so nothing is lost.
 let _wizStep = 'welcome';
 
 function wizardSeen() { return !!(S.settings && S.settings.wizardDone); }
+
+// "New" is NOT merely an unset flag. A returning writer signing in on a fresh
+// device has an empty flag and a full account, and must never be shown an
+// introduction to an app they already use. Emptiness is the only honest test.
+function isNewWriter() {
+  return !Object.keys(S.docs || {}).length && !Object.keys(S.characters || {}).length;
+}
 
 function markWizardSeen() {
   if (!S.settings) S.settings = {};
@@ -2951,6 +2965,7 @@ function markWizardSeen() {
 
 function maybeShowWizard() {
   if (wizardSeen()) return;
+  if (!isNewWriter()) return;
   showWizard();
 }
 
@@ -3005,11 +3020,10 @@ const WIZ = {
       LCARS is a writing tool for Starbase 118 — somewhere to draft your sims, keep them organised by mission and scene, and track your characters.
     </p>
     <p style="font-size:0.87rem;line-height:1.65;color:var(--dim);margin:0 0 18px">
-      Which of these sounds like you?
+      It takes about a minute to show you around.
     </p>
     <div style="display:flex;flex-direction:column;gap:8px">
-      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('new1')">I'm new to LCARS</button>
-      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizGo('ret1')">I've used LCARS before</button>
+      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('new1')">Show me around</button>
       <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizFinish(true)">Skip — let me get on with it</button>
     </div>
     <div style="font-size:0.72rem;color:var(--dim);margin-top:14px;line-height:1.5">
@@ -3039,74 +3053,25 @@ const WIZ = {
       <p style="margin:0 0 6px"><code>((Location))</code> and <code>((OOC))</code></p>
       <p style="margin:10px 0 0">Character names bold themselves once LCARS knows who is in a scene. When you're done, the copy button puts the sim on your clipboard with formatting intact, ready to paste into email or Discord.</p>
     </div>
-    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('acct')">Next</button></div>
+    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('new3')">Next</button></div>
     ${wizFoot('new1')}`,
 
-  // ---------- returning writers ----------
-  ret1: () => `
-    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">What's changed</div>
-    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
-      <p style="margin:0 0 10px"><strong style="color:var(--text)">LCARS has a new home and accounts.</strong> ${isFileCopy()
-        ? `Online at <strong style="color:var(--text)">${NEW_HOME.replace(/^https?:\/\//,'').replace(/\/$/,'')}</strong> you can sign in with your Writer ID and have your sims save automatically to every device. This offline copy keeps everything in this browser instead.`
-        : 'Sign in with your Writer ID and your sims save automatically and follow you to any device — no export files, no tokens to set up.'}</p>
-      <p style="margin:0 0 10px"><strong style="color:var(--text)">Gist sync is gone.</strong> It capped out around 1 MB. Accounts replace it with no practical limit. Your old Gist is untouched and still on GitHub if you want the file.</p>
-      <p style="margin:0 0 10px"><strong style="color:var(--text)">The Google Docs importer is gone.</strong> It was clumsy; better ways to bring sims in are coming.</p>
-      ${isFileCopy() ? '' : `<p style="margin:0"><strong style="color:var(--text)">You can still work offline</strong> if you'd rather not have an account — everything stays in this browser and nothing is sent anywhere.</p>`}
-    </div>
-    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('ret2')">Next — bringing my sims across</button></div>
-    ${wizFoot('welcome')}`,
-
-  ret2: () => `
-    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Bringing your sims across</div>
-    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
-      <p style="margin:0 0 10px">Your old sims are still on the address you used before. Browsers keep each web address's data separate, so they don't come across on their own.</p>
-      ${isFileCopy() ? `<p style="margin:0 0 10px"><strong style="color:var(--text)">With a backup file:</strong> take a backup from the copy that has your sims, then load it here. This offline copy has no network access, so a backup file is the only way in or out.</p>`
-      : `<p style="margin:0 0 10px"><strong style="color:var(--text)">The easy way:</strong> go back to the old address and click <em>Move My Stuff</em> in the notice at the bottom. Sign in there, your sims upload, and they'll be waiting when you sign in here.</p>
-      <p style="margin:0 0 10px"><strong style="color:var(--text)">Or with a backup file:</strong> if you've already downloaded one, load it now.</p>`}
-    </div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
-      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizImportBackup()">Load a backup file</button>
-      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizGo('acct')">${isCloud() || isFileCopy() ? 'Next' : 'Next — set up an account'}</button>
-    </div>
-    ${wizFoot('ret1')}`,
-
   // ---------- shared tail ----------
-  acct: () => isCloud() ? `
-    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">You're all set</div>
+  // Sections, not salesmanship. There is no account pitch here: a writer who
+  // is offline is offered an account by the first-run gate, and repeating it
+  // as the last word of an introduction to the app read as a sign-up funnel.
+  new3: () => `
+    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Where everything lives</div>
     <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
-      <p style="margin:0 0 10px">You're signed in as <strong style="color:var(--text)">${(getAuth().writerId)||''}</strong>. Your work saves to your account a few seconds after each change, and will be there on any device you sign in on.</p>
-      <p style="margin:0">A backup is still worth taking now and then — Settings → Backup Data.</p>
+      <p style="margin:0 0 8px"><strong style="color:var(--text)">Dashboard</strong> — your missions, sims in progress and what you posted recently. The LCARS logo in the top bar always brings you back to it.</p>
+      <p style="margin:0 0 8px"><strong style="color:var(--text)">The sims list</strong>, down the left, is every mission, scene and sim you have. On a phone it opens from the tab on the right-hand edge.</p>
+      <p style="margin:0 0 8px"><strong style="color:var(--text)">Characters</strong> — who you write, their colours and their aliases. LCARS uses these to bold and colour names as you type.</p>
+      <p style="margin:0 0 8px"><strong style="color:var(--text)">Settings</strong> — your style, your templates, and a backup of everything you have written. Worth taking one now and then.</p>
+      <p style="margin:10px 0 0">The full guide is on the Dashboard whenever you want more detail.</p>
     </div>
     <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true)">Start writing</button></div>
-    ${wizFoot(null)}` : isFileCopy() ? `
-    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Keep your work safe</div>
-    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
-      <p style="margin:0 0 10px">This is the offline copy of LCARS, running from a file on your own machine. It never touches the network, so your sims live in this browser alone — clearing your browser data would erase them.</p>
-      <p style="margin:0 0 10px">Take a backup regularly from Settings → Backup Data, and keep it somewhere safe.</p>
-      <p style="margin:0">If you'd rather have your sims backed up automatically and available on every device, use LCARS online at <strong style="color:var(--text)">${NEW_HOME.replace(/^https?:\/\//,'').replace(/\/$/,'')}</strong> — a backup from here restores straight into it.</p>
-    </div>
-    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true)">Start writing</button></div>
-    ${wizFoot(null)}` : `
-    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Keep your work safe</div>
-    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
-      <p style="margin:0 0 10px">You're working offline, so your sims live in this browser alone. Clearing your browser data would erase them.</p>
-      <p style="margin:0 0 10px">An account fixes that — it needs your SB118 Writer ID and a PIN of your choice, nothing else. Your work on this device comes across with you.</p>
-      <p style="margin:0">Prefer to stay offline? That's fine — just take backups from Settings regularly.</p>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
-      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true);showAuthGate(true)">Set up an account</button>
-      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizFinish(true)">Stay offline for now</button>
-    </div>
-    ${wizFoot(null)}`
+    ${wizFoot('new2')}`
 };
-
-// Reuses the normal restore path, so the file is validated and the
-// merge/overwrite choice is the same one Settings offers.
-function wizImportBackup() {
-  closeWizard();
-  markWizardSeen();
-  importData();
-}
 
 // ================================================================
 // MOVED NOTICE — old GitHub Pages address only
@@ -3551,7 +3516,7 @@ function renderDashboard() {
       <button class="dash-action" onclick="showWizard()">
         <div class="da-icon">${ic('sparkles')}</div>
         <div class="da-label">Getting Started</div>
-        <div class="da-hint">A quick tour, and how to bring old sims across</div>
+        <div class="da-hint">A quick tour of the app and where everything lives</div>
       </button>
       <button class="dash-action" onclick="window.open('LCARS-Guide-v2.html','_blank')">
         <div class="da-icon">${ic('book-open')}</div>
