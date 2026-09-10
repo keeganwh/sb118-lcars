@@ -1,6 +1,6 @@
 # LCARS SB118 Writing Tool — Roadmap
 
-_Outstanding work only. Current version: **4.25**, released 2026-09-05 — Batches 1 and 2 and the Batch 4 mobile pass are all in it, and their entries are now in `CHANGELOG.md`. There are no pending changelog entries._
+_Outstanding work only. Current version: **4.25**, released 2026-09-05 — Batches 1 and 2 and the Batch 4 mobile pass are all in it, and their entries are now in `CHANGELOG.md`. **Batch 5 shipped to `main` on 2026-09-10 and is live, but is NOT yet cut as a version** — there are pending entries in the `VERSIONS` array waiting on a bump._
 
 Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same `main` with a moving notice.
 
@@ -145,20 +145,45 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 
 **Why these together:** both need a new table, both need a new `security definer` function, and both add a panel to `#view-admin`. That is **one schema migration instead of two** — and migrations here carry a deploy-ordering rule, so halving the number is worth real money.
 
-- [ ] **[+4] Bug report / feature request tool.** _New Component._
-      A button in the **upper toolbar** opening a **non-blocking side panel** — the writer must be able to keep using the app while it is open.
-      - Choose **Bug** or **Feature request**.
-      - Free text: what went wrong, or what is being asked for.
-      - **Auto-screenshot of the currently open pane**, attached to the report.
-      - Reports land in `#view-admin`, visible to **super admins only**.
-      _Done when: a writer can file a bug from inside the app without losing their place, and it appears in the admin view with its screenshot._
+- [x] **[+4] Bug report / feature request tool.** _New Component. **Shipped 2026-09-10.**_
+      App Feedback button in the header (which IS the phone's app menu, so no second copy), opening a non-blocking side panel. Bug or Feature request, free text, and a **real screenshot** — `getDisplayMedia()` captures the tab on a computer, and a file input takes the one already in the camera roll on a phone, where that API does not exist. Super admins read the queue in `/admin`, set a status (New / Implementing / Will revisit / Rejected) and write one note back, which lands on the writer's own copy of their report under **My reports** — there is no notification surface in this app, so the reply goes where they already have a reason to look. Archive and delete both destroy the stored image; a writer can withdraw a report at any point.
+      **The "auto-screenshot" as originally written was not possible** — html2canvas is a CDN dependency this project will not take, and it cannot draw `backdrop-filter`, which is the property most likely to be causing a visual bug here. A DOM-copy capture was built as the answer, shipped, and then **removed on 2026-09-10** as unhelpful and unrequested. See the session memory file.
 
-- [ ] **[+3] Admin usage overview.** _Revision — the admin panel exists._
-      Total storage used across all writers, plus a per-writer breakdown: who is using it most, when they last used it, how many sims, how much storage.
-      **Super admins only.** Via an `admin_list_*`-style `security definer` function, never a widened policy on `writers` — that table is read by every writer on boot and must stay untouched.
-      _Done when: a super admin can see total and per-writer usage at a glance._
+- [x] **[+3] Admin usage overview.** _Shipped 2026-09-10._
+      Storage & Usage in `/admin`: per writer, their sims, joint sims, snapshots, stored files and total bytes, plus when they were last active, ordered by size. `admin_usage_overview()`, super admins only — a function, not a widened policy on `writers`.
 
 > **Landmine for this batch:** **deploy before running the schema migration, never after.** New app code tolerates columns it no longer uses; old app code does not tolerate columns that have vanished.
+>
+> **What that rule actually cost, and the better version of it.** The deploy went out first and the migration was forgotten, so the live app called a function the database did not have. The failure was clean — but the message was not, and it sent a real test looking at the app when the answer was "the bucket is not there yet". A second migration then had to change a `check` constraint, where NEITHER order is safe: migrate first and the deployed build writes the old value, deploy first and the new build writes a value the column has not learned. **The fix is a constraint that accepts both vocabularies**, which makes the order not matter at all. Prefer that over getting the order right.
+
+---
+
+# BATCH 5B — Onboarding, What's New and What's Planned
+
+**Top score [+4]. Category: Component Revision + New Component. Added 2026-09-10.**
+
+**Why its own batch:** all three touch the same boot-time surface — `showWizard()`, `maybeShowStyleIntro()` and the Dashboard tiles — and the first item is a **removal** that the other two depend on. Nothing here touches the database.
+
+- [ ] **[+4] Rewrite the first-run tour, and show it to new writers only.** _Removing + revision._
+      **The returning-writer branch is dead content.** `WIZ.ret1` and `WIZ.ret2` are entirely the August 2026 platform migration — Gist sync is gone, the Google Docs importer is gone, go back to the old address and press *Move My Stuff*. That was a one-time message for one migration and it is now the permanent second option on the welcome screen for every new writer. **Delete the fork.** The Pages moved-banner still covers stragglers on its own, and Settings still has backup import, so nothing is lost.
+      What replaces it: one path that **briefly explains the app's main features and sections, and nothing else** — no accounts pitch, no migration, no history.
+      **"New" means no sims and no characters**, not merely an unset `wizardDone` flag: a returning writer signing in on a new device must not be shown it.
+      _Done when: a writer with existing work never sees the tour, a genuinely new one gets a short tour of the app as it is today, and no part of it mentions Gist or the old address._
+
+- [ ] **[+3] Make the tour a spotlight overlay over the real UI.** _New Component._
+      Point at the actual buttons rather than describing them: a dark overlay with a hole punched over the target's `getBoundingClientRect()`, and a tooltip anchored beside it. **The tour creates an example sim on start** (not if the writer skips), with sample text demonstrating markers, character names and locations — so the editor steps have real content to point at, and the writer sees the formatting work. Offer to keep or delete it at the end.
+      **Two mobile complications, both from the Batch 4 pass:** under 820px many targets live inside collapsed things — the sims drawer, the app menu sheet, the grouped toolbar panels — so a step must open its container or be skipped. Controls keep their ids when `mobSyncChrome()` relocates them, so targeting by id works; it is *visibility* that needs handling, not identity.
+      _Done when: the tour highlights live controls on both a desktop and a phone, with an example sim to demonstrate on, and never points at something that is not on screen._
+
+- [ ] **[+3] What's New and What's Planned, with a badge.** _New Component._
+      A side panel — reuse the App Feedback panel pattern, which is non-blocking and already works on a phone — with two tabs:
+      - **What's New:** the last ~5 **features**, each with the date it launched. **Features only** — not fixes, not adjustments. That is what the changelog in Settings → About is for, and this must not become a second copy of it. A curated `HIGHLIGHTS` array, not generated from `VERSIONS`.
+      - **What's Planned:** a curated slice of this roadmap. No dates.
+      **A badge, not a boot popup.** Keyed on `S.settings.prefs.seenWhatsNew` vs `APP_VERSION`, so it is per writer and follows them across devices. It lives on the **Dashboard, upper right** — where the AI disclaimer used to sit — and deliberately **not** in the header, which already carries eight controls.
+      **Fold in `showStyleIntro()`/`STYLE_VERSION`** rather than leaving a second what's-new mechanism beside this one. `STYLE_VERSION` is stuck at 4.22 while the app is 4.25, which is the argument on its own.
+      _Done when: a returning writer sees a badge once per release, opens it to the last five features with dates, can read what is planned, and the badge clears and stays cleared._
+
+> **Landmine for this batch:** **boot raises prompts on a timer and they fight.** The reconcile question, a pending deletion, a temporary PIN and the Delta Prime intro have collided three times, twice invisibly. `maybeShowStyleIntro()` already carries the defensive version — a 400ms defer, a check that `_routeView === 'dash'`, and a check that `#mo` is hidden. **Anything raised at boot here must do the same**, and the tour is worse than a modal because it points at elements that may not be on screen yet.
 
 ---
 
