@@ -477,6 +477,21 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
   <div class="fb-body" id="fb-body"></div>
 </div>
 
+<!-- WHAT'S NEW / WHAT'S PLANNED — the same side-panel pattern as App Feedback
+     above: no scrim, nothing disabled behind it. Reading what changed while
+     still being able to poke at the app is the point. -->
+<div id="wn-panel" class="hidden" role="dialog" aria-label="What's new" aria-modal="false">
+  <div class="fb-hd">
+    <span class="fb-ttl">WHAT'S NEW</span>
+    <button class="fb-x" onclick="wnClose()" title="Close" aria-label="Close">&times;</button>
+  </div>
+  <div class="adm-tabs fb-tabs">
+    <button class="btn btn-p" id="wn-tab-new" onclick="wnTab('new')">What's new</button>
+    <button class="btn btn-s" id="wn-tab-planned" onclick="wnTab('planned')">What's planned</button>
+  </div>
+  <div class="fb-body" id="wn-body"></div>
+</div>
+
 <!-- MODAL -->
 <div id="mo" class="hidden" onclick="if(event.target===this)closeModal()">
   <div class="modal">

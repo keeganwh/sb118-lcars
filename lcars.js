@@ -10,6 +10,8 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'New What\'s New button in the upper right of the Dashboard, with a dot on it once per release. It opens a panel beside the app — nothing behind it is disabled — with the last five things LCARS gained and the date each arrived, and a second tab listing what is being built next. Big things only; every fix and adjustment is still in Settings → About',
+      'The one-off \'A new look — Delta Prime\' window is gone, and What\'s new in LCARS in the Style menu now opens the panel above. It was a second what\'s-new mechanism with its own version number, and that number had been stuck on 4.22 for three releases, so it had quietly stopped announcing anything',
       'The Getting Started tour now shows itself only to writers who are genuinely new — no sims and no characters — so signing in on a new phone or laptop no longer greets you with an introduction to an app you already use',
       'The \'I\'ve used LCARS before\' half of the Getting Started tour is gone. It was written for the one-off move from the old address in August and had become permanent furniture; the tour is now a single short walk through what the app does and where its sections are',
       'You can withdraw a report you have sent, at any point. It and anything attached to it are deleted outright',
@@ -466,7 +468,6 @@ let _sourceMode = false;
 // Skin 'classic' falls back entirely to the 4.21 Dark/Light/HC themes.
 // ================================================================
 const STYLE_KEY = 'lcars_style_v1';   // tiny mirror for flash-free first paint
-const STYLE_VERSION = '4.22';         // bump to re-show the intro on a future restyle
 const DUTY_ACCENTS = {
   command:    { calmLight:'#B4463C', epicLight:'#C0433A', dark:'#F0705F' },
   science:    { calmLight:'#2F7FC9', epicLight:'#2F7FC9', dark:'#5FB2FF' },
@@ -609,56 +610,6 @@ function toggleSkin(el, ev) {
   setStyle({ skin: next }, el, ev);
 }
 
-// ================================================================
-// "NEW LOOK" INTRODUCTION — one-time, re-openable from the Style menu
-// ================================================================
-function styleIntroBody() {
-  return `
-    <div style="font-size:0.87rem;line-height:1.6;margin-bottom:14px">
-      LCARS has a new look in v${STYLE_VERSION}, called <strong>Delta Prime</strong> — same layout and
-      the same controls, rebuilt on a cleaner surface, type and shape system.
-      Try the three settings below and watch the app behind this window change.
-    </div>
-    ${styleControlsHtml()}
-    <div style="font-size:0.73rem;color:var(--dim);line-height:1.55;margin-top:14px">
-      Everything here lives under <strong>Style ▾</strong> in the top bar afterwards, alongside
-      <em>What's new</em> to reopen this window.
-    </div>
-    <div style="font-size:0.73rem;color:var(--dim);line-height:1.55;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
-      <strong style="color:var(--amber)">Feedback wanted.</strong> The classic LCARS look is still
-      one click away — <em>Revert to the classic LCARS look</em>, in the same menu — and it stays
-      supported for now. Which one you prefer, and what feels off in either, is the useful thing
-      to report back.
-    </div>`;
-}
-
-function showStyleIntro() {
-  closeStyleMenu();
-  openModal('A NEW LOOK — DELTA PRIME', styleIntroBody(), () => {}, { ok:'Got it', noCancel:true });
-  // Escape, the backdrop and "Got it" all dismiss, so mark it seen on open —
-  // the intro never blocks and never nags twice.
-  S.settings.prefs = Object.assign({}, S.settings.prefs, { seenStyleIntro: STYLE_VERSION });
-  persist();
-  setTimeout(updateStyleMenu, 20);
-}
-
-function maybeShowStyleIntro() {
-  if ((S.settings.prefs || {}).seenStyleIntro === STYLE_VERSION) return;
-  // Deferred, so re-check on fire: a direct hit on /settings or /characters opens
-  // its view in between, and the intro must not steal the modal from under it.
-  // The same goes for anything already on screen. Boot raises prompts that must
-  // be answered -- the reconcile question, a pending deletion, a temporary PIN
-  // that has to be changed -- and every one of them lands after this timer was
-  // set. An introduction to the new colours can wait for the next load; those
-  // cannot, and showChooseOwnPin() in particular has no cancel button, so
-  // painting over it would strand the writer on a PIN someone else has read.
-  setTimeout(() => {
-    if (_routeView !== 'dash') return;
-    if (!document.getElementById('mo').classList.contains('hidden')) return;
-    showStyleIntro();
-  }, 400);
-}
-
 function closeStyleMenu(){ toggleStyleMenu(false); }
 
 // Shared markup for the three controls — header menu, intro modal and Settings
@@ -689,10 +640,10 @@ function renderStyleMenu() {
     <div class="sty-sep"></div>
     <div class="sty-foot">
       <button id="sty-revert" onclick="toggleSkin(this,event)">${ic('chevron-left')} Revert to the classic LCARS look</button>
-      <button onclick="showStyleIntro()">${ic('sparkles')} What's new in ${STYLE_VERSION}</button>
+      <button onclick="closeStyleMenu();wnOpen('new')">${ic('sparkles')} What's new in LCARS</button>
     </div>
-    <div class="sty-feedback"><strong>New in ${STYLE_VERSION}</strong> — the classic look stays
-      available while this one settles. Feedback on either is welcome.</div>`;
+    <div class="sty-feedback">The classic look stays available while this one settles.
+      Feedback on either is welcome.</div>`;
   updateStyleMenu();
 }
 
@@ -2934,6 +2885,167 @@ async function checkDeletionPending() {
 }
 
 // ================================================================
+// WHAT'S NEW / WHAT'S PLANNED
+// ================================================================
+// A side panel, not a boot popup, and deliberately not a second changelog.
+// The full VERSIONS list is in Settings -> About and is written for someone
+// who wants every fix; this is FEATURES ONLY, hand-picked, five of them, so
+// it stays readable in the thirty seconds anyone gives it. It is curated
+// rather than generated from VERSIONS for exactly that reason -- there is no
+// field in a changelog entry that says "this one mattered".
+//
+// This also replaced showStyleIntro()/STYLE_VERSION, which was a second
+// what's-new mechanism keyed on its own version number. It had been stuck at
+// 4.22 for three releases, which is the argument against keeping two.
+const HIGHLIGHTS = [
+  {
+    date: '2026-09-10',
+    title: 'App Feedback',
+    body: `Found a bug, or want something LCARS does not do? <strong>App Feedback</strong> in the
+      top bar &mdash; under <em>Help Us</em> in the menu on a phone &mdash; sends it straight to the
+      team without you leaving what you were doing. You can attach a screenshot, follow the status
+      of anything you have sent under <em>My reports</em>, and withdraw a report at any point.`,
+  },
+  {
+    date: '2026-09-05',
+    title: 'LCARS on a phone',
+    body: `The whole writing screen was rebuilt for a small screen. The header and the sim title
+      share one bar, the toolbar groups itself under <em>Insert</em>, <em>Format</em> and
+      <em>Tools</em> so everything fits, and the sims list opens from a tab on the right-hand edge.
+      One button in the top corner hides the furniture and gives a sim the whole screen.`,
+  },
+  {
+    date: '2026-09-05',
+    title: 'Characters picked up from the sim title',
+    body: `Title a sim the usual way &mdash; the names, a dash, then the title &mdash; and everyone
+      named is in the Characters panel before a word is written, with yours already ticked. Ranks
+      are fine, several characters are fine, and any alias you have set up counts.`,
+  },
+  {
+    date: '2026-08-21',
+    title: 'Joint Posts',
+    body: `Write a sim with somebody else, a turn at a time. Invite a writer, hand the sim back and
+      forth, and LCARS keeps track of whose turn it is so nobody types over anybody.`,
+  },
+  {
+    date: '2026-08-21',
+    title: 'Share links',
+    body: `<strong>Share Link</strong> in Sim Details gives you a web address anyone can open &mdash;
+      no account needed, nothing they can change. It is a snapshot rather than a window, so you can
+      carry on writing without an audience, and you can set it to expire or stop sharing outright.`,
+  },
+];
+
+// A curated slice of ROADMAP.md, in the writer's language and with NO dates.
+// A date here is a promise, and this is a roadmap.
+const PLANNED = [
+  {
+    title: 'Joint Posts for everyone',
+    body: 'Still limited to a few writers while it settles. Opening it up is next.',
+  },
+  {
+    title: 'Writing at the same time as somebody else',
+    body: 'Joint Posts take a turn each. The plan is for two writers to be able to type into the same sim at once, with turns kept as the fallback.',
+  },
+  {
+    title: 'Saving one sim at a time',
+    body: 'Every save currently uploads everything you have ever written. Sim-by-sim saving makes it quick no matter how much you have, and stops two open tabs treading on each other.',
+  },
+  {
+    title: 'Per-character signatures',
+    body: 'The block at the foot of a sim, kept with the character rather than retyped or pasted in each time.',
+  },
+  {
+    title: 'A rebuilt user guide',
+    body: 'The current guide predates accounts, Joint Posts and share links. It is being written again from the ground up.',
+  },
+  {
+    title: 'Posting straight to Google Groups',
+    body: 'Further off, and it needs a browser extension to be possible at all &mdash; but copy-and-paste should not be the last step of writing a sim.',
+  },
+];
+
+let _wnTab = 'new';
+
+// A writer with nothing in LCARS has nothing to be told is new, and the
+// first-run tour is already talking to them. Do not compete with it.
+function wnHasNew() {
+  if (isNewWriter()) return false;
+  return ((S.settings.prefs || {}).seenWhatsNew || '') !== APP_VERSION;
+}
+
+function wnOpen(tab) {
+  document.body.classList.remove('mob-more');
+  fbClose();                       // two panels share the right edge; only one at a time
+  document.getElementById('wn-panel').classList.remove('hidden');
+  wnTab(tab || _wnTab);
+  wnMarkSeen();
+}
+
+function wnClose() {
+  document.getElementById('wn-panel').classList.add('hidden');
+}
+
+// Marked seen on OPEN, not on close: Escape, the close button and simply
+// navigating away all leave the panel, and a badge that survives any of them
+// is a badge that nags. Same reasoning the style intro used.
+function wnMarkSeen() {
+  const was = (S.settings.prefs || {}).seenWhatsNew;
+  if (was === APP_VERSION) return;
+  S.settings.prefs = Object.assign({}, S.settings.prefs, { seenWhatsNew: APP_VERSION });
+  persist();
+  if (isCloud()) schedSync(2000);  // per writer, and it follows them to their other devices
+  const b = document.getElementById('dash-wn');
+  if (b) b.classList.remove('has-new');
+}
+
+function wnTab(tab) {
+  _wnTab = tab;
+  const nb = document.getElementById('wn-tab-new'), pb = document.getElementById('wn-tab-planned');
+  if (nb && pb) {
+    nb.className = 'btn ' + (tab === 'new' ? 'btn-p' : 'btn-s');
+    pb.className = 'btn ' + (tab === 'planned' ? 'btn-p' : 'btn-s');
+  }
+  const el = document.getElementById('wn-body');
+  if (!el) return;
+  el.scrollTop = 0;
+  el.innerHTML = tab === 'planned' ? wnPlannedHtml() : wnNewHtml();
+}
+
+function wnDate(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return isNaN(d) ? iso : d.toLocaleDateString(undefined, { day:'numeric', month:'long', year:'numeric' });
+}
+
+function wnNewHtml() {
+  return HIGHLIGHTS.map(h => `
+    <div class="wn-item">
+      <div class="wn-date">${esc(wnDate(h.date))}</div>
+      <div class="wn-ttl">${esc(h.title)}</div>
+      <div class="wn-body">${h.body}</div>
+    </div>`).join('') + `
+    <div class="wn-foot">
+      The big things only. Every fix and adjustment, version by version, is in
+      <strong>Settings &rarr; About</strong>.
+    </div>`;
+}
+
+function wnPlannedHtml() {
+  return `<div class="wn-foot" style="margin:0 0 4px">
+      What is being built next, roughly in order. Nothing here has a date, and
+      anything here can change.
+    </div>` + PLANNED.map(p => `
+    <div class="wn-item">
+      <div class="wn-ttl">${esc(p.title)}</div>
+      <div class="wn-body">${p.body}</div>
+    </div>`).join('') + `
+    <div class="wn-foot">
+      Something missing? <strong>App Feedback</strong> in the top bar is where a feature
+      request goes.
+    </div>`;
+}
+
+// ================================================================
 // GETTING STARTED WIZARD
 // ================================================================
 // Shown once to a genuinely NEW writer, and reopenable any time from the
@@ -3458,6 +3570,12 @@ function renderDashboard() {
           <div class="dash-stat-item" title="${dspTip}"><div class="dash-stat-num" style="color:${dspColor}">${dspVal}</div><div class="dash-stat-lbl">SINCE LAST POST</div></div>
         </div>
       </div>
+      <div class="dash-header-right">
+        <button class="dash-wn" id="dash-wn" onclick="wnOpen('new')"
+          title="What's new in LCARS, and what is planned">
+          ${ic('sparkles')}<span>WHAT'S NEW</span>
+        </button>
+      </div>
     </div>
     ${inProgress.length ? `
       <div class="dash-section">IN PROGRESS</div>
@@ -3524,6 +3642,11 @@ function renderDashboard() {
         <div class="da-hint">Open the full user guide</div>
       </button>
     </div>`;
+  // A badge on the Dashboard rather than a popup at boot. Boot already raises
+  // four prompts on a timer and they have collided three times; this one waits
+  // to be noticed instead of joining the queue.
+  const wnBtn = document.getElementById('dash-wn');
+  if (wnBtn) wnBtn.classList.toggle('has-new', wnHasNew());
 }
 
 
@@ -7394,7 +7517,7 @@ function settingsAppearanceCard() {
         <div class="ml">VISUAL STYLE</div>
         <div class="set-tiles" style="margin-top:6px">
           ${pick(skin==='prime', "setStyleFromSettings('prime',this,event)", 'sparkles',
-            `Delta Prime (${STYLE_VERSION})`, 'The current look. Still being tuned.')}
+            'Delta Prime', 'The current look. Still being tuned.')}
           ${pick(skin==='classic', "setStyleFromSettings('classic',this,event)", 'layout-grid',
             'Classic LCARS (4.21)', 'The original look, kept available.')}
         </div>
@@ -9030,7 +9153,6 @@ document.addEventListener('DOMContentLoaded',()=>{
     // ID, pulls the account and decides what to show.
   } else if (isFileCopy() && !getMode()) {
     setMode('local');                   // the offline copy has only one mode
-    maybeShowStyleIntro();
     maybeShowWizard();
   } else if (!getMode()) {
     // Someone who has just asked to delete their account lands here signed out.
@@ -9061,7 +9183,6 @@ document.addEventListener('DOMContentLoaded',()=>{
         .then(() => { jpMaybePromptInvites(); });
       initAdmin();
     }
-    maybeShowStyleIntro();              // held back behind the gate on a first visit
     maybeShowWizard();
   }
 });

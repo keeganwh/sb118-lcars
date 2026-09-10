@@ -515,6 +515,31 @@ body.hc .contact-card-bar{color:#000}
 .da-hint{font-size:0.73rem;color:var(--dim);line-height:1.4}
 .dash-header-row{display:flex;align-items:flex-start;gap:28px}
 .dash-header-left{flex:1;min-width:0}
+/* Upper right of the Dashboard, where the AI disclaimer used to sit. NOT in
+   the header, which already carries eight controls. */
+.dash-header-right{flex-shrink:0;display:flex;align-items:flex-start}
+.dash-wn{display:flex;align-items:center;gap:7px;background:var(--panel);
+  border:1px solid var(--border);border-radius:8px;padding:9px 13px;cursor:pointer;
+  font-family:inherit;font-size:0.72rem;letter-spacing:1.5px;font-weight:700;
+  color:var(--dim);white-space:nowrap;transition:border-color .15s,color .15s,background .15s}
+.dash-wn .ic{width:15px;height:15px;flex-shrink:0}
+.dash-wn:hover{border-color:var(--amber);color:var(--text);background:rgba(255,153,51,.05)}
+/* Once per release, per writer, and it follows them between devices. A dot,
+   not a number: there is nothing here to count. */
+.dash-wn.has-new{border-color:var(--amber);color:var(--amber);position:relative}
+.dash-wn.has-new::after{content:"";position:absolute;top:-4px;right:-4px;
+  width:9px;height:9px;border-radius:50%;background:var(--amber);
+  box-shadow:0 0 0 2px var(--bg)}
+
+/* ── What's New / What's Planned, inside the shared side-panel body ── */
+.wn-item{border:1px solid var(--border);border-radius:8px;padding:11px 13px}
+.wn-date{font-size:0.62rem;letter-spacing:1.5px;font-weight:700;color:var(--amber);
+  text-transform:uppercase;margin-bottom:4px}
+.wn-ttl{font-size:0.93rem;font-weight:700;color:var(--text);margin-bottom:5px}
+.wn-body{font-size:0.82rem;line-height:1.6;color:var(--dim);overflow-wrap:anywhere}
+.wn-body strong,.wn-body em{color:var(--text)}
+.wn-foot{font-size:0.73rem;line-height:1.55;color:var(--dim);margin-top:4px}
+.wn-foot strong{color:var(--text)}
 
 /* ── SEARCH ── */
 #search-bar{padding:6px 8px;border-bottom:1px solid var(--border);display:flex;gap:4px;flex-shrink:0}
@@ -1096,11 +1121,11 @@ body.hc .contact-card-bar{color:#000}
    Fixed to the right edge, above the app but with NO scrim: the app behind it
    stays live and usable, which is the whole design. It sits below the modal's
    z-index so a confirm raised from inside it still lands on top. */
-#fb-panel{position:fixed;top:0;right:0;z-index:700;width:min(420px,92vw);
+#fb-panel,#wn-panel{position:fixed;top:0;right:0;z-index:700;width:min(420px,92vw);
   height:100dvh;display:flex;flex-direction:column;
   background:var(--panel);border-left:1px solid var(--border);
   box-shadow:-14px 0 34px rgba(0,0,0,.34)}
-#fb-panel.hidden{display:none}
+#fb-panel.hidden,#wn-panel.hidden{display:none}
 .fb-hd{display:flex;align-items:center;gap:10px;padding:12px 14px;
   border-bottom:3px solid var(--amber)}
 .fb-ttl{font-size:0.72rem;letter-spacing:2px;font-weight:700;color:var(--amber)}
@@ -1320,7 +1345,7 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   .adm-fb-act .btn,.adm-fb-act .mi{flex:1 1 100%}
   /* The panel is the full width of a phone, and its text fields clear the
      16px floor or iOS Safari zooms the whole app in on focus. */
-  #fb-panel{width:100vw;border-left:none}
+  #fb-panel,#wn-panel{width:100vw;border-left:none}
   .fb-text{font-size:16px}
   .adm-fb-note{font-size:16px}   /* iOS Safari zooms into any focused field under 16px */
 }
@@ -1573,7 +1598,15 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   .dash-table td:not(:first-child){display:inline-block;margin-right:12px}
   .dash-table td[data-lbl]::before{content:attr(data-lbl) ": ";opacity:.65}
   .dash-actions .dash-action{flex:1 1 100%;min-width:0}
-  .dash-header-row{gap:0}
+  /* Block, not a wrapping flex row. As flex, .dash-header-left kept its
+     flex:1 and collapsed to a narrow column -- the title broke over two
+     lines, the stat grid lost its three columns, and the button sat on top
+     of the title rather than wrapping below it. Stacking them as blocks
+     gives the left column the full width back and puts the button under it,
+     which is where it belongs on a phone anyway. */
+  .dash-header-row{gap:0;display:block}
+  .dash-header-right{margin-bottom:14px}
+  .dash-wn{width:100%;justify-content:center;padding:12px 13px}
 
   /* ── The two rails become one drawer, opened from a rail on the right ── */
   #rh-left,#rh-right{display:none}
