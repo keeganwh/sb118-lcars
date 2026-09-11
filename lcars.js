@@ -10,6 +10,9 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'Ticking a character as yours in a sim now adds them to your Characters list straight away, so the name is recognised in a sim title from that moment. It used to only be remembered as a name you had claimed, and did not become a character until the next time you happened to open the Characters view — until then, titling a sim after them did nothing',
+      'Adding a character in the Characters view now also counts them as yours, so they are ticked automatically in the next sim they appear in rather than waiting to be ticked by hand',
+      'Unticking a character in a sim removes them from that sim only. Their record, colour and aliases are left alone — unticking means they are not in this sim, not that they are not your character',
       'Getting Started is now a guided tour that points at the real thing. A dark overlay lights up one part of LCARS at a time — the sims list, the sim title, the editor, the toolbar, sim details, the characters panel, the copy button, and the Dashboard, Characters, What\'s New, Style and Settings controls in the top bar — with a short note beside it, rather than a window describing the app from a distance. It works the same on a phone, opening the drawer or the menu a step needs and skipping anything not on that screen. Reopen it whenever you like from Getting Started on the Dashboard, or from Settings',
       'The tour brings an example sim with it, already written, so the markers and the character colouring are there to look at instead of being described. At the end you choose whether to keep it or throw it away; skipping the tour never creates one',
       'New What\'s New button in the upper right of the Dashboard, with a dot on it once per release. It opens a panel beside the app — nothing behind it is disabled — with the last five things LCARS gained and the date each arrived, and a second tab listing what is being built next. Big things only; every fix and adjustment is still in Settings → About',
@@ -5699,7 +5702,11 @@ function toggleMyChar(i) {
     if (gi>=0) S.settings.myChars.splice(gi,1);
   } else {
     doc.myChars.push(name);
-    if (gi<0) S.settings.myChars.push(name);
+    // Ticking is the claim, so register the character here and now. It used to
+    // land in S.settings.myChars alone and reach S.characters only the next
+    // time the Characters view was opened -- so until you went there, the name
+    // you had just called yours did not catch in a sim title.
+    claimChar(name);
   }
   jpRememberMyChars(doc);
   persist(); updateCharsPanel(doc);
@@ -8438,17 +8445,40 @@ function getCharInitials(name) {
 
 // Everything the manifest needs before it is shown. Called by showView, which
 // owns the actual display and the URL.
+// One place a name becomes one of YOUR characters, used by every route in:
+// ticking a name in a sim, opening the Characters view, and adding a character
+// by hand. The two halves have to move together or they disagree:
+//   S.characters        -- the character RECORD. Registering here is what makes
+//                          the name catch in a sim title, because charsFromTitle
+//                          reads getRegisteredAliases(), which reads this.
+//   S.settings.myChars  -- the names you have claimed, which is what pre-ticks
+//                          them in the next sim you write.
+// Writing one without the other is the bug this fixes: a name ticked in twenty
+// sims was claimed but never registered, so it never caught in a title until
+// you happened to open the Characters view, which seeded it on the way past.
+// Returns the character record either way.
+function claimChar(name, charType) {
+  const n = (name || '').trim();
+  if (!n) return null;
+  if (!S.characters) S.characters = {};
+  if (!S.settings.myChars) S.settings.myChars = [];
+  let char = findCharByAnyName(n);
+  if (!char) {
+    const id = uid();
+    char = { id, name:n, aliases:[], charType:charType||'', rank:'', division:'', divisionColor:'',
+      species:'', pictureDataUrl:null, wikiUrl:'', notes:'', addedAt:Date.now(), updatedAt:Date.now() };
+    S.characters[id] = char;
+  }
+  if (!S.settings.myChars.some(m => sameCharName(m, n))) S.settings.myChars.push(n);
+  return char;
+}
+
 function prepManifest() {
   flushSave(); // prune stale myChars before auto-seeding manifest
   if (!S.characters) S.characters = {};
-  // Auto-seed from myChars (checks primary name + aliases)
-  (S.settings.myChars||[]).forEach(name => {
-    if (!findCharByAnyName(name)) {
-      const id = uid();
-      S.characters[id] = {id, name, aliases:[], charType:'', rank:'', division:'', divisionColor:'',
-        species:'', pictureDataUrl:null, wikiUrl:'', notes:'', addedAt:Date.now(), updatedAt:Date.now()};
-    }
-  });
+  // Kept as a backstop for anything claimed before claimChar() existed. New
+  // ticks register on the spot, so this now finds nothing to do.
+  (S.settings.myChars||[]).slice().forEach(name => claimChar(name));
   persist();
   _manifestActiveTab = 'sims';
   renderManifestList();
@@ -8523,13 +8553,13 @@ function addNewCharacter() {
     const name = document.getElementById('cm-new-name').value.trim();
     if (!name) { alert('Please enter a name.'); return false; }
     if (!S.characters) S.characters = {};
-    const id = uid();
-    const charType = document.getElementById('cm-new-type').value;
-    S.characters[id] = {id, name, aliases:[], charType, rank:'', division:'', divisionColor:'',
-      species:'', pictureDataUrl:null, wikiUrl:'', notes:'', addedAt:Date.now(), updatedAt:Date.now()};
+    // claimChar registers the record AND claims the name, so a character you
+    // add here pre-ticks in the next sim you write rather than only catching
+    // in titles. Adding somebody to your own character list is the claim.
+    const char = claimChar(name, document.getElementById('cm-new-type').value);
     persist();
     renderManifestList();
-    selectCharacter(id);
+    selectCharacter(char.id);
   });
 }
 
