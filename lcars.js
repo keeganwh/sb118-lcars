@@ -10,7 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
-      'Getting Started is now a guided tour that points at the real thing. A dark overlay lights up one control at a time — the sims list, the sim title, the editor, the toolbar, the characters panel, the copy button — with a short note beside it, rather than a window describing the app from a distance. It works the same on a phone, opening the drawer or the menu a step needs and skipping anything not on that screen. Reopen it whenever you like from Getting Started on the Dashboard, or from Settings',
+      'Getting Started is now a guided tour that points at the real thing. A dark overlay lights up one part of LCARS at a time — the sims list, the sim title, the editor, the toolbar, sim details, the characters panel, the copy button, and the Dashboard, Characters, What\'s New, Style and Settings controls in the top bar — with a short note beside it, rather than a window describing the app from a distance. It works the same on a phone, opening the drawer or the menu a step needs and skipping anything not on that screen. Reopen it whenever you like from Getting Started on the Dashboard, or from Settings',
       'The tour brings an example sim with it, already written, so the markers and the character colouring are there to look at instead of being described. At the end you choose whether to keep it or throw it away; skipping the tour never creates one',
       'New What\'s New button in the upper right of the Dashboard, with a dot on it once per release. It opens a panel beside the app — nothing behind it is disabled — with the last five things LCARS gained and the date each arrived, and a second tab listing what is being built next. Big things only; every fix and adjustment is still in Settings → About',
       'The one-off \'A new look — Delta Prime\' window is gone, and What\'s new in LCARS in the Style menu now opens the panel above. It was a second what\'s-new mechanism with its own version number, and that number had been stuck on 4.22 for three releases, so it had quietly stopped announcing anything',
@@ -3109,84 +3109,175 @@ function maybeShowWizard() {
 // MOVES those controls, so their ids are unchanged and it is visibility, not
 // identity, that needs handling. A step whose target still has no box is
 // skipped rather than pointed at.
+// ── The steps ──────────────────────────────────────────────────────────
+// `target` is one or more selectors; the hole is the union of their boxes, so
+// a control and the panel it opens can be lit together. A step with no target
+// is a centred card, and `softTarget` means "light it if it is on screen,
+// otherwise show a centred card" -- App Feedback is hidden for a writer who is
+// not signed in, and the last step carries the keep-or-delete choice, so it
+// must never be the step that gets skipped.
+//
+// `before` runs first and may open whatever the target lives inside. Under
+// 820px many targets are inside collapsed containers -- the sims drawer, the
+// app menu sheet, the grouped toolbar panels -- and mobSyncChrome() only
+// MOVES those controls, so their ids are unchanged and it is visibility, not
+// identity, that needs handling. A step whose target still has no box is
+// skipped rather than pointed at.
 const TOUR = [
   {
     id: 'welcome',
-    title: 'Welcome to LCARS',
-    body: `A writing tool for Starbase 118: somewhere to draft your sims, keep them
-      organised by mission and scene, and track who you write.
-      <br><br>This takes about a minute, and points at the real thing as it goes.
-      An example sim comes with it so there is something to look at &mdash; you can
-      keep it or throw it away at the end.`,
+    title: 'Welcome To LCARS',
+    body: `This is a writing tool built specifically to make writing, organising and tracking
+      your sims &mdash; and your simming habits &mdash; easier and more intuitive for players of
+      Starbase 118. How often you sim, who you sim with, when you last posted.
+      <br><br>This overview of the tool's main features takes a couple of minutes and walks you
+      through the site's layout. The full scope of what LCARS does is in the User Guide.
+      <br><br>An example sim comes with the tour so there is something real to look at &mdash;
+      you can keep it or throw it away at the end.
+      <br><br>Ready to get started?`,
   },
   {
     id: 'nav',
     target: '#sidebar',
-    before: () => { tourMobile() ? mobDrawer('sims') : null; },
-    title: 'Everything you write, down the side',
-    body: `Three levels. A <strong>Mission</strong> is a storyline your ship is playing
-      through; a <strong>Scene</strong> is a thread inside it; a <strong>Sim</strong> is
-      a post you write. The example is filed under a mission and a scene here.
-      <br><br>Put a sim in the wrong place and you can move it later.`,
-    mobBody: `On a phone this list lives behind the <strong>SIMS</strong> tab on the
-      right-hand edge, which is open now.`,
+    before: () => { tourEnsureSim(); if (tourMobile()) mobDrawer('sims'); },
+    title: 'The Sims List',
+    body: `Not to be confused with a Google Group or HQ's Sim Archive, this is a list of every
+      sim you have written using LCARS &mdash; those in progress as well as those you have posted
+      or archived.
+      <br><br>To help you keep things organised, LCARS uses a three-tiered hierarchy.
+      <strong>Missions</strong> are arching stories that hold multiple scenes and sims.
+      <strong>Scenes</strong> are groups of related sims that build off one another.
+      <strong>Sims</strong> are the individual writings you post to your group.
+      <br><br>Have a look at the Example Mission, Scene and Sim just added to your profile to see
+      this in action.`,
+    mobBody: `On a phone this list is collapsed by default and opens from the <strong>SIMS</strong>
+      tab on the right-hand edge, which is open now.`,
   },
   {
     id: 'title',
     target: '#doc-title',
-    before: () => { if (tourMobile()) mobDrawer(null); },
-    title: 'The title does some work',
-    body: `Title a sim the usual way &mdash; the names, a dash, then the title &mdash;
-      and LCARS reads the characters straight out of it. Anyone you have added to
-      your character list is picked up and ticked as yours before a word is written.`,
+    before: () => { tourEnsureSim(); if (tourMobile()) mobDrawer(null); },
+    title: "What's In A Name?",
+    body: `When you title a sim, LCARS can tell which of your characters is tagged in it. So long
+      as the character is in your Characters List, it links this sim to them automatically, for
+      easier tracking and reporting.
+      <br><br>More on Characters and tracking in a moment.`,
   },
   {
     id: 'editor',
     target: '#editor',
-    title: 'Sim conventions format themselves',
-    body: `Look at the example: <code>((Location))</code> goes bold,
-      <code>::an action::</code>, <code>oO a thought Oo</code> and
-      <code>=/\\= over comms =/\\=</code> each get their own treatment.
-      <br><br>Type. Nothing needs turning on.`,
+    before: () => { tourEnsureSim(); },
+    title: 'Special Formatting Highlight',
+    body: `LCARS' optional <strong>Visual Aids</strong> and <strong>Auto Format</strong> features
+      make it easy to format your sims properly and see special text at a glance. Look at the
+      example sim to see a few of them in action.
+      <br><br>Auto Format &mdash; bold location tags, italic OOC tags, bold names &mdash; copies
+      out of LCARS with your sim when you post it. Visual Aids are for LCARS only and do not go
+      with your text.
+      <br><br>All of it is configurable to your preferences, and best of all, it happens as you
+      type.`,
   },
   {
     id: 'insert',
     target: '#tb-ins-wrap,#tb-dd-ins',
-    before: () => { if (tourMobile()) mobDrawer(null); openTbDd('ins'); },
+    before: () => { tourEnsureSim(); if (tourMobile()) mobDrawer(null); openTbDd('ins'); },
     after:  () => { document.querySelectorAll('.tb-dd').forEach(d => d.classList.remove('open')); },
-    title: 'Or insert them from here',
-    body: `<strong>Insert</strong> drops a marker in and puts the cursor between its
-      two halves. <strong>Format</strong> holds bold, italic and indenting;
-      <strong>Tools</strong> holds the visual aids that highlight one kind of marker at a
-      time, and the Auto Format toggles &mdash; including bolding your characters' names
-      as you write, which is off until you ask for it.`,
+    title: 'Insert Special Formatting Directly',
+    body: `Prefer not to type <code>=/\\= Comms =/\\=</code> out by hand every time? LCARS has you
+      covered. Use <strong>Insert</strong> to drop in whatever special format you want, with the
+      cursor already in the middle of it, ready to keep writing.
+      <br><br>You can also select a section of text and use Insert to wrap that text in the
+      appropriate formatting markers.`,
   },
   {
-    id: 'chars',
-    target: '#chars-list',
-    before: () => { if (tourMobile()) mobDrawer('details'); },
-    title: 'Who is in this sim',
-    body: `Everyone LCARS has found is listed here, each with a colour, and the ones
-      ticked are yours. Colours are for writing only &mdash; a sim you copy out goes
-      to your inbox in plain black.
-      <br><br>Add your own characters, and their aliases, under
-      <strong>Characters</strong> in the top bar.`,
+    id: 'details',
+    target: '#sim-details',
+    before: () => { tourEnsureSim(); if (tourMobile()) mobDrawer('details'); },
+    title: 'Sim Details',
+    body: `From this panel you can see and set the type of sim you are writing, save manual
+      writing snapshots, organise and file sims, save a sim as a template to re-use later, and
+      mark it posted.`,
     mobBody: `On a phone this shares the drawer with the sims list, under
       <strong>Details</strong>.`,
   },
   {
+    id: 'chars',
+    target: '#chars-list',
+    before: () => { tourEnsureSim(); if (tourMobile()) mobDrawer('details'); },
+    title: 'Characters & Colour Coding',
+    body: `As characters get added to the scene, LCARS detects them automatically and adds them to
+      a list. Tick one to claim it as your own.
+      <br><br>You can also give a character a preset or custom colour, which carries through all
+      of their dialogue. Once a colour is set, <strong>Shift + right-click</strong> a paragraph to
+      assign it to that character and take its colour &mdash; handy for collating other people's
+      sims into one working document.
+      <br><br>Don't worry: these colours appear in LCARS only and do not copy out when you post.`,
+    mobBody: `On a phone, characters share a drawer with the list of sims.`,
+  },
+  {
+    id: 'charlist',
+    target: '#btn-manifest-toggle',
+    before: () => {
+      tourEnsureSim();
+      if (!tourMobile()) return;
+      mobDrawer(null);
+      document.body.classList.add('mob-more');
+      const b = document.getElementById('hdr-more');
+      if (b) b.setAttribute('aria-expanded', 'true');
+    },
+    after: () => { document.body.classList.remove('mob-more'); },
+    title: 'Your Characters List',
+    body: `<strong>Characters</strong>, in the top bar, is where everyone you write lives &mdash;
+      their colour, their aliases, and what LCARS has tracked about them.
+      <br><br>Adding a character here is what lets LCARS recognise them in a sim title, so it is
+      worth doing for anyone you write regularly.`,
+    mobBody: `On a phone this lives behind the grid button, which is open now.`,
+  },
+  {
     id: 'copy',
     target: '#btn-copy',
-    before: () => { if (tourMobile()) mobDrawer(null); },
-    title: 'When it is ready to post',
-    body: `<strong>Copy</strong> puts the whole sim on your clipboard with its
-      formatting intact, ready to paste into email, Discord or Google Groups.
-      The colours are dropped and the markers come out plain, which is how a sim
-      should read to everybody else.`,
+    before: () => { tourEnsureSim(); if (tourMobile()) mobDrawer(null); },
+    title: 'Ready To Post It?',
+    body: `<strong>Copy</strong> strips out the Visual Aids and the character colours
+      automatically, keeping every bit of formatting you added by hand or had applied for you.
+      <br><br>The whole sim is now on your clipboard, ready to send by email or to Google Groups.
+      Be sure to mark it <strong>Posted</strong> once you have actually hit send, so your simming
+      stays tracked.`,
   },
   {
     id: 'home',
     target: '#btn-dash',
+    // Pointing at "go home" while standing in the editor asks the writer to
+    // take it on faith. Closing the sim first means the Dashboard is actually
+    // behind the card -- and it gives the three steps after this one a real
+    // Dashboard to sit on.
+    before: () => {
+      if (curId) closeDoc();
+      if (!tourMobile()) return;
+      mobDrawer(null);
+      document.body.classList.add('mob-more');
+      const b = document.getElementById('hdr-more');
+      if (b) b.setAttribute('aria-expanded', 'true');
+    },
+    after: () => { document.body.classList.remove('mob-more'); },
+    title: 'Return Home',
+    body: `<strong>Dashboard</strong> brings you back here from anywhere. It holds your missions,
+      how long it has been since you last posted, what is in progress, and what you posted
+      recently.`,
+    mobBody: `On a phone this lives behind the grid button, which is open now.`,
+  },
+  {
+    id: 'whatsnew',
+    target: '#dash-wn',
+    before: () => { if (curId) closeDoc(); document.body.classList.remove('mob-more'); },
+    title: "What's New",
+    body: `Worth a click now and then: what LCARS has gained lately, with the date each thing
+      arrived, and a second tab listing what is being built next.
+      <br><br>It marks itself as a dot when there is something you have not seen.`,
+  },
+  {
+    id: 'yours',
+    target: '#btn-style,#btn-settings',
     before: () => {
       if (!tourMobile()) return;
       mobDrawer(null);
@@ -3195,23 +3286,46 @@ const TOUR = [
       if (b) b.setAttribute('aria-expanded', 'true');
     },
     after: () => { document.body.classList.remove('mob-more'); },
-    title: 'And back to the Dashboard',
-    body: `Your missions, what is in progress, and how long it has been since you
-      posted. <strong>What's New</strong> is in its top corner &mdash; what LCARS has
-      gained lately, and what is being built next.
-      <br><br><strong>Settings</strong> holds your style, your templates and a backup
-      of everything you have written. Take one now and then.`,
-    mobBody: `On a phone these live behind the grid button, which is open now.`,
+    title: 'Making It Yours',
+    body: `<strong>Style</strong> sets how LCARS looks &mdash; the skin, light or dark, and the
+      accent colour of your duty post. Change it as often as you like; nothing about your sims is
+      affected.
+      <br><br><strong>Settings</strong> holds your writing preferences, your templates, and a
+      backup of everything you have written. Signed in, your work saves to your account a few
+      seconds after each change and follows you to any device &mdash; a backup now and then is
+      still worth taking.`,
+    mobBody: `On a phone both live behind the grid button, which is open now.`,
   },
   {
     id: 'done',
-    title: "That's the tour",
-    body: `The full guide is on the Dashboard whenever you want more detail, and
-      <strong>App Feedback</strong> in the top bar is how you tell us something is
-      wrong or missing.
+    target: '#btn-feedback',
+    softTarget: true,
+    before: () => {
+      if (!tourMobile()) return;
+      mobDrawer(null);
+      document.body.classList.add('mob-more');
+      const b = document.getElementById('hdr-more');
+      if (b) b.setAttribute('aria-expanded', 'true');
+    },
+    after: () => { document.body.classList.remove('mob-more'); },
+    title: 'Ready To Sim',
+    body: `That is the full tour &mdash; and there is more about everything in it in the User
+      Guide, on the Dashboard.
+      <br><br>If you hit a bug, or want to ask for something LCARS does not do,
+      <strong>App Feedback</strong> is how you tell us.
       <br><br>What would you like to do with the example sim?`,
+    mobBody: `On a phone App Feedback lives behind the grid button, under
+      <strong>Help Us</strong>.`,
   },
 ];
+
+// Steps 2 to 9 talk about a sim, so a sim has to be open for them. Going BACK
+// from "Return Home" -- which closes it -- would otherwise find an empty
+// editor, no box on any of their targets, and skip every one of them.
+function tourEnsureSim() {
+  if (curId) return;
+  if (_tourExampleId && S.docs[_tourExampleId]) openDoc(_tourExampleId);
+}
 
 function tourMobile() { return window.innerWidth <= 820; }
 
@@ -3333,8 +3447,11 @@ function tourGo(i, dir) {
   const step = TOUR[i];
   if (step.before) { try { step.before(); } catch(e){} }
   const commit = () => {
-    // A target with no box on this screen is skipped, never pointed at.
-    if (step.target && !tourRect(step.target)) {
+    // A target with no box on this screen is skipped, never pointed at --
+    // unless the step asked to be soft, in which case it shows as a centred
+    // card instead. The last step carries the keep-or-delete choice and must
+    // never be skipped, and App Feedback is hidden for an offline writer.
+    if (step.target && !step.softTarget && !tourRect(step.target)) {
       const d = dir || 1;
       if (i + d < 0 || i + d >= TOUR.length) { tourEnd(); markWizardSeen(); return; }
       return tourGo(i + d, d);
