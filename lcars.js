@@ -13,7 +13,7 @@ const VERSIONS = [
       'Ticking a character as yours in a sim now adds them to your Characters list straight away, so the name is recognised in a sim title from that moment. It used to only be remembered as a name you had claimed, and did not become a character until the next time you happened to open the Characters view — until then, titling a sim after them did nothing',
       'Adding a character in the Characters view now also counts them as yours, so they are ticked automatically in the next sim they appear in rather than waiting to be ticked by hand',
       'Unticking a character in a sim removes them from that sim only. Their record, colour and aliases are left alone — unticking means they are not in this sim, not that they are not your character',
-      'Getting Started is now a guided tour that points at the real thing. A dark overlay lights up one part of LCARS at a time — the sims list, the sim title, the editor, the toolbar, sim details, the characters panel, the copy button, and the Dashboard, Characters, What\'s New, Style and Settings controls in the top bar — with a short note beside it, rather than a window describing the app from a distance. It works the same on a phone, opening the drawer or the menu a step needs and skipping anything not on that screen. Reopen it whenever you like from Getting Started on the Dashboard, or from Settings',
+      'Getting Started is now a guided tour that points at the real thing. A dark overlay lights up one part of LCARS at a time — the sims list, the sim title, the editor, the toolbar, sim details, the characters panel, the copy button, and the Dashboard, Characters, What\'s New, Style and Settings controls in the top bar — with a short note beside it, rather than a window describing the app from a distance. It works the same on a phone, opening the drawer or the menu a step needs and skipping anything not on that screen. Step backwards and forwards through it as often as you like, close it whenever you want, and reopen it from Getting Started on the Dashboard or from Settings',
       'The tour brings an example sim with it, already written, so the markers and the character colouring are there to look at instead of being described. At the end you choose whether to keep it or throw it away; skipping the tour never creates one',
       'New What\'s New button in the upper right of the Dashboard, with a dot on it once per release. It opens a panel beside the app — nothing behind it is disabled — with the last five things LCARS gained and the date each arrived, and a second tab listing what is being built next. Big things only; every fix and adjustment is still in Settings → About',
       'The one-off \'A new look — Delta Prime\' window is gone, and What\'s new in LCARS in the Style menu now opens the panel above. It was a second what\'s-new mechanism with its own version number, and that number had been stuck on 4.22 for three releases, so it had quietly stopped announcing anything',
@@ -3508,7 +3508,9 @@ function tourPaint() {
     <div class="tour-act">${
       first ? `<button class="btn btn-p" onclick="tourBegin()">Show me around</button>
                <button class="btn btn-s" onclick="tourSkip()">Skip</button>`
-      : last ? `<button class="btn btn-p" onclick="tourFinishExample('keep')">Keep the example sim</button>
+      : last ? `<button class="btn btn-s" onclick="tourBack()">Back</button>
+                <div style="flex:1"></div>
+                <button class="btn btn-p" onclick="tourFinishExample('keep')">Keep the example sim</button>
                 <button class="btn btn-s" onclick="tourFinishExample('delete')">Delete it</button>`
       : `<button class="btn btn-s" onclick="tourBack()">Back</button>
          <div style="flex:1"></div>
