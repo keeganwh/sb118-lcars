@@ -210,6 +210,23 @@ along with Batch 5's. See `memory/session_lcars_2026-09-onboarding.md`.
       _`jp_docs`, the membership helpers and the two-accessor discipline from Joint Posts are what this builds on._
       _Done when: saving a sentence uploads one sim, not the archive._
 
+- [ ] **[+2] Retire `S.settings.myChars`.** _Revision. Found 2026-09-11 while fixing character claiming._
+      Four stores track characters and three of them earn it: `S.characters` is the
+      records (and the only thing `charsFromTitle` reads, so it is what makes a name
+      catch in a title), `doc.chars` is who is in this sim, and `doc.myChars` has to
+      be per-sim because **a joint sim holds your characters and somebody else's in
+      the same document** — `jpRememberMyChars()` keeps your selection local.
+      **`S.settings.myChars` is the fourth and is derivable.** It caches "names that
+      should be mine", written by ticks and read to pre-tick, and it stores NAMES
+      rather than character ids — which is the only reason `syncDocMyChars()` has to
+      walk the alias chain to match. Everything in `S.characters` is yours by
+      definition, so the list adds nothing that is not already known.
+      `claimChar()` now keeps the two in step, so this is tidying rather than a fix.
+      Eight-plus read sites including stats, search and the dashboard, so not a
+      drive-by.
+      _Done when: `S.settings.myChars` is gone, pre-ticking reads `S.characters`, and
+      a legacy payload still holding the old list is migrated on load._
+
 - [ ] **[+4] Character pictures into the storage bucket the schema already made for them.** _Small, standalone — take it before the item above, not with it._
       `supabase/schema.sql` creates a public `character-pics` bucket with four RLS policies, commented *"replaces base64 pictureDataUrl"*. **The app never calls it** — there is no reference to `character-pics` or `/storage/v1` anywhere in `lcars.js`. Pictures are still resized to 200×200, JPEG'd at 0.82 and base64'd into `c.pictureDataUrl` (`onCharPicFile`, `loadCharPicFromUrl`, `resizePicture` ~line 7909), which puts them **inside the payload blob**.
       **Why it matters more than its size suggests.** Base64 inflates a picture by a third, and the payload is uploaded whole on every save and downloaded whole on every load — so a writer with eight characters carries ~150 KB of image data in every sync, forever, against the 500 MB database quota, while the 1 GB file-storage quota created for exactly this sits at zero. It is a cost paid repeatedly where it should be paid once. Measured 2026-08-26: 34 MB of database and 92 MB of egress across 17 writers, so this is not urgent — but egress is the quota with a shape to it, and this is the cheapest thing that flattens it.
