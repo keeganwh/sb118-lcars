@@ -373,12 +373,14 @@ body.hc #cp{border-left:3px solid var(--blue)}
 .set-btn-danger .set-btn-t .ic{color:var(--red,#c66)}
 /* A linked account keeps the plain chain as its leading mark -- the row is an
    account link whichever state it is in -- and says it is set up where the eye
-   already is: the word itself, in green, with a tick after it. A broken chain
+   already is: the word itself, accented, with a tick after it. A broken chain
    reads as an error before it reads as a state, so it is not used here.
-   The tick has to out-specify .set-btn-t .ic above, which paints every icon in
-   the row amber. */
-.set-linked{color:var(--green);font-weight:bold;white-space:nowrap}
-.set-btn-t .set-linked .ic{color:var(--green);width:.85em;height:.85em;
+   --amber IS the chosen accent: Prime remaps it to --ac, the duty-post colour,
+   and each classic theme sets its own. So this follows the writer's style
+   rather than being green everywhere. The tick inherits the accent from
+   .set-btn-t .ic above; this rule only sizes it. */
+.set-linked{color:var(--amber);font-weight:bold;white-space:nowrap}
+.set-btn-t .set-linked .ic{width:.85em;height:.85em;
   vertical-align:-.08em;margin-left:.12em}
 /* Selected state, for the buttons that are a choice rather than an action */
 .set-btn.on{border-color:var(--amber);background:var(--hover)}
