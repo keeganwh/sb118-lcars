@@ -1386,9 +1386,11 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   /* The tour card takes the width it can get, and its actions stop being a
      row -- Back / Close / Next on one 390px line leaves each of them a tap
      target too small to hit. */
-  /* Half the screen at most, so the thing being pointed at always gets the
-     other half. The text scrolls inside the card. */
-  #tour-tip{width:calc(100vw - 20px);padding:14px 15px;max-height:52dvh}
+  /* Under half the screen, so the top of whatever is being pointed at still
+     has room below the card. At 52dvh the characters panel only had 22px left
+     above the card -- less than one row -- and the placement fell back to
+     lighting the empty space underneath instead. The text scrolls inside. */
+  #tour-tip{width:calc(100vw - 20px);padding:14px 15px;max-height:44dvh}
   .tour-act .btn{flex:1 1 auto;justify-content:center}
   .tour-choice{flex:1 1 100%}
   .tour-choice .btn{flex:1 1 auto}

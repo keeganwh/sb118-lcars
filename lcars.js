@@ -3560,8 +3560,14 @@ function tourPaint() {
     const cardTop = vh - th - 8;
     const aTop = t, aH = Math.max(0, Math.min(t + h, cardTop - gap) - aTop);
     const bTop = Math.max(t, 8 + th + gap), bH = Math.max(0, (t + h) - bTop);
-    if (aH >= bH) { top = cardTop; holeT = aTop; holeH = aH; }
-    else          { top = 8;       holeT = bTop; holeH = bH; }
+    // Prefer the card at the BOTTOM, which leaves the TOP of the target lit.
+    // Taking whichever region was simply larger looked right in the numbers
+    // and was wrong on screen: the characters panel is 360px tall but its
+    // rows are all in the first 70px, so lighting the bigger lower region lit
+    // an empty white box. The top of a list is what identifies it; 60px is
+    // about two rows, which is enough to recognise.
+    if (aH >= 60 || aH >= bH) { top = cardTop; holeT = aTop; holeH = aH; }
+    else                      { top = 8;       holeT = bTop; holeH = bH; }
     hole.style.top = Math.round(Math.max(0, holeT)) + 'px';
     hole.style.height = Math.round(Math.max(0, holeH)) + 'px';
   }
