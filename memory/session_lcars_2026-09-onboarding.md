@@ -1,8 +1,8 @@
 # Session — onboarding, What's New and What's Planned (2026-09-10)
 
-_ROADMAP **Batch 5B**, all three items. Built on
-`claude/onboarding-whats-new-akf1s2`. **Not cut as a version** — the entries
-sit pending in the `VERSIONS` array alongside Batch 5's._
+_ROADMAP **Batch 5B**, all three items, plus a character-claiming fix the batch
+turned up. **Merged to `main` and live 2026-09-12.** **Not cut as a version** —
+the entries sit pending in the `VERSIONS` array alongside Batch 5's._
 
 Read alongside `session_lcars_2026-09-mobile.md` (the phone toolbar moves
 controls rather than copying them; `.hdr-right` IS the app menu) and
@@ -194,7 +194,10 @@ Supabase (`prefs.seenWhatsNew` syncing between two devices in particular).
 
 ## Left for next time
 
-- **`HIGHLIGHTS` and `PLANNED` need curating on every release.** Nothing
-  updates them automatically and nothing will complain if they go stale — which
-  is precisely how `STYLE_VERSION` ended up three versions behind. Add it to
-  the version-bump routine.
+- **`HIGHLIGHTS` and `PLANNED` need curating on every release.** Nothing updates
+  them automatically and nothing will complain if they go stale — which is
+  precisely how `STYLE_VERSION` ended up three versions behind. Add it to the
+  version-bump routine.
+- **Neither Batch 5 nor 5B is cut as a version.** Both sit as pending entries.
+- **The icon review is ROADMAP Batch 5C**, raised by this session but not done
+  here.

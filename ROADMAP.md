@@ -1,6 +1,6 @@
 # LCARS SB118 Writing Tool — Roadmap
 
-_Outstanding work only. Current version: **4.25**, released 2026-09-05 — Batches 1 and 2 and the Batch 4 mobile pass are all in it, and their entries are now in `CHANGELOG.md`. **Batch 5 shipped to `main` on 2026-09-10 and is live, but is NOT yet cut as a version** — there are pending entries in the `VERSIONS` array waiting on a bump._
+_Outstanding work only. Current version: **4.25**, released 2026-09-05 — Batches 1 and 2 and the Batch 4 mobile pass are all in it, and their entries are now in `CHANGELOG.md`. **Batches 5 and 5B are both shipped to `main` and live (5 on 2026-09-10, 5B on 2026-09-12), but NEITHER is cut as a version** — there are pending entries in the `VERSIONS` array waiting on a bump._
 
 Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same `main` with a moving notice.
 
@@ -162,9 +162,9 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 
 **Top score [+4]. Category: Component Revision + New Component. Added 2026-09-10.**
 
-**SHIPPED 2026-09-10 on `claude/onboarding-whats-new-akf1s2`.** All three items are
-done and the entries are pending in the `VERSIONS` array, waiting on a version bump
-along with Batch 5's. See `memory/session_lcars_2026-09-onboarding.md`.
+**SHIPPED to `main` 2026-09-12.** All three items are done, plus a character-claiming
+fix the batch turned up. The entries are pending in the `VERSIONS` array, waiting on a
+version bump along with Batch 5's. See `memory/session_lcars_2026-09-onboarding.md`.
 
 **Why its own batch:** all three touch the same boot-time surface — `showWizard()`, `maybeShowStyleIntro()` and the Dashboard tiles — and the first item is a **removal** that the other two depend on. Nothing here touches the database.
 
@@ -188,6 +188,29 @@ along with Batch 5's. See `memory/session_lcars_2026-09-onboarding.md`.
       _Done when: a returning writer sees a badge once per release, opens it to the last five features with dates, can read what is planned, and the badge clears and stays cleared._
 
 > **Landmine for this batch:** **boot raises prompts on a timer and they fight.** The reconcile question, a pending deletion, a temporary PIN and the Delta Prime intro have collided three times, twice invisibly. `maybeShowStyleIntro()` already carries the defensive version — a 400ms defer, a check that `_routeView === 'dash'`, and a check that `#mo` is hidden. **Anything raised at boot here must do the same**, and the tour is worse than a modal because it points at elements that may not be on screen yet.
+
+---
+
+# BATCH 5C — Icon review
+
+**Score [+2]. Category: Component Revision. Added 2026-09-12. A short session of its own.**
+
+- [ ] **[+2] Review every icon in the sprite.** _Revision._
+      46 `<symbol>`s in `LCARS.html`, and a pass over them found **four with no
+      reference at all** (`arrow-up`, `arrow-down`, `clipboard`, `download`) and
+      **eight doing two unrelated jobs at once**: `camera` is a screenshot AND a
+      revision snapshot; `hexagon` is the Dashboard AND Save as Template;
+      `circle-dot` is a new Mission AND View in Characters; `list` is Sim Details
+      AND the Settings contents; `shield` is admin tools AND a reply from the team;
+      `alert` is App Feedback AND the reconcile warning AND the admin queue; `user`
+      is Characters AND joint-sim invitations; `undo` is un-mark AND unarchive, and
+      is near-identical to `rotate-ccw` doing a third.
+      **The worst single one is `alert` on App Feedback** — a warning triangle there
+      reads as "something is wrong with LCARS", not "tell us something".
+      _Purely presentational: no data, no schema, no behaviour. A swap is an edited
+      `<symbol>` plus its `viewBox`._
+      _Done when: nothing unreferenced is left in the sprite, no glyph carries two
+      unrelated meanings, and every icon still renders at 14px in all five skins._
 
 ---
 
