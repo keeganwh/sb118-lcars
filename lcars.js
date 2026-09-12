@@ -10,7 +10,9 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
-      'Fixed: on a phone, a tour step pointing at something tall — the sims list, the editor, the characters panel — had its own text box land on top of it, hiding the thing it was describing. The box now sits against an edge of the screen and the highlight stops short of it, so the two never overlap',
+      'Fixed: moving to the next step of the tour could open it already scrolled part-way down its own text, if the step before it had been scrolled',
+      'The tour\'s text box scrolls properly on a phone now, and fades its last line when there is more to read rather than stopping mid-sentence',
+      'Fixed: on a phone, a tour step pointing at something tall — the sims list, the editor, the characters panel — had its own text box land on top of it, hiding the thing it was describing. The box now sits against an edge of the screen, takes at most half of it, and scrolls its own text if there is more, so what is being pointed at always has room to be seen',
       'Unticking a character who is in your Characters list now asks whether you meant to take them out of that sim only, or out of your characters altogether. If anything is stored against them — aliases, a colour, a picture, your notes — it says exactly what removing them would destroy',
       'Ticking a character as yours in a sim now adds them to your Characters list straight away, so the name is recognised in a sim title from that moment. It used to only be remembered as a name you had claimed, and did not become a character until the next time you happened to open the Characters view — until then, titling a sim after them did nothing',
       'Adding a character in the Characters view now also counts them as yours, so they are ticked automatically in the next sim they appear in rather than waiting to be ticked by hand',
@@ -3153,8 +3155,7 @@ const TOUR = [
       <strong>Sims</strong> are the individual writings you post to your group.
       <br><br>Have a look at the Example Mission, Scene and Sim just added to your profile to see
       this in action.`,
-    mobBody: `On a phone this list is collapsed by default and opens from the <strong>SIMS</strong>
-      tab on the right-hand edge, which is open now.`,
+    mobBody: `On a phone it opens from the <strong>SIMS</strong> tab on the right-hand edge.`,
   },
   {
     id: 'title',
@@ -3211,12 +3212,10 @@ const TOUR = [
     title: 'Characters & Colour Coding',
     body: `As characters get added to the scene, LCARS detects them automatically and adds them to
       a list. Tick one to claim it as your own.
-      <br><br>You can also give a character a preset or custom colour, which carries through all
-      of their dialogue. Once a colour is set, <strong>Shift + right-click</strong> a paragraph to
-      assign it to that character and take its colour &mdash; handy for collating other people's
-      sims into one working document.
-      <br><br>Don't worry: these colours appear in LCARS only and do not copy out when you post.`,
-    mobBody: `On a phone, characters share a drawer with the list of sims.`,
+      <br><br>Give a character a colour and it carries through all of their dialogue. These are
+      for writing only &mdash; they do not copy out when you post.
+      <br><br>Once a colour is set, <strong>Shift + right-click</strong> a paragraph to assign it
+      to that character, which helps when collating other people's sims.`,
   },
   {
     id: 'copy',
@@ -3249,7 +3248,7 @@ const TOUR = [
     body: `<strong>Dashboard</strong> brings you back here from anywhere. It holds your missions,
       how long it has been since you last posted, what is in progress, and what you posted
       recently.`,
-    mobBody: `On a phone this lives behind the grid button, which is open now.`,
+    mobBody: `On a phone this lives behind the grid button.`,
   },
   {
     id: 'charlist',
@@ -3265,12 +3264,11 @@ const TOUR = [
     after: () => { document.body.classList.remove('mob-more'); },
     title: 'Your Characters List',
     body: `<strong>Characters</strong>, accessed via the top bar, is where all your claimed
-      characters live. Characters you check off as yours while writing appear here, but you can
-      also add characters manually, add their details, and even give them aliases that LCARS will
-      know to identify them with.
-      <br><br>Adding a character here is what lets LCARS recognise them in a sim title, so it is
+      characters live. Ones you tick while writing appear here, and you can add others by hand,
+      fill in their details, and give them aliases LCARS will recognise them by.
+      <br><br>Adding a character here is what lets LCARS pick them up from a sim title, so it is
       worth doing for anyone you write regularly.`,
-    mobBody: `On a phone this lives behind the grid button, which is open now.`,
+    mobBody: `On a phone this lives behind the grid button.`,
   },
   {
     id: 'yours',
@@ -3291,7 +3289,7 @@ const TOUR = [
       backup of everything you have written. Signed in, your work saves to your account a few
       seconds after each change and follows you to any device &mdash; a backup now and then is
       still worth taking.`,
-    mobBody: `On a phone both live behind the grid button, which is open now.`,
+    mobBody: `On a phone both live behind the grid button.`,
   },
   {
     id: 'whatsnew',
@@ -3505,9 +3503,11 @@ function tourPaint() {
   const body = (tourMobile() && step.mobBody)
     ? step.body + '<div class="tour-mob">' + step.mobBody + '</div>' : step.body;
   tip.innerHTML = `
-    <div class="tour-count">STEP ${_tourStep + 1} OF ${TOUR.length}</div>
-    <div class="tour-ttl">${esc(step.title)}</div>
-    <div class="tour-body">${body}</div>
+    <div class="tour-scroll">
+      <div class="tour-count">STEP ${_tourStep + 1} OF ${TOUR.length}</div>
+      <div class="tour-ttl">${esc(step.title)}</div>
+      <div class="tour-body">${body}</div>
+    </div>
     <div class="tour-act">${
       first ? `<button class="btn btn-p" onclick="tourBegin()">Show me around</button>
                <button class="btn btn-s" onclick="tourSkip()">Skip</button>`
@@ -3549,9 +3549,23 @@ function tourPaint() {
     // TOP of the very thing the step was pointing at. Pin it to an edge and
     // CLIP the hole so the two never overlap: bottom edge by preference, since
     // the top of a list is the part worth seeing.
+    // Work out how much of the target each edge would leave lit, and take the
+    // better one. A fixed threshold got this wrong: it chose the top edge
+    // whenever the bottom left under 90px, even when the top left NONE -- a
+    // target sitting above the card's own bottom clipped to a negative
+    // height and vanished, which is what happened to Style and Settings on a
+    // real phone.
     const cardTop = vh - th - 8;
-    if (cardTop - gap - t >= 90) { top = cardTop; holeH = (cardTop - gap) - t; }
-    else { top = 8; holeT = 8 + th + gap; holeH = (t + h) - holeT; }
+    const aTop = t, aH = Math.max(0, Math.min(t + h, cardTop - gap) - aTop);
+    const bTop = Math.max(t, 8 + th + gap), bH = Math.max(0, (t + h) - bTop);
+    // Prefer the card at the BOTTOM, which leaves the TOP of the target lit.
+    // Taking whichever region was simply larger looked right in the numbers
+    // and was wrong on screen: the characters panel is 360px tall but its
+    // rows are all in the first 70px, so lighting the bigger lower region lit
+    // an empty white box. The top of a list is what identifies it; 60px is
+    // about two rows, which is enough to recognise.
+    if (aH >= 60 || aH >= bH) { top = cardTop; holeT = aTop; holeH = aH; }
+    else                      { top = 8;       holeT = bTop; holeH = bH; }
     hole.style.top = Math.round(Math.max(0, holeT)) + 'px';
     hole.style.height = Math.round(Math.max(0, holeH)) + 'px';
   }
@@ -3559,6 +3573,10 @@ function tourPaint() {
   left = Math.max(10, Math.min(vw - tw - 10, left));
   tip.style.top = Math.round(top) + 'px';
   tip.style.left = Math.round(left) + 'px';
+  // A new step starts at the top of its own text. Without this the card keeps
+  // wherever the previous step was scrolled to, so a short step can open
+  // already scrolled past its first line.
+  if (tip.scrollTop) tip.scrollTop = 0;
 }
 
 // Pressing "Show me around" is what makes the example sim -- skipping never
