@@ -10,6 +10,10 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'A pass over every icon in the app. Buttons that shared a symbol no longer do: the Dashboard is a house and Save as Template a copy, Characters is a pair of people and Joint Sim Invites a person with a plus, Sim Details is an information mark and the Settings contents a menu, Admin is a shield with a tick and a reply from the team a message, Snapshots is a clock rather than a camera, and Unarchive is its own mark rather than the undo arrow',
+      'The App Feedback button is no longer a warning triangle. A triangle there read as something being wrong with LCARS rather than an invitation to tell us something, so it is now a message with a mark in it; the Bug half of the report form is a bug, the admin queues are an in-tray, and Send is a paper plane',
+      'A few more icons now say what they do: Start a New Mission is a heading arrow, View in Characters a person with a magnifier, Post Date a calendar with a tick, Refresh Stats a pair of circling arrows, and Overwrite, when restoring a backup, a replace mark',
+      'Four icons that nothing in the app used have been taken out',
       'Unticking a character who is in your Characters list now asks whether you meant to take them out of that sim only, or out of your characters altogether. If anything is stored against them — aliases, a colour, a picture, your notes — it says exactly what removing them would destroy',
       'Ticking a character as yours in a sim now adds them to your Characters list straight away, so the name is recognised in a sim title from that moment. It used to only be remembered as a name you had claimed, and did not become a character until the next time you happened to open the Characters view — until then, titling a sim after them did nothing',
       'Adding a character in the Characters view now also counts them as yours, so they are ticked automatically in the next sim they appear in rather than waiting to be ticked by hand',
@@ -883,7 +887,7 @@ function onImportFile(e) {
         <strong style="color:var(--text)">Merge</strong> adds imported items alongside existing data.
       </p>`,
       () => applyImport('merge'),
-      { ok: 'Merge', extra: [{label:ic('alert') + ' Overwrite', cls:'btn-s', fn:"applyImport('overwrite')"}] }
+      { ok: 'Merge', extra: [{label:ic('replace') + ' Overwrite', cls:'btn-s', fn:"applyImport('overwrite')"}] }
     );
   };
   reader.readAsText(file);
@@ -1524,7 +1528,7 @@ function renderAdminView() {
         <div class="msec">PIN RESET REQUESTS</div>
         <div class="set-block">
           <div class="adm-tabs">
-            <button class="btn ${open ? 'btn-p' : 'btn-s'}" onclick="adminTab('open')">${ic('alert')} Waiting${_adminOpen ? ' (' + _adminOpen + ')' : ''}</button>
+            <button class="btn ${open ? 'btn-p' : 'btn-s'}" onclick="adminTab('open')">${ic('inbox')} Waiting${_adminOpen ? ' (' + _adminOpen + ')' : ''}</button>
             <button class="btn ${open ? 'btn-s' : 'btn-p'}" onclick="adminTab('done')">${ic('archive')} Archive</button>
           </div>
           <div id="adm-list"><span class="set-note">Loading…</span></div>
@@ -1841,7 +1845,7 @@ function fbAdminCard() {
           app. A note you write here appears on the writer's own copy of their report — it is the only way
           they hear back.</span>
         <div class="adm-tabs">
-          <button class="btn ${_fbArchived ? 'btn-s' : 'btn-p'}" onclick="fbAdminTab(false)">${ic('alert')} Open</button>
+          <button class="btn ${_fbArchived ? 'btn-s' : 'btn-p'}" onclick="fbAdminTab(false)">${ic('inbox')} Open</button>
           <button class="btn ${_fbArchived ? 'btn-p' : 'btn-s'}" onclick="fbAdminTab(true)">${ic('archive')} Including archived</button>
         </div>
         <div id="adm-fb"><span class="set-note">Loading…</span></div>
@@ -2157,7 +2161,7 @@ function fbPaintForm(keep) {
   const prev = keep ? ((document.getElementById('fb-text') || {}).value || '') : '';
   el.innerHTML = `
     <div class="fb-kind">
-      <button class="btn ${_fbKind === 'bug' ? 'btn-p' : 'btn-s'}" onclick="fbSetKind('bug')">${ic('alert')} Bug</button>
+      <button class="btn ${_fbKind === 'bug' ? 'btn-p' : 'btn-s'}" onclick="fbSetKind('bug')">${ic('bug')} Bug</button>
       <button class="btn ${_fbKind === 'feature' ? 'btn-p' : 'btn-s'}" onclick="fbSetKind('feature')">${ic('sparkles')} Feature request</button>
     </div>
     <textarea class="mi fb-text" id="fb-text" rows="7" maxlength="4000"
@@ -2175,7 +2179,7 @@ function fbPaintForm(keep) {
       <div class="set-note" id="fb-shot-note" style="margin:0"></div>
       <div id="fb-shot-prev"></div>
     </div>
-    <button class="btn btn-p fb-send" onclick="fbSend()">${ic('upload')} Send it</button>
+    <button class="btn btn-p fb-send" onclick="fbSend()">${ic('send')} Send it</button>
     <div class="set-note" id="fb-msg" style="min-height:1.1em"></div>`;
   if (_fbShot) fbShowShot();      // survives switching Bug <-> Feature request
 }
@@ -2395,7 +2399,7 @@ function fbPaintMine() {
         <span class="fb-st fb-st-${esc(f.status)}">${esc(fbStatusLabel(f.status))}</span>
       </div>
       <div class="adm-req-note">${esc(f.body)}</div>
-      ${f.admin_note ? `<div class="fb-reply">${ic('shield')} ${esc(f.admin_note)}
+      ${f.admin_note ? `<div class="fb-reply">${ic('message-square-warning')} ${esc(f.admin_note)}
         <span class="adm-req-foot">${esc(fmtWhen(f.status_at))}</span></div>` : ''}
       <div class="fb-item-act">
         <button class="btn btn-s" onclick="fbConfirmWithdraw('${f.id}')">${ic('trash')} Withdraw</button>
@@ -4003,12 +4007,12 @@ function renderDashboard() {
     <div class="dash-section">READY TO GET STARTED?</div>
     <div class="dash-actions">
       <button class="dash-action" onclick="showNewMission()">
-        <div class="da-icon">${ic('circle-dot')}</div>
+        <div class="da-icon">${ic('navigation-2')}</div>
         <div class="da-label">Start a new Mission</div>
         <div class="da-hint">Create a mission folder to organise scenes and sims</div>
       </button>
       <button class="dash-action" onclick="showNewScene()">
-        <div class="da-icon">${ic('table')}</div>
+        <div class="da-icon">${ic('list')}</div>
         <div class="da-label">Create a new Scene</div>
         <div class="da-hint">Add a scene grouping within a mission</div>
       </button>
@@ -4018,7 +4022,7 @@ function renderDashboard() {
         <div class="da-hint">Start a new sim post</div>
       </button>
       <button class="dash-action" onclick="openManifest()">
-        <div class="da-icon">${ic('user')}</div>
+        <div class="da-icon">${ic('users')}</div>
         <div class="da-label">Characters</div>
         <div class="da-hint">View and manage your characters</div>
       </button>
@@ -5560,9 +5564,9 @@ function updateMeta(doc) {
 function updatePostedMeta(doc) {
   const btn = document.getElementById('btn-post');
   if (doc.postedAt) {
-    btn.innerHTML = ic('calendar') + ' Change';
+    btn.innerHTML = ic('calendar-check') + ' Change';
   } else {
-    btn.innerHTML = ic('calendar') + ' Post';
+    btn.innerHTML = ic('calendar-check') + ' Post';
   }
   updateMeta(doc);
 }
@@ -5852,7 +5856,7 @@ function charCtx(e, i) {
     const manifestChar = findCharByAnyName(name);
     if (manifestChar) {
       items.push('-');
-      items.push({label:ic('circle-dot') + ' View in Characters', fn:`openManifestToChar('${manifestChar.id}')`});
+      items.push({label:ic('user-search') + ' View in Characters', fn:`openManifestToChar('${manifestChar.id}')`});
     }
   }
 
@@ -6750,7 +6754,7 @@ function renderMissionView(id) {
       </div>
       <div class="dash-actions dv-action-btns" style="flex-shrink:0;margin:0;flex-wrap:nowrap">
         <button class="dash-action" onclick="showNewScene('${id}')">
-          <div class="da-icon">${ic('table')}</div>
+          <div class="da-icon">${ic('list')}</div>
           <div class="da-label">Create a new Scene</div>
           <div class="da-hint">Add a scene grouping to this mission</div>
         </button>
@@ -7145,7 +7149,7 @@ function toggleSidebar() {
 function toggleSidebarDetail() {
   S.settings.sidebarDetail = !S.settings.sidebarDetail;
   document.getElementById('sidebar').classList.toggle('sidebar-detail', !!S.settings.sidebarDetail);
-  document.getElementById('sb-detail-btn').innerHTML = ic('list') + ' Details';
+  document.getElementById('sb-detail-btn').innerHTML = ic('info') + ' Details';
   persist();
   schedSync();          // see toggleSidebar: a local-only preference loses to the account
 }
@@ -7316,7 +7320,7 @@ function ctxMission(e,id){
     '-',
     {label:m.status==='complete'?ic('circle') + ' Mark Active':ic('check') + ' Mark Complete',
       fn:`setStatus('mission','${id}','${m.status==='complete'?'active':'complete'}');hideCtx()`},
-    {label:m.status==='archived'?ic('undo') + ' Unarchive':ic('archive') + ' Archive',
+    {label:m.status==='archived'?ic('list-restart') + ' Unarchive':ic('archive') + ' Archive',
       fn:`setStatus('mission','${id}','${m.status==='archived'?'active':'archived'}');hideCtx()`},
     '-',
     {label:ic('pencil') + ' Rename',fn:`renameItem('mission','${id}');hideCtx()`},
@@ -7331,7 +7335,7 @@ function ctxScene(e,id){
     '-',
     {label:sc.status==='complete'?ic('circle') + ' Mark Active':ic('check') + ' Mark Complete',
       fn:`setStatus('scene','${id}','${sc.status==='complete'?'active':'complete'}');hideCtx()`},
-    {label:sc.status==='archived'?ic('undo') + ' Unarchive':ic('archive') + ' Archive',
+    {label:sc.status==='archived'?ic('list-restart') + ' Unarchive':ic('archive') + ' Archive',
       fn:`setStatus('scene','${id}','${sc.status==='archived'?'active':'archived'}');hideCtx()`},
     '-',
     {label:ic('pencil') + ' Edit Scene',fn:`editScene('${id}');hideCtx()`},
@@ -7344,7 +7348,7 @@ function ctxDoc(e,id){
   const items = [
     {label:d.status==='complete'?ic('circle') + ' Mark Active':ic('check') + ' Mark Complete',
       fn:`setStatus('doc','${id}','${d.status==='complete'?'active':'complete'}');hideCtx()`},
-    {label:d.status==='archived'?ic('undo') + ' Unarchive':ic('archive') + ' Archive',
+    {label:d.status==='archived'?ic('list-restart') + ' Unarchive':ic('archive') + ' Archive',
       fn:`setStatus('doc','${id}','${d.status==='archived'?'active':'archived'}');hideCtx()`},
   ];
   // If title has multiple separators, offer display-title chooser
@@ -7749,7 +7753,7 @@ function updateViewButtons() {
   const mb = document.getElementById('btn-manifest-toggle');
   if (mb) {
     const on = _routeView === 'characters';
-    mb.innerHTML = on ? ic('pencil') + ' Sim Editor' : ic('user') + ' Characters';
+    mb.innerHTML = on ? ic('pencil') + ' Sim Editor' : ic('users') + ' Characters';
     mb.onclick = () => showView(on ? 'dash' : 'characters');
   }
   const ab = document.getElementById('btn-admin');
@@ -7808,7 +7812,7 @@ function renderSettingsView() {
     <div id="set-scroll">
       <div class="set-wrap">
         <div class="set-head">
-          <button class="btn btn-s" id="set-toc-btn" onclick="toggleSettingsToc()">${ic('list')} Jump to…</button>
+          <button class="btn btn-s" id="set-toc-btn" onclick="toggleSettingsToc()">${ic('menu')} Jump to…</button>
           <span class="set-sub">LCARS SB118 Writing Tool &middot; v${APP_VERSION}</span>
         </div>
         ${settingsAccountCard()}
@@ -9609,7 +9613,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   // an account adopt cannot drift apart.
   applyPanelStates();
   if (S.settings.sidebarDetail) {
-    document.getElementById('sb-detail-btn').innerHTML=ic('list') + ' Details';
+    document.getElementById('sb-detail-btn').innerHTML=ic('info') + ' Details';
   }
 
   // Saved sidebar widths
