@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'Fixed: the bottom of every page was cut off by the browser\u2019s own toolbar on a phone \u2014 the last row of the dashboard, the foot of a mission or scene, the end of a sim you were writing. You could drag it into view with a thumb but it sprang back before you could tap it. LCARS was sizing itself to the taller measurement a phone browser reports when its toolbar is hidden, so the last stretch of every screen sat underneath that toolbar with no way to scroll it up. Everything now sizes to the screen you can actually see, and leaves room for the home indicator at the bottom',
       'Mission and scene dashboards now fit a phone screen. They were built for a wide window and had never been adjusted: the title was squeezed into a sliver a single letter wide, the action buttons sat on top of it, and the whole page ran off the side. The title now gets the full width, the statistics divide the screen evenly, and each row of the scene and sim tables reads as a block instead of a table too wide to see',
       'Added: an Actions button on every mission and scene dashboard, holding rename, edit, mark complete, archive, delete and the mission tag. These were only ever available by right-clicking the sims list, which a phone cannot do \u2014 so on a phone there had been no way to rename or delete a mission or a scene at all',
       'Added: a Dashboard link in the top corner of a mission, matching the link back to the mission that a scene already had',
