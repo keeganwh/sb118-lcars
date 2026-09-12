@@ -15,6 +15,7 @@ const VERSIONS = [
       'A few more icons now say what they do: Start a New Mission is a heading arrow, View in Characters a person with a magnifier, Post Date a calendar with a tick, Refresh Stats a pair of circling arrows, and Overwrite, when restoring a backup, a replace mark',
       'Create a new Scene is now a stack of layers, so it no longer shares its mark with the bullet-list button in the toolbar',
       'Every row in Settings has its icon back. Display name, Set up an account, Change my PIN, Sync data now, Back up my data, Restore from a backup, Built with Claude Code and the Your Account and Sim Templates entries in the contents rail were all drawing nothing, and Change my PIN is now a padlock, Sync data now a cloud, and Built with Claude Code a pair of brackets',
+      'Four more Settings rows say what they do: Display name is a person with a pencil, Share my contact the contact card the button hands over, Sign out a door rather than the arrow that means Move to Scene, and a linked Discord or Google account shows a broken link, since clicking it unlinks the account rather than linking it again',
       'Two icons that nothing in the app used have been taken out',
       'The Getting Started, What\'s New and Delta Prime mark is now the three-part sparkle rather than the single star it had been drawing',
       'Unticking a character who is in your Characters list now asks whether you meant to take them out of that sim only, or out of your characters altogether. If anything is stored against them — aliases, a colour, a picture, your notes — it says exactly what removing them would destroy',
@@ -1411,7 +1412,7 @@ function paintIdentities(list) {
     }
     const d = found.identity_data || {};
     const who = d.email || d.name || d.full_name || d.preferred_username || '';
-    return setBtn(`confirmUnlinkProvider('${identityKey(found)}','${p.id}')`, 'link', p.label + ' — linked',
+    return setBtn(`confirmUnlinkProvider('${identityKey(found)}','${p.id}')`, 'unlink', p.label + ' — linked',
       (who ? esc(who) + '. ' : '') + 'Click to unlink.');
   }).join('');
 }
@@ -7922,11 +7923,11 @@ function settingsAccountCard() {
           <span class="set-note" style="margin:0" id="sync-status">${esc(syncStatus.msg||'')}</span>
         </div>
         <div class="set-tiles" style="margin-top:10px">
-          ${setBtn('showDisplayName()', 'user', 'Display name', 'Helps friends find you, not for logins.', {id:'acct-dn-tile'})}
+          ${setBtn('showDisplayName()', 'user-round-pen', 'Display name', 'Helps friends find you, not for logins.', {id:'acct-dn-tile'})}
           ${setBtn('showChangePin()', 'lock', 'Change my PIN', 'Requires your current PIN to change.')}
-          ${setBtn('showShareContact()', 'copy', 'Share my contact', 'Copy + paste to connect with other writers.')}
+          ${setBtn('showShareContact()', 'id-card', 'Share my contact', 'Copy + paste to connect with other writers.')}
           ${setBtn('saveToCloud()', 'cloud-upload', 'Sync data now', 'Push/sync manually (for those who like pushing buttons).')}
-          ${setBtn('cloudSignOut()', 'move-right', 'Sign out', 'Signs out in this browser. Nothing is deleted.')}
+          ${setBtn('cloudSignOut()', 'log-out', 'Sign out', 'Signs out in this browser. Nothing is deleted.')}
         </div>
       </div>
 
