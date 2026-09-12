@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'Unticking a character who is in your Characters list now asks whether you meant to take them out of that sim only, or out of your characters altogether. If anything is stored against them — aliases, a colour, a picture, your notes — it says exactly what removing them would destroy',
       'Ticking a character as yours in a sim now adds them to your Characters list straight away, so the name is recognised in a sim title from that moment. It used to only be remembered as a name you had claimed, and did not become a character until the next time you happened to open the Characters view — until then, titling a sim after them did nothing',
       'Adding a character in the Characters view now also counts them as yours, so they are ticked automatically in the next sim they appear in rather than waiting to be ticked by hand',
       'Unticking a character in a sim removes them from that sim only. Their record, colour and aliases are left alone — unticking means they are not in this sim, not that they are not your character',
@@ -5692,6 +5693,83 @@ function updateCharsPanel(doc) {
   }).join('');
 }
 
+// "a, b and c" -- a comma-joined list reads as a stutter in a warning.
+function listJoin(a) {
+  if (a.length <= 1) return a[0] || '';
+  return a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+}
+
+// Unticking a character who has a record in Characters. Two different
+// intentions wear the same gesture -- "not in this sim" and "not mine at
+// all" -- so it asks which, rather than silently picking one.
+//
+// The prompt says what would actually be destroyed. A record LCARS made from
+// a tick holds nothing but a name and is free to throw away; one the writer
+// has filled in holds aliases, a colour, a picture and notes, and removing it
+// is the expensive answer. Same question either way, different warning.
+function untickAsk(doc, name, char, di, gi) {
+  const extras = [];
+  if ((char.aliases || []).length) extras.push((char.aliases.length) + ' alias' + (char.aliases.length === 1 ? '' : 'es'));
+  if (char.pictureDataUrl) extras.push('their picture');
+  if (char.charType || char.rank || char.division || char.species) extras.push('their details');
+  if ((char.notes || '').trim()) extras.push('your notes');
+  const colour = (doc.charColors || {})[name];
+  if (colour) extras.push('their colour');
+  const others = Object.values(S.docs).filter(d => d.id !== doc.id
+    && (d.myChars || []).some(m => sameCharName(m, name))).length;
+
+  const warn = extras.length
+    ? `<div style="font-size:0.8rem;line-height:1.6;color:var(--dim);border-left:3px solid var(--amber);padding:8px 11px;margin-top:12px">
+         Removing them from Characters also destroys ${esc(listJoin(extras))}. That cannot be undone.
+       </div>`
+    : `<div style="font-size:0.8rem;line-height:1.6;color:var(--dim);margin-top:12px">
+         Nothing else is stored against them, so there is nothing to lose.
+       </div>`;
+  const elsewhere = others
+    ? `<div style="font-size:0.8rem;line-height:1.6;color:var(--dim);margin-top:8px">
+         They are also marked as yours in ${others} other sim${others === 1 ? '' : 's'}, which ${others === 1 ? 'is' : 'are'} not changed.
+       </div>`
+    : '';
+
+  _untickPending = { docId: doc.id, name, charId: char.id, di, gi };
+  openModal(`REMOVE ${(name || '').toUpperCase()}?`, `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <strong>${esc(name)}</strong> is in your Characters list. Take them out of this sim only,
+      or out of your characters entirely?
+    </div>${warn}${elsewhere}`,
+    null, {
+      noCancel: false,
+      extra: [
+        { label: 'This sim only', cls: 'btn-p', fn: 'untickDo(false)' },
+        { label: 'Remove from Characters', cls: 'btn-s', fn: 'untickDo(true)' },
+      ],
+    });
+}
+
+let _untickPending = null;
+
+function untickDo(alsoRemoveRecord) {
+  const p = _untickPending; _untickPending = null;
+  closeModal();
+  if (!p) return;
+  const doc = S.docs[p.docId]; if (!doc) return;
+  // Re-find rather than trusting the indexes: the panel can repaint while the
+  // question is on screen, and acting on a stale index is how the alias editor
+  // used to save onto the wrong row.
+  const di = (doc.myChars || []).findIndex(m => sameCharName(m, p.name));
+  if (di >= 0) doc.myChars.splice(di, 1);
+  const gi = (S.settings.myChars || []).findIndex(m => sameCharName(m, p.name));
+  if (gi >= 0) S.settings.myChars.splice(gi, 1);
+  if (alsoRemoveRecord && S.characters && S.characters[p.charId]) {
+    delete S.characters[p.charId];
+    if (_curCharId === p.charId) _curCharId = null;
+  }
+  jpRememberMyChars(doc);
+  persist(); updateCharsPanel(doc);
+  if (isCloud()) schedSync();
+  if (_routeView === 'characters') refreshManifest();
+}
+
 function toggleMyChar(i) {
   const name = _charList[i]; if (!name || !curId) return;
   const doc = S.docs[curId]; if (!doc) return;
@@ -5703,6 +5781,12 @@ function toggleMyChar(i) {
   const di = doc.myChars.findIndex(m => sameCharName(m, name));
   const gi = S.settings.myChars.findIndex(m => sameCharName(m, name));
   if (di>=0) {
+    // Ticking now creates a character record, so unticking has to be able to
+    // undo exactly that -- otherwise a mis-tap leaves somebody in your
+    // Characters list with no obvious way out. Ask, rather than guessing which
+    // of the two the writer meant.
+    const char = findCharByAnyName(name);
+    if (char) { untickAsk(doc, name, char, di, gi); return; }
     doc.myChars.splice(di,1);
     if (gi>=0) S.settings.myChars.splice(gi,1);
   } else {
