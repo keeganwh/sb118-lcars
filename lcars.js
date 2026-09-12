@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'Fixed: moving to the next step of the tour could open it already scrolled part-way down its own text, if the step before it had been scrolled',
       'The tour\'s text box scrolls properly on a phone now, and fades its last line when there is more to read rather than stopping mid-sentence',
       'Fixed: on a phone, a tour step pointing at something tall — the sims list, the editor, the characters panel — had its own text box land on top of it, hiding the thing it was describing. The box now sits against an edge of the screen, takes at most half of it, and scrolls its own text if there is more, so what is being pointed at always has room to be seen',
       'Unticking a character who is in your Characters list now asks whether you meant to take them out of that sim only, or out of your characters altogether. If anything is stored against them — aliases, a colour, a picture, your notes — it says exactly what removing them would destroy',
@@ -3572,6 +3573,10 @@ function tourPaint() {
   left = Math.max(10, Math.min(vw - tw - 10, left));
   tip.style.top = Math.round(top) + 'px';
   tip.style.left = Math.round(left) + 'px';
+  // A new step starts at the top of its own text. Without this the card keeps
+  // wherever the previous step was scrolled to, so a short step can open
+  // already scrolled past its first line.
+  if (tip.scrollTop) tip.scrollTop = 0;
 }
 
 // Pressing "Show me around" is what makes the example sim -- skipping never
