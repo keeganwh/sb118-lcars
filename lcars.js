@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'Fixed: on a phone, a tour step pointing at something tall — the sims list, the editor, the characters panel — had its own text box land on top of it, hiding the thing it was describing. The box now sits against an edge of the screen and the highlight stops short of it, so the two never overlap',
       'Unticking a character who is in your Characters list now asks whether you meant to take them out of that sim only, or out of your characters altogether. If anything is stored against them — aliases, a colour, a picture, your notes — it says exactly what removing them would destroy',
       'Ticking a character as yours in a sim now adds them to your Characters list straight away, so the name is recognised in a sim title from that moment. It used to only be remembered as a name you had claimed, and did not become a character until the next time you happened to open the Characters view — until then, titling a sim after them did nothing',
       'Adding a character in the Characters view now also counts them as yours, so they are ticked automatically in the next sim they appear in rather than waiting to be ticked by hand',
@@ -3218,27 +3219,6 @@ const TOUR = [
     mobBody: `On a phone, characters share a drawer with the list of sims.`,
   },
   {
-    id: 'charlist',
-    target: '#btn-manifest-toggle',
-    before: () => {
-      tourEnsureSim();
-      if (!tourMobile()) return;
-      mobDrawer(null);
-      document.body.classList.add('mob-more');
-      const b = document.getElementById('hdr-more');
-      if (b) b.setAttribute('aria-expanded', 'true');
-    },
-    after: () => { document.body.classList.remove('mob-more'); },
-    title: 'Your Characters List',
-    body: `<strong>Characters</strong>, accessed via the top bar, is where all your claimed
-      characters live. Characters you check off as yours while writing appear here, but you can
-      also add characters manually, add their details, and even give them aliases that LCARS will
-      know to identify them with.
-      <br><br>Adding a character here is what lets LCARS recognise them in a sim title, so it is
-      worth doing for anyone you write regularly.`,
-    mobBody: `On a phone this lives behind the grid button, which is open now.`,
-  },
-  {
     id: 'copy',
     target: '#btn-copy',
     before: () => { tourEnsureSim(); if (tourMobile()) mobDrawer(null); },
@@ -3269,6 +3249,27 @@ const TOUR = [
     body: `<strong>Dashboard</strong> brings you back here from anywhere. It holds your missions,
       how long it has been since you last posted, what is in progress, and what you posted
       recently.`,
+    mobBody: `On a phone this lives behind the grid button, which is open now.`,
+  },
+  {
+    id: 'charlist',
+    target: '#btn-manifest-toggle',
+    before: () => {
+      if (curId) closeDoc();
+      if (!tourMobile()) return;
+      mobDrawer(null);
+      document.body.classList.add('mob-more');
+      const b = document.getElementById('hdr-more');
+      if (b) b.setAttribute('aria-expanded', 'true');
+    },
+    after: () => { document.body.classList.remove('mob-more'); },
+    title: 'Your Characters List',
+    body: `<strong>Characters</strong>, accessed via the top bar, is where all your claimed
+      characters live. Characters you check off as yours while writing appear here, but you can
+      also add characters manually, add their details, and even give them aliases that LCARS will
+      know to identify them with.
+      <br><br>Adding a character here is what lets LCARS recognise them in a sim title, so it is
+      worth doing for anyone you write regularly.`,
     mobBody: `On a phone this lives behind the grid button, which is open now.`,
   },
   {
@@ -3538,10 +3539,22 @@ function tourPaint() {
   hole.style.cssText = `top:${t}px;left:${l}px;width:${w}px;height:${h}px;border-radius:8px`;
 
   const tw = tip.offsetWidth, th = tip.offsetHeight, gap = 14;
-  let top;
+  let top, holeT = t, holeH = h;
   if (t + h + gap + th <= vh - 8)      top = t + h + gap;      // below
   else if (t - gap - th >= 8)          top = t - gap - th;     // above
-  else                                 top = Math.max(8, Math.min(vh - th - 8, t + h + gap));
+  else {
+    // Neither side has room, which on a phone means the target is most of the
+    // screen -- the sims drawer, the editor, the app menu sheet. The old
+    // fallback clamped the card into the middle of the viewport, so it sat ON
+    // TOP of the very thing the step was pointing at. Pin it to an edge and
+    // CLIP the hole so the two never overlap: bottom edge by preference, since
+    // the top of a list is the part worth seeing.
+    const cardTop = vh - th - 8;
+    if (cardTop - gap - t >= 90) { top = cardTop; holeH = (cardTop - gap) - t; }
+    else { top = 8; holeT = 8 + th + gap; holeH = (t + h) - holeT; }
+    hole.style.top = Math.round(Math.max(0, holeT)) + 'px';
+    hole.style.height = Math.round(Math.max(0, holeH)) + 'px';
+  }
   let left = l + w / 2 - tw / 2;
   left = Math.max(10, Math.min(vw - tw - 10, left));
   tip.style.top = Math.round(top) + 'px';
