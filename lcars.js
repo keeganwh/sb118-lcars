@@ -13,6 +13,7 @@ const VERSIONS = [
       'A pass over every icon in the app. Buttons that shared a symbol no longer do: the Dashboard is a house and Save as Template a copy, Characters is a pair of people and Joint Sim Invites a person with a plus, Sim Details is an information mark and the Settings contents a menu, Admin is a shield with a tick and a reply from the team a message, Snapshots is a clock rather than a camera, and Unarchive is its own mark rather than the undo arrow',
       'The App Feedback button is no longer a warning triangle. A triangle there read as something being wrong with LCARS rather than an invitation to tell us something, so it is now a message with a mark in it; the Bug half of the report form is a bug, the admin queues are an in-tray, and Send is a paper plane',
       'A few more icons now say what they do: Start a New Mission is a heading arrow, View in Characters a person with a magnifier, Post Date a calendar with a tick, Refresh Stats a pair of circling arrows, and Overwrite, when restoring a backup, a replace mark',
+      'Create a new Scene is now a stack of layers, so it no longer shares its mark with the bullet-list button in the toolbar',
       'Four icons that nothing in the app used have been taken out',
       'The Getting Started, What\'s New and Delta Prime mark is now the three-part sparkle rather than the single star it had been drawing',
       'Unticking a character who is in your Characters list now asks whether you meant to take them out of that sim only, or out of your characters altogether. If anything is stored against them — aliases, a colour, a picture, your notes — it says exactly what removing them would destroy',
@@ -4013,7 +4014,7 @@ function renderDashboard() {
         <div class="da-hint">Create a mission folder to organise scenes and sims</div>
       </button>
       <button class="dash-action" onclick="showNewScene()">
-        <div class="da-icon">${ic('list')}</div>
+        <div class="da-icon">${ic('layers')}</div>
         <div class="da-label">Create a new Scene</div>
         <div class="da-hint">Add a scene grouping within a mission</div>
       </button>
@@ -6755,7 +6756,7 @@ function renderMissionView(id) {
       </div>
       <div class="dash-actions dv-action-btns" style="flex-shrink:0;margin:0;flex-wrap:nowrap">
         <button class="dash-action" onclick="showNewScene('${id}')">
-          <div class="da-icon">${ic('list')}</div>
+          <div class="da-icon">${ic('layers')}</div>
           <div class="da-label">Create a new Scene</div>
           <div class="da-hint">Add a scene grouping to this mission</div>
         </button>
