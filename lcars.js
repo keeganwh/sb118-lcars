@@ -3132,11 +3132,9 @@ const TOUR = [
     title: 'Welcome To LCARS',
     body: `This is a writing tool built specifically to make writing, organising and tracking
       your sims &mdash; and your simming habits &mdash; easier and more intuitive for players of
-      Starbase 118. How often you sim, who you sim with, when you last posted.
+      Starbase 118.
       <br><br>This overview of the tool's main features takes a couple of minutes and walks you
       through the site's layout. The full scope of what LCARS does is in the User Guide.
-      <br><br>An example sim comes with the tour so there is something real to look at &mdash;
-      you can keep it or throw it away at the end.
       <br><br>Ready to get started?`,
   },
   {
@@ -3162,7 +3160,8 @@ const TOUR = [
     before: () => { tourEnsureSim(); if (tourMobile()) mobDrawer(null); },
     title: "What's In A Name?",
     body: `When you title a sim, LCARS can tell which of your characters is tagged in it. So long
-      as the character is in your Characters List, it links this sim to them automatically, for
+      as the character is in your <strong>Characters List</strong>, it links this sim to them
+      automatically, for
       easier tracking and reporting.
       <br><br>More on Characters and tracking in a moment.`,
   },
@@ -3230,8 +3229,10 @@ const TOUR = [
     },
     after: () => { document.body.classList.remove('mob-more'); },
     title: 'Your Characters List',
-    body: `<strong>Characters</strong>, in the top bar, is where everyone you write lives &mdash;
-      their colour, their aliases, and what LCARS has tracked about them.
+    body: `<strong>Characters</strong>, accessed via the top bar, is where all your claimed
+      characters live. Characters you check off as yours while writing appear here, but you can
+      also add characters manually, add their details, and even give them aliases that LCARS will
+      know to identify them with.
       <br><br>Adding a character here is what lets LCARS recognise them in a sim title, so it is
       worth doing for anyone you write regularly.`,
     mobBody: `On a phone this lives behind the grid button, which is open now.`,
@@ -3270,15 +3271,6 @@ const TOUR = [
     mobBody: `On a phone this lives behind the grid button, which is open now.`,
   },
   {
-    id: 'whatsnew',
-    target: '#dash-wn',
-    before: () => { if (curId) closeDoc(); document.body.classList.remove('mob-more'); },
-    title: "What's New",
-    body: `Worth a click now and then: what LCARS has gained lately, with the date each thing
-      arrived, and a second tab listing what is being built next.
-      <br><br>It marks itself as a dot when there is something you have not seen.`,
-  },
-  {
     id: 'yours',
     target: '#btn-style,#btn-settings',
     before: () => {
@@ -3292,12 +3284,21 @@ const TOUR = [
     title: 'Making It Yours',
     body: `<strong>Style</strong> sets how LCARS looks &mdash; the skin, light or dark, and the
       accent colour of your duty post. Change it as often as you like; nothing about your sims is
-      affected.
+      affected. More detailed configuration is in Settings.
       <br><br><strong>Settings</strong> holds your writing preferences, your templates, and a
       backup of everything you have written. Signed in, your work saves to your account a few
       seconds after each change and follows you to any device &mdash; a backup now and then is
       still worth taking.`,
     mobBody: `On a phone both live behind the grid button, which is open now.`,
+  },
+  {
+    id: 'whatsnew',
+    target: '#dash-wn',
+    before: () => { if (curId) closeDoc(); document.body.classList.remove('mob-more'); },
+    title: "What's New",
+    body: `Worth a click now and then. See what new features LCARS has gained lately while in
+      development, plus a <strong>What's planned</strong> tab listing what is being built next.
+      <br><br>It marks itself with a dot when there is something you have not seen.`,
   },
   {
     id: 'done',
