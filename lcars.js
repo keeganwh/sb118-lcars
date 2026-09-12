@@ -3297,7 +3297,7 @@ const TOUR = [
     before: () => { if (curId) closeDoc(); document.body.classList.remove('mob-more'); },
     title: "What's New",
     body: `Worth a click now and then. See what new features LCARS has gained lately while in
-      development, plus a <strong>What's planned</strong> tab listing what is being built next.
+      development, plus a <strong>What's Planned</strong> tab listing what is being built next.
       <br><br>It marks itself with a dot when there is something you have not seen.`,
   },
   {
@@ -3511,8 +3511,10 @@ function tourPaint() {
                <button class="btn btn-s" onclick="tourSkip()">Skip</button>`
       : last ? `<button class="btn btn-s" onclick="tourBack()">Back</button>
                 <div style="flex:1"></div>
-                <button class="btn btn-p" onclick="tourFinishExample('keep')">Keep the example sim</button>
-                <button class="btn btn-s" onclick="tourFinishExample('delete')">Delete it</button>`
+                <span class="tour-choice">
+                  <button class="btn btn-p" onclick="tourFinishExample('keep')">Keep it</button>
+                  <button class="btn btn-s" onclick="tourFinishExample('delete')">Delete it</button>
+                </span>`
       : `<button class="btn btn-s" onclick="tourBack()">Back</button>
          <div style="flex:1"></div>
          <button class="btn btn-s" onclick="tourQuit()">Close</button>

@@ -1143,6 +1143,10 @@ body.hc .contact-card-bar{color:#000}
 .tour-mob{margin-top:9px;padding-top:8px;border-top:1px solid var(--border);
   font-size:0.78rem;line-height:1.55}
 .tour-act{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px}
+/* Keep and Delete are one question, so they wrap as one block. Loose in the
+   flex row they split across two lines -- Back and Keep on the first, Delete
+   stranded on the second -- which reads as two sets of controls, not a choice. */
+.tour-choice{display:flex;gap:8px;flex-wrap:nowrap;flex-shrink:0}
 
 /* ── App Feedback, the writer's side panel ──
    Fixed to the right edge, above the app but with NO scrim: the app behind it
@@ -1378,6 +1382,8 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
      target too small to hit. */
   #tour-tip{width:calc(100vw - 20px);padding:14px 15px}
   .tour-act .btn{flex:1 1 auto;justify-content:center}
+  .tour-choice{flex:1 1 100%}
+  .tour-choice .btn{flex:1 1 auto}
   .fb-text{font-size:16px}
   .adm-fb-note{font-size:16px}   /* iOS Safari zooms into any focused field under 16px */
 }
