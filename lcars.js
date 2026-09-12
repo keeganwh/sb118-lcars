@@ -3551,9 +3551,17 @@ function tourPaint() {
     // TOP of the very thing the step was pointing at. Pin it to an edge and
     // CLIP the hole so the two never overlap: bottom edge by preference, since
     // the top of a list is the part worth seeing.
+    // Work out how much of the target each edge would leave lit, and take the
+    // better one. A fixed threshold got this wrong: it chose the top edge
+    // whenever the bottom left under 90px, even when the top left NONE -- a
+    // target sitting above the card's own bottom clipped to a negative
+    // height and vanished, which is what happened to Style and Settings on a
+    // real phone.
     const cardTop = vh - th - 8;
-    if (cardTop - gap - t >= 90) { top = cardTop; holeH = (cardTop - gap) - t; }
-    else { top = 8; holeT = 8 + th + gap; holeH = (t + h) - holeT; }
+    const aTop = t, aH = Math.max(0, Math.min(t + h, cardTop - gap) - aTop);
+    const bTop = Math.max(t, 8 + th + gap), bH = Math.max(0, (t + h) - bTop);
+    if (aH >= bH) { top = cardTop; holeT = aTop; holeH = aH; }
+    else          { top = 8;       holeT = bTop; holeH = bH; }
     hole.style.top = Math.round(Math.max(0, holeT)) + 'px';
     hole.style.height = Math.round(Math.max(0, holeH)) + 'px';
   }
