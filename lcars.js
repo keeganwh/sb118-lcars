@@ -14,7 +14,8 @@ const VERSIONS = [
       'The App Feedback button is no longer a warning triangle. A triangle there read as something being wrong with LCARS rather than an invitation to tell us something, so it is now a message with a mark in it; the Bug half of the report form is a bug, the admin queues are an in-tray, and Send is a paper plane',
       'A few more icons now say what they do: Start a New Mission is a heading arrow, View in Characters a person with a magnifier, Post Date a calendar with a tick, Refresh Stats a pair of circling arrows, and Overwrite, when restoring a backup, a replace mark',
       'Create a new Scene is now a stack of layers, so it no longer shares its mark with the bullet-list button in the toolbar',
-      'Four icons that nothing in the app used have been taken out',
+      'Every row in Settings has its icon back. Display name, Set up an account, Change my PIN, Sync data now, Back up my data, Restore from a backup, Built with Claude Code and the Your Account and Sim Templates entries in the contents rail were all drawing nothing, and Change my PIN is now a padlock, Sync data now a cloud, and Built with Claude Code a pair of brackets',
+      'Two icons that nothing in the app used have been taken out',
       'The Getting Started, What\'s New and Delta Prime mark is now the three-part sparkle rather than the single star it had been drawing',
       'Unticking a character who is in your Characters list now asks whether you meant to take them out of that sim only, or out of your characters altogether. If anything is stored against them — aliases, a colour, a picture, your notes — it says exactly what removing them would destroy',
       'Ticking a character as yours in a sim now adds them to your Characters list straight away, so the name is recognised in a sim title from that moment. It used to only be remembered as a name you had claimed, and did not become a character until the next time you happened to open the Characters view — until then, titling a sim after them did nothing',
@@ -7794,7 +7795,7 @@ const SET_SECTIONS = [
   { id: 'set-sec-account',    icon: 'user',        label: 'Your Account & Data' },
   { id: 'set-sec-appearance', icon: 'palette',     label: 'LCARS Appearance' },
   { id: 'set-sec-editor',     icon: 'pencil',      label: 'LCARS Sim Editor' },
-  { id: 'set-sec-templates',  icon: 'hexagon',     label: 'Sim Templates' },
+  { id: 'set-sec-templates',  icon: 'copy-plus',     label: 'Sim Templates' },
   { id: 'set-sec-about',      icon: 'file-text',   label: 'About LCARS' },
 ];
 
@@ -7922,9 +7923,9 @@ function settingsAccountCard() {
         </div>
         <div class="set-tiles" style="margin-top:10px">
           ${setBtn('showDisplayName()', 'user', 'Display name', 'Helps friends find you, not for logins.', {id:'acct-dn-tile'})}
-          ${setBtn('showChangePin()', 'hexagon', 'Change my PIN', 'Requires your current PIN to change.')}
+          ${setBtn('showChangePin()', 'lock', 'Change my PIN', 'Requires your current PIN to change.')}
           ${setBtn('showShareContact()', 'copy', 'Share my contact', 'Copy + paste to connect with other writers.')}
-          ${setBtn('saveToCloud()', 'arrow-up', 'Sync data now', 'Push/sync manually (for those who like pushing buttons).')}
+          ${setBtn('saveToCloud()', 'cloud-upload', 'Sync data now', 'Push/sync manually (for those who like pushing buttons).')}
           ${setBtn('cloudSignOut()', 'move-right', 'Sign out', 'Signs out in this browser. Nothing is deleted.')}
         </div>
       </div>
@@ -8378,7 +8379,7 @@ function settingsAboutCard() {
         <div class="set-tiles" style="margin-top:12px">
           ${setBtn('tourStart()', 'sparkles', 'Getting Started', 'A guided tour of how LCARS works, pointing at the real controls.')}
           ${setBtn("window.open('LCARS-Guide-v2.html','_blank')", 'book-open', 'Full user guide', 'Every part of the tool, in detail.')}
-          ${setBtn('showBuiltWith()', 'circle-dot', 'Built with Claude Code', 'How this tool was made, and what it does not do.')}
+          ${setBtn('showBuiltWith()', 'code', 'Built with Claude Code', 'How this tool was made, and what it does not do.')}
         </div>
       </div>
     </div>`;
