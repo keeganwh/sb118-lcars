@@ -10,6 +10,9 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'Mission and scene dashboards now fit a phone screen. They were built for a wide window and had never been adjusted: the title was squeezed into a sliver a single letter wide, the action buttons sat on top of it, and the whole page ran off the side. The title now gets the full width, the statistics divide the screen evenly, and each row of the scene and sim tables reads as a block instead of a table too wide to see',
+      'Added: an Actions button on every mission and scene dashboard, holding rename, edit, mark complete, archive, delete and the mission tag. These were only ever available by right-clicking the sims list, which a phone cannot do \u2014 so on a phone there had been no way to rename or delete a mission or a scene at all',
+      'Added: a Dashboard link in the top corner of a mission, matching the link back to the mission that a scene already had',
       'Fixed: moving to the next step of the tour could open it already scrolled part-way down its own text, if the step before it had been scrolled',
       'The tour\'s text box scrolls properly on a phone now, and fades its last line when there is more to read rather than stopping mid-sentence',
       'Fixed: on a phone, a tour step pointing at something tall — the sims list, the editor, the characters panel — had its own text box land on top of it, hiding the thing it was describing. The box now sits against an edge of the screen, takes at most half of it, and scrolls its own text if there is more, so what is being pointed at always has room to be seen',
@@ -6773,9 +6776,14 @@ function renderMissionView(id) {
   const posted = allDocs.filter(d=>d.postedAt).length;
 
   let html = `
-    <div class="dv-close"><button class="dv-close-btn" onclick="showDashboard()" title="Back to dashboard">${ic('x')}</button></div>
-    <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:4px">
-      <div style="flex:1;min-width:0">
+    <div class="dv-close">
+      <span class="dv-back" onclick="showDashboard()">${ic('chevron-left')} Dashboard</span>
+      <span class="dv-close-sp"></span>
+      <button class="dv-act-btn" onclick="ctxMission(event,'${id}',this)" title="Actions">${ic('ellipsis')}<span class="dv-act-lbl">Actions</span></button>
+      <button class="dv-close-btn" onclick="showDashboard()" title="Back to dashboard">${ic('x')}</button>
+    </div>
+    <div class="dv-hdr">
+      <div class="dv-hdr-main">
         <div class="dv-title">${esc(m.name)}</div>
         <div class="dv-meta">
           <span class="sdot ${m.status||'active'}"></span>
@@ -6789,15 +6797,15 @@ function renderMissionView(id) {
           <div class="dv-stat-item"><div class="dv-stat-num">${posted}</div><div class="dv-stat-lbl">POSTED</div></div>
         </div>
       </div>
-      <div class="dash-actions dv-action-btns" style="flex-shrink:0;margin:0;flex-wrap:nowrap">
+      <div class="dash-actions dv-action-btns">
         <button class="dash-action" onclick="showNewScene('${id}')">
           <div class="da-icon">${ic('layers')}</div>
-          <div class="da-label">Create a new Scene</div>
+          <div class="da-label"><span class="da-lbl-lg">Create a new Scene</span><span class="da-lbl-sm">New Scene</span></div>
           <div class="da-hint">Add a scene grouping to this mission</div>
         </button>
         <button class="dash-action" onclick="showNewDoc(null,'${id}')">
           <div class="da-icon">${ic('pencil')}</div>
-          <div class="da-label">Write a new Sim</div>
+          <div class="da-label"><span class="da-lbl-lg">Write a new Sim</span><span class="da-lbl-sm">New Sim</span></div>
           <div class="da-hint">Start a new sim in this mission</div>
         </button>
       </div>
@@ -6812,8 +6820,8 @@ function renderMissionView(id) {
         const cnt = Object.values(S.docs).filter(d=>d.sceneId===sc.id).length;
         return `<tr>
           <td><span class="dv-link" onclick="openScene('${sc.id}')">${esc(sc.name)}</span></td>
-          <td>${cnt}</td>
-          <td><span class="sdot ${sc.status||'active'}" style="display:inline-block;margin-right:4px"></span><span style="text-transform:capitalize;font-size:0.8rem;color:var(--dim)">${sc.status||'active'}</span>${staleMarker(sc.id, sc.status)}</td>
+          <td data-lbl="Sims">${cnt}</td>
+          <td data-lbl="Status"><span class="sdot ${sc.status||'active'}" style="display:inline-block;margin-right:4px"></span><span style="text-transform:capitalize;font-size:0.8rem;color:var(--dim)">${sc.status||'active'}</span>${staleMarker(sc.id, sc.status)}</td>
         </tr>`;
       }).join('')}
     </table>`;
@@ -6825,9 +6833,9 @@ function renderMissionView(id) {
       <tr><th>TITLE</th><th>TYPE</th><th>STATUS</th><th>POSTED</th></tr>
       ${unsortedDocs.map(d=>`<tr>
         <td><span class="dv-link" onclick="openDoc('${d.id}')">${esc(d.title||'Untitled')}</span></td>
-        <td>${postTypeTag(d.postType)||'<span style="color:var(--dim)">—</span>'}</td>
-        <td><span class="sdot ${d.status||'active'}" style="display:inline-block"></span></td>
-        <td style="color:var(--dim);font-size:0.8rem">${d.postedAt||'—'}</td>
+        <td data-lbl="Type">${postTypeTag(d.postType)||'<span style="color:var(--dim)">—</span>'}</td>
+        <td data-lbl="Status"><span class="sdot ${d.status||'active'}" style="display:inline-block"></span></td>
+        <td data-lbl="Posted" style="color:var(--dim);font-size:0.8rem">${d.postedAt||'—'}</td>
       </tr>`).join('')}
     </table>`;
   }
@@ -6848,11 +6856,14 @@ function renderSceneView(id) {
 
   let html = `
     <div class="dv-close">
-      ${m ? `<span class="dv-back" style="margin-right:auto" onclick="openMission('${m.id}')">${ic('chevron-left')} ${esc(m.name)}</span>` : ''}
+      ${m ? `<span class="dv-back" onclick="openMission('${m.id}')">${ic('chevron-left')} ${esc(m.name)}</span>`
+          : `<span class="dv-back" onclick="showDashboard()">${ic('chevron-left')} Dashboard</span>`}
+      <span class="dv-close-sp"></span>
+      <button class="dv-act-btn" onclick="ctxScene(event,'${id}',this)" title="Actions">${ic('ellipsis')}<span class="dv-act-lbl">Actions</span></button>
       <button class="dv-close-btn" onclick="showDashboard()" title="Back to dashboard">${ic('x')}</button>
     </div>
-    <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:4px">
-      <div style="flex:1;min-width:0">
+    <div class="dv-hdr">
+      <div class="dv-hdr-main">
         <div class="dv-title">${esc(sc.name)}</div>
         <div class="dv-meta">
           <span class="sdot ${sc.status||'active'}"></span>
@@ -6865,10 +6876,10 @@ function renderSceneView(id) {
           <div class="dv-stat-item"><div class="dv-stat-num">${docs.filter(d=>d.postedAt).length}</div><div class="dv-stat-lbl">POSTED</div></div>
         </div>
       </div>
-      <div class="dash-actions dv-action-btns" style="flex-shrink:0;margin:0">
+      <div class="dash-actions dv-action-btns">
         <button class="dash-action" onclick="showNewDoc('${id}','${sc.missionId||''}')">
           <div class="da-icon">${ic('pencil')}</div>
-          <div class="da-label">Write a new Sim</div>
+          <div class="da-label"><span class="da-lbl-lg">Write a new Sim</span><span class="da-lbl-sm">New Sim</span></div>
           <div class="da-hint">Start a new sim in this scene</div>
         </button>
       </div>
@@ -6881,10 +6892,10 @@ function renderSceneView(id) {
       <tr><th>TITLE</th><th>TYPE</th><th>MY CHARS</th><th>STATUS</th><th>POSTED</th></tr>
       ${docs.map(d=>`<tr>
         <td><span class="dv-link" onclick="openDoc('${d.id}')">${esc(d.title||'Untitled')}</span></td>
-        <td>${postTypeTag(d.postType)||'<span style="color:var(--dim)">—</span>'}</td>
-        <td style="color:var(--dim);font-size:0.8rem">${(d.myChars||[]).join(', ')||'—'}</td>
-        <td><span class="sdot ${d.status||'active'}" style="display:inline-block"></span></td>
-        <td style="color:var(--dim);font-size:0.8rem">${d.postedAt||'—'}</td>
+        <td data-lbl="Type">${postTypeTag(d.postType)||'<span style="color:var(--dim)">—</span>'}</td>
+        <td data-lbl="My chars" style="color:var(--dim);font-size:0.8rem">${(d.myChars||[]).join(', ')||'—'}</td>
+        <td data-lbl="Status"><span class="sdot ${d.status||'active'}" style="display:inline-block"></span></td>
+        <td data-lbl="Posted" style="color:var(--dim);font-size:0.8rem">${d.postedAt||'—'}</td>
       </tr>`).join('')}
     </table>`;
   } else {
@@ -7279,13 +7290,35 @@ document.addEventListener('mouseup', () => {
 // CONTEXT MENUS
 // ================================================================
 function hideCtx(){document.getElementById('ctx').classList.add('hidden');}
-function showCtx(e,items,extraHtml){
+// `opts.anchor` hangs the menu off an ELEMENT instead of a pointer position.
+// A touch screen has no cursor, so the Actions button on a detail view is the
+// only thing the menu can be positioned from -- e.clientX/clientY on a tap
+// would put it under the finger that is covering it.
+//
+// An anchored menu always drops DOWNWARD and is never flipped up, unlike the
+// pointer case below. Flipping would take it toward the bottom edge, which is
+// where a software keyboard appears; it is allowed to run off instead, because
+// #ctx scrolls and the screen does not.
+function showCtx(e,items,extraHtml,opts){
   e.preventDefault();e.stopPropagation();
   const m=document.getElementById('ctx');
   m.innerHTML=(extraHtml||'')+items.map(it=>
     it==='-'?'<div class="csep"></div>':
     `<div class="ci ${it.cls||''}" onclick="${it.fn||''}">${it.label}</div>`
   ).join('');
+  const anchor=opts&&opts.anchor;
+  if(anchor){
+    // Parked off-screen first: the menu has to be visible to have a width, and
+    // measuring it where it will not be seen avoids a frame at a stale spot.
+    m.style.left='-9999px';m.style.top='0px';
+    m.classList.remove('hidden');
+    const a=anchor.getBoundingClientRect();
+    const w=m.offsetWidth;
+    // Right edges aligned, then clamped into the viewport at both ends.
+    m.style.left=Math.max(4,Math.min(a.right-w,window.innerWidth-w-4))+'px';
+    m.style.top=(a.bottom+4)+'px';
+    return;
+  }
   const x=Math.min(e.clientX,window.innerWidth-220);
   m.style.left=x+'px';
   m.style.top=e.clientY+'px';
@@ -7339,13 +7372,23 @@ function delYear(y) {
     persist(); renderNav();
   }, {ok:`Delete Year ${y}`});
 }
-function ctxMission(e,id){
+// The four sim-type tags, as their own list. On a desktop they sit inline in
+// the mission menu; under 820px that menu is eleven rows against a 633px
+// screen and runs off the bottom, so they fold behind one row that opens this.
+// They are ONE choice rather than four commands, which is why they are the
+// part that folds.
+function ctxMissionType(e,id,anchor){
   const m=S.missions[id]; if (!m) return;
-  const st=m.simType;
-  showCtx(e,[
-    {label:'+ New Scene',fn:`showNewScene('${id}');hideCtx()`},
-    {label:'+ New Sim',fn:`showNewDoc(null,'${id}');hideCtx()`},
+  showCtx(e,SIM_TYPE_ITEMS(id,m.simType).concat([
     '-',
+    {label:ic('chevron-left') + ' Back',fn:`ctxMission(event,'${id}',_ctxAnchor);`},
+  ]),null,{anchor:anchor||_ctxAnchor});
+}
+
+// Shared by the inline (desktop) and folded (phone) presentations, so the two
+// can never drift apart.
+function SIM_TYPE_ITEMS(id,st){
+  return [
     {label:st==='mission'?ic('check') + ' Mission type':'  Tag: Mission',cls:st==='mission'?'':'dim-item',
       fn:`setSimType('${id}','mission');hideCtx()`},
     {label:st==='shoreleave'?ic('check') + ' Shore Leave':'  Tag: Shore Leave',cls:st==='shoreleave'?'':'dim-item',
@@ -7354,6 +7397,29 @@ function ctxMission(e,id){
       fn:`setSimType('${id}','academy');hideCtx()`},
     {label:(!st)?ic('check') + ' Regular (default)':'  Clear tag',cls:(!st)?'':'dim-item',
       fn:`setSimType('${id}',null);hideCtx()`},
+  ];
+}
+
+// Remembers what the open menu was hung off, so the tag sub-menu and the Back
+// out of it land in the same place rather than jumping to the corner.
+let _ctxAnchor = null;
+
+const SIM_TYPE_LABELS = {mission:'Mission',shoreleave:'Shore Leave',academy:'Academy'};
+
+function ctxMission(e,id,anchor){
+  const m=S.missions[id]; if (!m) return;
+  const st=m.simType;
+  if (anchor) _ctxAnchor = anchor;
+  const folded = MOB_Q.matches;
+  const typeRows = folded
+    ? [{label:ic('square') + ` Tag: ${SIM_TYPE_LABELS[st]||'Regular'}`,
+        fn:`ctxMissionType(event,'${id}')`}]
+    : SIM_TYPE_ITEMS(id,st);
+  showCtx(e,[
+    {label:'+ New Scene',fn:`showNewScene('${id}');hideCtx()`},
+    {label:'+ New Sim',fn:`showNewDoc(null,'${id}');hideCtx()`},
+    '-',
+    ...typeRows,
     '-',
     {label:m.status==='complete'?ic('circle') + ' Mark Active':ic('check') + ' Mark Complete',
       fn:`setStatus('mission','${id}','${m.status==='complete'?'active':'complete'}');hideCtx()`},
@@ -7363,10 +7429,11 @@ function ctxMission(e,id){
     {label:ic('pencil') + ' Rename',fn:`renameItem('mission','${id}');hideCtx()`},
     '-',
     {label:ic('trash') + ' Delete Mission',cls:'dng',fn:`delMission('${id}');hideCtx()`},
-  ]);
+  ],null,anchor?{anchor}:null);
 }
-function ctxScene(e,id){
+function ctxScene(e,id,anchor){
   const sc=S.scenes[id]; if (!sc) return;
+  if (anchor) _ctxAnchor = anchor;
   showCtx(e,[
     {label:'+ New Sim',fn:`showNewDoc('${id}',null);hideCtx()`},
     '-',
@@ -7378,7 +7445,7 @@ function ctxScene(e,id){
     {label:ic('pencil') + ' Edit Scene',fn:`editScene('${id}');hideCtx()`},
     '-',
     {label:ic('trash') + ' Delete Scene',cls:'dng',fn:`delScene('${id}');hideCtx()`},
-  ]);
+  ],null,anchor?{anchor}:null);
 }
 function ctxDoc(e,id){
   const d=S.docs[id]; if (!d) return;
