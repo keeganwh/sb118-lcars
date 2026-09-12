@@ -10,6 +10,16 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'Unticking a character who is in your Characters list now asks whether you meant to take them out of that sim only, or out of your characters altogether. If anything is stored against them — aliases, a colour, a picture, your notes — it says exactly what removing them would destroy',
+      'Ticking a character as yours in a sim now adds them to your Characters list straight away, so the name is recognised in a sim title from that moment. It used to only be remembered as a name you had claimed, and did not become a character until the next time you happened to open the Characters view — until then, titling a sim after them did nothing',
+      'Adding a character in the Characters view now also counts them as yours, so they are ticked automatically in the next sim they appear in rather than waiting to be ticked by hand',
+      'Unticking a character in a sim removes them from that sim only. Their record, colour and aliases are left alone — unticking means they are not in this sim, not that they are not your character',
+      'Getting Started is now a guided tour that points at the real thing. A dark overlay lights up one part of LCARS at a time — the sims list, the sim title, the editor, the toolbar, sim details, the characters panel, the copy button, and the Dashboard, Characters, What\'s New, Style and Settings controls in the top bar — with a short note beside it, rather than a window describing the app from a distance. It works the same on a phone, opening the drawer or the menu a step needs and skipping anything not on that screen. Step backwards and forwards through it as often as you like, close it whenever you want, and reopen it from Getting Started on the Dashboard or from Settings',
+      'The tour brings an example sim with it, already written, so the markers and the character colouring are there to look at instead of being described. At the end you choose whether to keep it or throw it away; skipping the tour never creates one',
+      'New What\'s New button in the upper right of the Dashboard, with a dot on it once per release. It opens a panel beside the app — nothing behind it is disabled — with the last five things LCARS gained and the date each arrived, and a second tab listing what is being built next. Big things only; every fix and adjustment is still in Settings → About',
+      'The one-off \'A new look — Delta Prime\' window is gone, and What\'s new in LCARS in the Style menu now opens the panel above. It was a second what\'s-new mechanism with its own version number, and that number had been stuck on 4.22 for three releases, so it had quietly stopped announcing anything',
+      'The Getting Started tour now shows itself only to writers who are genuinely new — no sims and no characters — so signing in on a new phone or laptop no longer greets you with an introduction to an app you already use',
+      'The \'I\'ve used LCARS before\' half of the Getting Started tour is gone. It was written for the one-off move from the old address in August and had become permanent furniture; the tour is now a single short walk through what the app does and where its sections are',
       'You can withdraw a report you have sent, at any point. It and anything attached to it are deleted outright',
       'Clearer statuses on a report: New, Implementing, Will revisit, Rejected. The old \'Responded\' is gone — a note from the team reaches you whatever the status says, so it never meant anything on its own',
       'Screenshots open inside LCARS rather than in a new tab, which was coming up blank on iPhones',
@@ -464,7 +474,6 @@ let _sourceMode = false;
 // Skin 'classic' falls back entirely to the 4.21 Dark/Light/HC themes.
 // ================================================================
 const STYLE_KEY = 'lcars_style_v1';   // tiny mirror for flash-free first paint
-const STYLE_VERSION = '4.22';         // bump to re-show the intro on a future restyle
 const DUTY_ACCENTS = {
   command:    { calmLight:'#B4463C', epicLight:'#C0433A', dark:'#F0705F' },
   science:    { calmLight:'#2F7FC9', epicLight:'#2F7FC9', dark:'#5FB2FF' },
@@ -607,56 +616,6 @@ function toggleSkin(el, ev) {
   setStyle({ skin: next }, el, ev);
 }
 
-// ================================================================
-// "NEW LOOK" INTRODUCTION — one-time, re-openable from the Style menu
-// ================================================================
-function styleIntroBody() {
-  return `
-    <div style="font-size:0.87rem;line-height:1.6;margin-bottom:14px">
-      LCARS has a new look in v${STYLE_VERSION}, called <strong>Delta Prime</strong> — same layout and
-      the same controls, rebuilt on a cleaner surface, type and shape system.
-      Try the three settings below and watch the app behind this window change.
-    </div>
-    ${styleControlsHtml()}
-    <div style="font-size:0.73rem;color:var(--dim);line-height:1.55;margin-top:14px">
-      Everything here lives under <strong>Style ▾</strong> in the top bar afterwards, alongside
-      <em>What's new</em> to reopen this window.
-    </div>
-    <div style="font-size:0.73rem;color:var(--dim);line-height:1.55;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
-      <strong style="color:var(--amber)">Feedback wanted.</strong> The classic LCARS look is still
-      one click away — <em>Revert to the classic LCARS look</em>, in the same menu — and it stays
-      supported for now. Which one you prefer, and what feels off in either, is the useful thing
-      to report back.
-    </div>`;
-}
-
-function showStyleIntro() {
-  closeStyleMenu();
-  openModal('A NEW LOOK — DELTA PRIME', styleIntroBody(), () => {}, { ok:'Got it', noCancel:true });
-  // Escape, the backdrop and "Got it" all dismiss, so mark it seen on open —
-  // the intro never blocks and never nags twice.
-  S.settings.prefs = Object.assign({}, S.settings.prefs, { seenStyleIntro: STYLE_VERSION });
-  persist();
-  setTimeout(updateStyleMenu, 20);
-}
-
-function maybeShowStyleIntro() {
-  if ((S.settings.prefs || {}).seenStyleIntro === STYLE_VERSION) return;
-  // Deferred, so re-check on fire: a direct hit on /settings or /characters opens
-  // its view in between, and the intro must not steal the modal from under it.
-  // The same goes for anything already on screen. Boot raises prompts that must
-  // be answered -- the reconcile question, a pending deletion, a temporary PIN
-  // that has to be changed -- and every one of them lands after this timer was
-  // set. An introduction to the new colours can wait for the next load; those
-  // cannot, and showChooseOwnPin() in particular has no cancel button, so
-  // painting over it would strand the writer on a PIN someone else has read.
-  setTimeout(() => {
-    if (_routeView !== 'dash') return;
-    if (!document.getElementById('mo').classList.contains('hidden')) return;
-    showStyleIntro();
-  }, 400);
-}
-
 function closeStyleMenu(){ toggleStyleMenu(false); }
 
 // Shared markup for the three controls — header menu, intro modal and Settings
@@ -687,10 +646,10 @@ function renderStyleMenu() {
     <div class="sty-sep"></div>
     <div class="sty-foot">
       <button id="sty-revert" onclick="toggleSkin(this,event)">${ic('chevron-left')} Revert to the classic LCARS look</button>
-      <button onclick="showStyleIntro()">${ic('sparkles')} What's new in ${STYLE_VERSION}</button>
+      <button onclick="closeStyleMenu();wnOpen('new')">${ic('sparkles')} What's new in LCARS</button>
     </div>
-    <div class="sty-feedback"><strong>New in ${STYLE_VERSION}</strong> — the classic look stays
-      available while this one settles. Feedback on either is welcome.</div>`;
+    <div class="sty-feedback">The classic look stays available while this one settles.
+      Feedback on either is welcome.</div>`;
   updateStyleMenu();
 }
 
@@ -2932,13 +2891,183 @@ async function checkDeletionPending() {
 }
 
 // ================================================================
-// GETTING STARTED WIZARD
+// WHAT'S NEW / WHAT'S PLANNED
 // ================================================================
-// Shown once after the first-run gate resolves, and reopenable any time from
-// the Dashboard. Two routes through it: writers new to LCARS entirely, and
-// writers arriving from the old GitHub Pages version who mainly need to know
-// what changed and how to bring their sims across.
-let _wizStep = 'welcome';
+// A side panel, not a boot popup, and deliberately not a second changelog.
+// The full VERSIONS list is in Settings -> About and is written for someone
+// who wants every fix; this is FEATURES ONLY, hand-picked, five of them, so
+// it stays readable in the thirty seconds anyone gives it. It is curated
+// rather than generated from VERSIONS for exactly that reason -- there is no
+// field in a changelog entry that says "this one mattered".
+//
+// This also replaced showStyleIntro()/STYLE_VERSION, which was a second
+// what's-new mechanism keyed on its own version number. It had been stuck at
+// 4.22 for three releases, which is the argument against keeping two.
+const HIGHLIGHTS = [
+  {
+    date: '2026-09-10',
+    title: 'App Feedback',
+    body: `Found a bug, or want something LCARS does not do? <strong>App Feedback</strong> in the
+      top bar &mdash; under <em>Help Us</em> in the menu on a phone &mdash; sends it straight to the
+      team without you leaving what you were doing. You can attach a screenshot, follow the status
+      of anything you have sent under <em>My reports</em>, and withdraw a report at any point.`,
+  },
+  {
+    date: '2026-09-05',
+    title: 'LCARS on a phone',
+    body: `The whole writing screen was rebuilt for a small screen. The header and the sim title
+      share one bar, the toolbar groups itself under <em>Insert</em>, <em>Format</em> and
+      <em>Tools</em> so everything fits, and the sims list opens from a tab on the right-hand edge.
+      One button in the top corner hides the furniture and gives a sim the whole screen.`,
+  },
+  {
+    date: '2026-09-05',
+    title: 'Characters picked up from the sim title',
+    body: `Title a sim the usual way &mdash; the names, a dash, then the title &mdash; and everyone
+      named is in the Characters panel before a word is written, with yours already ticked. Ranks
+      are fine, several characters are fine, and any alias you have set up counts.`,
+  },
+  {
+    date: '2026-08-21',
+    title: 'Joint Posts',
+    body: `Write a sim with somebody else, a turn at a time. Invite a writer, hand the sim back and
+      forth, and LCARS keeps track of whose turn it is so nobody types over anybody.`,
+  },
+  {
+    date: '2026-08-21',
+    title: 'Share links',
+    body: `<strong>Share Link</strong> in Sim Details gives you a web address anyone can open &mdash;
+      no account needed, nothing they can change. It is a snapshot rather than a window, so you can
+      carry on writing without an audience, and you can set it to expire or stop sharing outright.`,
+  },
+];
+
+// A curated slice of ROADMAP.md, in the writer's language and with NO dates.
+// A date here is a promise, and this is a roadmap.
+const PLANNED = [
+  {
+    title: 'Joint Posts for everyone',
+    body: 'Still limited to a few writers while it settles. Opening it up is next.',
+  },
+  {
+    title: 'Writing at the same time as somebody else',
+    body: 'Joint Posts take a turn each. The plan is for two writers to be able to type into the same sim at once, with turns kept as the fallback.',
+  },
+  {
+    title: 'Saving one sim at a time',
+    body: 'Every save currently uploads everything you have ever written. Sim-by-sim saving makes it quick no matter how much you have, and stops two open tabs treading on each other.',
+  },
+  {
+    title: 'Per-character signatures',
+    body: 'The block at the foot of a sim, kept with the character rather than retyped or pasted in each time.',
+  },
+  {
+    title: 'A rebuilt user guide',
+    body: 'The current guide predates accounts, Joint Posts and share links. It is being written again from the ground up.',
+  },
+  {
+    title: 'Posting straight to Google Groups',
+    body: 'Further off, and it needs a browser extension to be possible at all &mdash; but copy-and-paste should not be the last step of writing a sim.',
+  },
+];
+
+let _wnTab = 'new';
+
+// A writer with nothing in LCARS has nothing to be told is new, and the
+// first-run tour is already talking to them. Do not compete with it.
+function wnHasNew() {
+  if (isNewWriter()) return false;
+  return ((S.settings.prefs || {}).seenWhatsNew || '') !== APP_VERSION;
+}
+
+function wnOpen(tab) {
+  document.body.classList.remove('mob-more');
+  fbClose();                       // two panels share the right edge; only one at a time
+  document.getElementById('wn-panel').classList.remove('hidden');
+  wnTab(tab || _wnTab);
+  wnMarkSeen();
+}
+
+function wnClose() {
+  document.getElementById('wn-panel').classList.add('hidden');
+}
+
+// Marked seen on OPEN, not on close: Escape, the close button and simply
+// navigating away all leave the panel, and a badge that survives any of them
+// is a badge that nags. Same reasoning the style intro used.
+function wnMarkSeen() {
+  const was = (S.settings.prefs || {}).seenWhatsNew;
+  if (was === APP_VERSION) return;
+  S.settings.prefs = Object.assign({}, S.settings.prefs, { seenWhatsNew: APP_VERSION });
+  persist();
+  if (isCloud()) schedSync(2000);  // per writer, and it follows them to their other devices
+  const b = document.getElementById('dash-wn');
+  if (b) b.classList.remove('has-new');
+}
+
+function wnTab(tab) {
+  _wnTab = tab;
+  const nb = document.getElementById('wn-tab-new'), pb = document.getElementById('wn-tab-planned');
+  if (nb && pb) {
+    nb.className = 'btn ' + (tab === 'new' ? 'btn-p' : 'btn-s');
+    pb.className = 'btn ' + (tab === 'planned' ? 'btn-p' : 'btn-s');
+  }
+  const el = document.getElementById('wn-body');
+  if (!el) return;
+  el.scrollTop = 0;
+  el.innerHTML = tab === 'planned' ? wnPlannedHtml() : wnNewHtml();
+}
+
+function wnDate(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return isNaN(d) ? iso : d.toLocaleDateString(undefined, { day:'numeric', month:'long', year:'numeric' });
+}
+
+function wnNewHtml() {
+  return HIGHLIGHTS.map(h => `
+    <div class="wn-item">
+      <div class="wn-date">${esc(wnDate(h.date))}</div>
+      <div class="wn-ttl">${esc(h.title)}</div>
+      <div class="wn-body">${h.body}</div>
+    </div>`).join('') + `
+    <div class="wn-foot">
+      The big things only. Every fix and adjustment, version by version, is in
+      <strong>Settings &rarr; About</strong>.
+    </div>`;
+}
+
+function wnPlannedHtml() {
+  return `<div class="wn-foot" style="margin:0 0 4px">
+      What is being built next, roughly in order. Nothing here has a date, and
+      anything here can change.
+    </div>` + PLANNED.map(p => `
+    <div class="wn-item">
+      <div class="wn-ttl">${esc(p.title)}</div>
+      <div class="wn-body">${p.body}</div>
+    </div>`).join('') + `
+    <div class="wn-foot">
+      Something missing? <strong>App Feedback</strong> in the top bar is where a feature
+      request goes.
+    </div>`;
+}
+
+// ================================================================
+// GETTING STARTED TOUR
+// ================================================================
+// A spotlight over the real UI, not a modal describing it: a dark overlay
+// with a hole punched over the target's getBoundingClientRect() and a tooltip
+// beside it. The hole is one absolutely-positioned box wearing a 9999px
+// spread box-shadow, which is the whole mask -- no SVG, no dependency.
+//
+// Shown once to a genuinely NEW writer, and reopenable any time from the
+// Dashboard or Settings.
+//
+// The old modal wizard had a second route -- "I've used LCARS before" -- that
+// was entirely the August 2026 platform move: Gist sync, the Docs importer,
+// go back to the old address and press Move My Stuff. It was deleted with
+// that route; the Pages moved-banner still covers stragglers on its own.
+let _tourStep = 0;
+let _tourExampleId = null;
 
 function wizardSeen() { return !!(S.settings && S.settings.wizardDone); }
 
@@ -2949,163 +3078,504 @@ function markWizardSeen() {
   if (isCloud()) schedSync(2000);
 }
 
+// "New" is NOT merely an unset flag. A returning writer signing in on a fresh
+// device has an empty flag and a full account, and must never be shown an
+// introduction to an app they already use. Emptiness is the only honest test.
+function isNewWriter() {
+  return !Object.keys(S.docs || {}).length && !Object.keys(S.characters || {}).length;
+}
+
 function maybeShowWizard() {
   if (wizardSeen()) return;
-  showWizard();
+  if (!isNewWriter()) return;
+  // The same defence maybeShowStyleIntro() carried, and it matters more here.
+  // Boot raises prompts on a timer -- the reconcile question, a pending
+  // deletion, a temporary PIN with no cancel button -- and they have collided
+  // three times, twice invisibly. A tour is worse than a modal: it points at
+  // elements that may not be on screen yet. An introduction can wait for the
+  // next load; a PIN somebody else has read cannot.
+  setTimeout(() => {
+    if (_routeView !== 'dash') return;
+    if (!document.getElementById('mo').classList.contains('hidden')) return;
+    if (document.getElementById('tour')) return;
+    tourStart();
+  }, 400);
 }
 
-function showWizard() {
-  closeWizard();
+// ── The steps ──────────────────────────────────────────────────────────
+// `target` is one or more selectors; the hole is the union of their boxes, so
+// a control and the panel it opens can be lit together. A step with no target
+// is a centred card.
+//
+// `before` runs first and may open whatever the target lives inside. Under
+// 820px many targets are inside collapsed containers -- the sims drawer, the
+// app menu sheet, the grouped toolbar panels -- and mobSyncChrome() only
+// MOVES those controls, so their ids are unchanged and it is visibility, not
+// identity, that needs handling. A step whose target still has no box is
+// skipped rather than pointed at.
+// ── The steps ──────────────────────────────────────────────────────────
+// `target` is one or more selectors; the hole is the union of their boxes, so
+// a control and the panel it opens can be lit together. A step with no target
+// is a centred card, and `softTarget` means "light it if it is on screen,
+// otherwise show a centred card" -- App Feedback is hidden for a writer who is
+// not signed in, and the last step carries the keep-or-delete choice, so it
+// must never be the step that gets skipped.
+//
+// `before` runs first and may open whatever the target lives inside. Under
+// 820px many targets are inside collapsed containers -- the sims drawer, the
+// app menu sheet, the grouped toolbar panels -- and mobSyncChrome() only
+// MOVES those controls, so their ids are unchanged and it is visibility, not
+// identity, that needs handling. A step whose target still has no box is
+// skipped rather than pointed at.
+const TOUR = [
+  {
+    id: 'welcome',
+    title: 'Welcome To LCARS',
+    body: `This is a writing tool built specifically to make writing, organising and tracking
+      your sims &mdash; and your simming habits &mdash; easier and more intuitive for players of
+      Starbase 118.
+      <br><br>This overview of the tool's main features takes a couple of minutes and walks you
+      through the site's layout. The full scope of what LCARS does is in the User Guide.
+      <br><br>Ready to get started?`,
+  },
+  {
+    id: 'nav',
+    target: '#sidebar',
+    before: () => { tourEnsureSim(); if (tourMobile()) mobDrawer('sims'); },
+    title: 'The Sims List',
+    body: `Not to be confused with a Google Group or HQ's Sim Archive, this is a list of every
+      sim you have written using LCARS &mdash; those in progress as well as those you have posted
+      or archived.
+      <br><br>To help you keep things organised, LCARS uses a three-tiered hierarchy.
+      <strong>Missions</strong> are arching stories that hold multiple scenes and sims.
+      <strong>Scenes</strong> are groups of related sims that build off one another.
+      <strong>Sims</strong> are the individual writings you post to your group.
+      <br><br>Have a look at the Example Mission, Scene and Sim just added to your profile to see
+      this in action.`,
+    mobBody: `On a phone this list is collapsed by default and opens from the <strong>SIMS</strong>
+      tab on the right-hand edge, which is open now.`,
+  },
+  {
+    id: 'title',
+    target: '#doc-title',
+    before: () => { tourEnsureSim(); if (tourMobile()) mobDrawer(null); },
+    title: "What's In A Name?",
+    body: `When you title a sim, LCARS can tell which of your characters is tagged in it. So long
+      as the character is in your <strong>Characters List</strong>, it links this sim to them
+      automatically, for
+      easier tracking and reporting.
+      <br><br>More on Characters and tracking in a moment.`,
+  },
+  {
+    id: 'editor',
+    target: '#editor',
+    before: () => { tourEnsureSim(); },
+    title: 'Special Formatting Highlight',
+    body: `LCARS' optional <strong>Visual Aids</strong> and <strong>Auto Format</strong> features
+      make it easy to format your sims properly and see special text at a glance. Look at the
+      example sim to see a few of them in action.
+      <br><br>Auto Format &mdash; bold location tags, italic OOC tags, bold names &mdash; copies
+      out of LCARS with your sim when you post it. Visual Aids are for LCARS only and do not go
+      with your text.
+      <br><br>All of it is configurable to your preferences, and best of all, it happens as you
+      type.`,
+  },
+  {
+    id: 'insert',
+    target: '#tb-ins-wrap,#tb-dd-ins',
+    before: () => { tourEnsureSim(); if (tourMobile()) mobDrawer(null); openTbDd('ins'); },
+    after:  () => { document.querySelectorAll('.tb-dd').forEach(d => d.classList.remove('open')); },
+    title: 'Insert Special Formatting Directly',
+    body: `Prefer not to type <code>=/\\= Comms =/\\=</code> out by hand every time? LCARS has you
+      covered. Use <strong>Insert</strong> to drop in whatever special format you want, with the
+      cursor already in the middle of it, ready to keep writing.
+      <br><br>You can also select a section of text and use Insert to wrap that text in the
+      appropriate formatting markers.`,
+  },
+  {
+    id: 'details',
+    target: '#sim-details',
+    before: () => { tourEnsureSim(); if (tourMobile()) mobDrawer('details'); },
+    title: 'Sim Details',
+    body: `From this panel you can see and set the type of sim you are writing, save manual
+      writing snapshots, organise and file sims, save a sim as a template to re-use later, and
+      mark it posted.`,
+    mobBody: `On a phone this shares the drawer with the sims list, under
+      <strong>Details</strong>.`,
+  },
+  {
+    id: 'chars',
+    target: '#chars-list',
+    before: () => { tourEnsureSim(); if (tourMobile()) mobDrawer('details'); },
+    title: 'Characters & Colour Coding',
+    body: `As characters get added to the scene, LCARS detects them automatically and adds them to
+      a list. Tick one to claim it as your own.
+      <br><br>You can also give a character a preset or custom colour, which carries through all
+      of their dialogue. Once a colour is set, <strong>Shift + right-click</strong> a paragraph to
+      assign it to that character and take its colour &mdash; handy for collating other people's
+      sims into one working document.
+      <br><br>Don't worry: these colours appear in LCARS only and do not copy out when you post.`,
+    mobBody: `On a phone, characters share a drawer with the list of sims.`,
+  },
+  {
+    id: 'charlist',
+    target: '#btn-manifest-toggle',
+    before: () => {
+      tourEnsureSim();
+      if (!tourMobile()) return;
+      mobDrawer(null);
+      document.body.classList.add('mob-more');
+      const b = document.getElementById('hdr-more');
+      if (b) b.setAttribute('aria-expanded', 'true');
+    },
+    after: () => { document.body.classList.remove('mob-more'); },
+    title: 'Your Characters List',
+    body: `<strong>Characters</strong>, accessed via the top bar, is where all your claimed
+      characters live. Characters you check off as yours while writing appear here, but you can
+      also add characters manually, add their details, and even give them aliases that LCARS will
+      know to identify them with.
+      <br><br>Adding a character here is what lets LCARS recognise them in a sim title, so it is
+      worth doing for anyone you write regularly.`,
+    mobBody: `On a phone this lives behind the grid button, which is open now.`,
+  },
+  {
+    id: 'copy',
+    target: '#btn-copy',
+    before: () => { tourEnsureSim(); if (tourMobile()) mobDrawer(null); },
+    title: 'Ready To Post It?',
+    body: `<strong>Copy</strong> strips out the Visual Aids and the character colours
+      automatically, keeping every bit of formatting you added by hand or had applied for you.
+      <br><br>The whole sim is now on your clipboard, ready to send by email or to Google Groups.
+      Be sure to mark it <strong>Posted</strong> once you have actually hit send, so your simming
+      stays tracked.`,
+  },
+  {
+    id: 'home',
+    target: '#btn-dash',
+    // Pointing at "go home" while standing in the editor asks the writer to
+    // take it on faith. Closing the sim first means the Dashboard is actually
+    // behind the card -- and it gives the three steps after this one a real
+    // Dashboard to sit on.
+    before: () => {
+      if (curId) closeDoc();
+      if (!tourMobile()) return;
+      mobDrawer(null);
+      document.body.classList.add('mob-more');
+      const b = document.getElementById('hdr-more');
+      if (b) b.setAttribute('aria-expanded', 'true');
+    },
+    after: () => { document.body.classList.remove('mob-more'); },
+    title: 'Return Home',
+    body: `<strong>Dashboard</strong> brings you back here from anywhere. It holds your missions,
+      how long it has been since you last posted, what is in progress, and what you posted
+      recently.`,
+    mobBody: `On a phone this lives behind the grid button, which is open now.`,
+  },
+  {
+    id: 'yours',
+    target: '#btn-style,#btn-settings',
+    before: () => {
+      if (!tourMobile()) return;
+      mobDrawer(null);
+      document.body.classList.add('mob-more');
+      const b = document.getElementById('hdr-more');
+      if (b) b.setAttribute('aria-expanded', 'true');
+    },
+    after: () => { document.body.classList.remove('mob-more'); },
+    title: 'Making It Yours',
+    body: `<strong>Style</strong> sets how LCARS looks &mdash; the skin, light or dark, and the
+      accent colour of your duty post. Change it as often as you like; nothing about your sims is
+      affected. More detailed configuration is in Settings.
+      <br><br><strong>Settings</strong> holds your writing preferences, your templates, and a
+      backup of everything you have written. Signed in, your work saves to your account a few
+      seconds after each change and follows you to any device &mdash; a backup now and then is
+      still worth taking.`,
+    mobBody: `On a phone both live behind the grid button, which is open now.`,
+  },
+  {
+    id: 'whatsnew',
+    target: '#dash-wn',
+    before: () => { if (curId) closeDoc(); document.body.classList.remove('mob-more'); },
+    title: "What's New",
+    body: `Worth a click now and then. See what new features LCARS has gained lately while in
+      development, plus a <strong>What's Planned</strong> tab listing what is being built next.
+      <br><br>It marks itself with a dot when there is something you have not seen.`,
+  },
+  {
+    id: 'done',
+    target: '#btn-feedback',
+    softTarget: true,
+    before: () => {
+      if (!tourMobile()) return;
+      mobDrawer(null);
+      document.body.classList.add('mob-more');
+      const b = document.getElementById('hdr-more');
+      if (b) b.setAttribute('aria-expanded', 'true');
+    },
+    after: () => { document.body.classList.remove('mob-more'); },
+    title: 'Ready To Sim',
+    body: `That is the full tour &mdash; and there is more about everything in it in the User
+      Guide, on the Dashboard.
+      <br><br>If you hit a bug, or want to ask for something LCARS does not do,
+      <strong>App Feedback</strong> is how you tell us.
+      <br><br>What would you like to do with the example sim?`,
+    mobBody: `On a phone App Feedback lives behind the grid button, under
+      <strong>Help Us</strong>.`,
+  },
+];
+
+// Steps 2 to 9 talk about a sim, so a sim has to be open for them. Going BACK
+// from "Return Home" -- which closes it -- would otherwise find an empty
+// editor, no box on any of their targets, and skip every one of them.
+function tourEnsureSim() {
+  if (curId) return;
+  if (_tourExampleId && S.docs[_tourExampleId]) openDoc(_tourExampleId);
+}
+
+function tourMobile() { return window.innerWidth <= 820; }
+
+// ── The example sim ────────────────────────────────────────────────────
+// A real doc in S.docs, in a real mission and scene, because a fake one would
+// not be pointed at by the sims tree, would not be counted by the dashboard
+// and would not be found by search. It is ordinary in every way, which is the
+// only version of this that cannot go quietly wrong somewhere else.
+function tourMakeExample() {
+  if (_tourExampleId && S.docs[_tourExampleId]) return _tourExampleId;
+  const mId = uid(), scId = uid(), dId = uid();
+  const yr = String(new Date().getFullYear());
+  S.missions[mId] = { id:mId, name:'Example Mission', year:yr, simType:null,
+    status:'active', createdAt:Date.now() };
+  S.scenes[scId]  = { id:scId, name:'Example Scene', missionId:mId,
+    status:'active', startedAt:null, createdAt:Date.now() };
+  S.docs[dId] = {
+    id:dId, title:'Ellis & Vex - An Example Sim', content:TOUR_EXAMPLE_HTML,
+    missionId:mId, sceneId:scId, chars:['Ellis','Vex'], myChars:['Ellis'],
+    charColors:{}, status:'active', postType:null, postedAt:null,
+    snapshots:[], createdAt:Date.now(), updatedAt:Date.now(),
+  };
+  persist(); renderNav();
+  _tourExampleId = dId;
+  return dId;
+}
+
+const TOUR_EXAMPLE_HTML = [
+  '<div>((Bridge, USS Example))</div>',
+  '<div><br></div>',
+  '<div>::The turbolift doors part. Ellis steps onto the bridge, PADD in hand.::</div>',
+  '<div><br></div>',
+  '<div>Ellis: Report.</div>',
+  '<div><br></div>',
+  '<div>Vex: Long-range sensors picked something up eleven minutes ago. It has not moved since.</div>',
+  '<div><br></div>',
+  '<div>oO Eleven minutes, and nobody thought to wake me. Oo</div>',
+  '<div><br></div>',
+  '<div>Ellis: Put it on screen.</div>',
+  '<div><br></div>',
+  '<div>=/\\= Engineering to bridge. We are ready when you are. =/\\=</div>',
+  '<div><br></div>',
+  '<div>((OOC: Tagging anyone who wants in.))</div>',
+].join('');
+
+// ── Running it ─────────────────────────────────────────────────────────
+function tourStart() {
+  tourEnd(true);                       // never two overlays
+  closeStyleMenu();
+  fbClose();
+  wnClose();
+  document.body.classList.remove('mob-more');
+  // Reopening the tour from Settings, Characters or Admin would otherwise
+  // point at a workspace that is hidden behind the view you are standing in --
+  // openDoc() does not navigate, it only paints -- and every step would find
+  // no box and skip itself.
+  showView('dash');
+  _tourStep = 0;
   const el = document.createElement('div');
-  el.id = 'wiz';
-  el.style.cssText = 'position:fixed;inset:0;z-index:8800;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,0.72);overflow:auto';
-  el.innerHTML = `
-    <div style="position:relative;width:100%;max-width:560px;background:var(--panel,#1b1b1b);border:1px solid var(--border,#333);border-radius:10px;padding:26px 24px;max-height:88vh;overflow:auto">
-      <button class="btn btn-s" onclick="wizFinish(false)" title="Close" aria-label="Close"
-        style="position:absolute;top:10px;right:10px;padding:2px 8px;line-height:1.4">✕</button>
-      <div id="wiz-body"></div>
-    </div>`;
+  el.id = 'tour';
+  el.innerHTML = '<div id="tour-hole"></div><div id="tour-tip" role="dialog" aria-live="polite"></div>';
+  // Swallow clicks. Without stopPropagation the document-level handler that
+  // closes the toolbar dropdowns would fire on every click of Next and shut
+  // the panel the step is pointing at.
+  el.addEventListener('click', e => { e.stopPropagation(); });
   document.body.appendChild(el);
-  wizGo('welcome');
+  window.addEventListener('resize', tourPaint);
+  window.addEventListener('scroll', tourPaint, true);
+  document.addEventListener('keydown', tourKey, true);
+  tourGo(0);
 }
 
-function closeWizard() {
-  const el = document.getElementById('wiz');
+// `quiet` is the internal teardown -- no state written, nothing marked seen.
+function tourEnd(quiet) {
+  const el = document.getElementById('tour');
   if (el) el.remove();
+  window.removeEventListener('resize', tourPaint);
+  window.removeEventListener('scroll', tourPaint, true);
+  document.removeEventListener('keydown', tourKey, true);
+  document.querySelectorAll('.tb-dd').forEach(d => d.classList.remove('open'));
+  if (!quiet) {
+    document.body.classList.remove('mob-more');
+    if (tourMobile()) mobDrawer(null);
+  }
 }
 
-// "Don't show again" is explicit and separate from simply closing, so a writer
-// who closes mid-way still gets the wizard back next time.
-function wizFinish(remember) {
-  if (remember) markWizardSeen();
-  closeWizard();
+function tourKey(e) {
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); tourQuit(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); tourNext(); }
+  else if (e.key === 'ArrowLeft')  { e.preventDefault(); tourBack(); }
 }
 
-function wizFoot(backStep) {
-  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:20px;padding-top:14px;border-top:1px solid var(--border,#333)">
-      ${backStep ? `<button class="btn btn-s" onclick="wizGo('${backStep}')">Back</button>` : ''}
-      <div style="flex:1"></div>
-      <button class="btn btn-s" onclick="wizFinish(true)">Don't show this again</button>
-      <button class="btn btn-s" onclick="wizFinish(false)">Close</button>
-    </div>`;
-}
-
-function wizGo(step) {
-  _wizStep = step;
-  const b = document.getElementById('wiz-body');
-  if (!b) return;
-  b.innerHTML = WIZ[step] ? WIZ[step]() : WIZ.welcome();
-  b.parentElement.scrollTop = 0;
-}
-
-const WIZ = {
-  welcome: () => `
-    <div style="font-size:1.15rem;font-weight:700;margin-bottom:10px">Welcome to LCARS</div>
-    <p style="font-size:0.87rem;line-height:1.65;color:var(--dim);margin:0 0 8px">
-      LCARS is a writing tool for Starbase 118 — somewhere to draft your sims, keep them organised by mission and scene, and track your characters.
-    </p>
-    <p style="font-size:0.87rem;line-height:1.65;color:var(--dim);margin:0 0 18px">
-      Which of these sounds like you?
-    </p>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('new1')">I'm new to LCARS</button>
-      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizGo('ret1')">I've used LCARS before</button>
-      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizFinish(true)">Skip — let me get on with it</button>
-    </div>
-    <div style="font-size:0.72rem;color:var(--dim);margin-top:14px;line-height:1.5">
-      You can reopen this any time from the Dashboard.
-    </div>`,
-
-  // ---------- new writers ----------
-  new1: () => `
-    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">How your writing is organised</div>
-    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
-      <p style="margin:0 0 10px">Three levels, largest to smallest:</p>
-      <p style="margin:0 0 8px"><strong style="color:var(--text)">Missions</strong> — a storyline your ship is playing through.</p>
-      <p style="margin:0 0 8px"><strong style="color:var(--text)">Scenes</strong> — a thread within a mission. The bridge, sickbay, an away team.</p>
-      <p style="margin:0 0 8px"><strong style="color:var(--text)">Sims</strong> — the individual posts you write. These live inside a scene.</p>
-      <p style="margin:10px 0 0">Start a mission, add a scene, then write. You can always move a sim later if you put it in the wrong place.</p>
-    </div>
-    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('new2')">Next</button></div>
-    ${wizFoot('welcome')}`,
-
-  new2: () => `
-    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Writing a sim</div>
-    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
-      <p style="margin:0 0 10px">The editor formats sim conventions as you type:</p>
-      <p style="margin:0 0 6px"><code>::Action::</code> — an action beat</p>
-      <p style="margin:0 0 6px"><code>=/\\= Comms =/\\=</code> — over comms</p>
-      <p style="margin:0 0 6px"><code>oO Thoughts Oo</code> — internal thought</p>
-      <p style="margin:0 0 6px"><code>((Location))</code> and <code>((OOC))</code></p>
-      <p style="margin:10px 0 0">Character names bold themselves once LCARS knows who is in a scene. When you're done, the copy button puts the sim on your clipboard with formatting intact, ready to paste into email or Discord.</p>
-    </div>
-    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('acct')">Next</button></div>
-    ${wizFoot('new1')}`,
-
-  // ---------- returning writers ----------
-  ret1: () => `
-    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">What's changed</div>
-    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
-      <p style="margin:0 0 10px"><strong style="color:var(--text)">LCARS has a new home and accounts.</strong> ${isFileCopy()
-        ? `Online at <strong style="color:var(--text)">${NEW_HOME.replace(/^https?:\/\//,'').replace(/\/$/,'')}</strong> you can sign in with your Writer ID and have your sims save automatically to every device. This offline copy keeps everything in this browser instead.`
-        : 'Sign in with your Writer ID and your sims save automatically and follow you to any device — no export files, no tokens to set up.'}</p>
-      <p style="margin:0 0 10px"><strong style="color:var(--text)">Gist sync is gone.</strong> It capped out around 1 MB. Accounts replace it with no practical limit. Your old Gist is untouched and still on GitHub if you want the file.</p>
-      <p style="margin:0 0 10px"><strong style="color:var(--text)">The Google Docs importer is gone.</strong> It was clumsy; better ways to bring sims in are coming.</p>
-      ${isFileCopy() ? '' : `<p style="margin:0"><strong style="color:var(--text)">You can still work offline</strong> if you'd rather not have an account — everything stays in this browser and nothing is sent anywhere.</p>`}
-    </div>
-    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizGo('ret2')">Next — bringing my sims across</button></div>
-    ${wizFoot('welcome')}`,
-
-  ret2: () => `
-    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Bringing your sims across</div>
-    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
-      <p style="margin:0 0 10px">Your old sims are still on the address you used before. Browsers keep each web address's data separate, so they don't come across on their own.</p>
-      ${isFileCopy() ? `<p style="margin:0 0 10px"><strong style="color:var(--text)">With a backup file:</strong> take a backup from the copy that has your sims, then load it here. This offline copy has no network access, so a backup file is the only way in or out.</p>`
-      : `<p style="margin:0 0 10px"><strong style="color:var(--text)">The easy way:</strong> go back to the old address and click <em>Move My Stuff</em> in the notice at the bottom. Sign in there, your sims upload, and they'll be waiting when you sign in here.</p>
-      <p style="margin:0 0 10px"><strong style="color:var(--text)">Or with a backup file:</strong> if you've already downloaded one, load it now.</p>`}
-    </div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
-      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizImportBackup()">Load a backup file</button>
-      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizGo('acct')">${isCloud() || isFileCopy() ? 'Next' : 'Next — set up an account'}</button>
-    </div>
-    ${wizFoot('ret1')}`,
-
-  // ---------- shared tail ----------
-  acct: () => isCloud() ? `
-    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">You're all set</div>
-    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
-      <p style="margin:0 0 10px">You're signed in as <strong style="color:var(--text)">${(getAuth().writerId)||''}</strong>. Your work saves to your account a few seconds after each change, and will be there on any device you sign in on.</p>
-      <p style="margin:0">A backup is still worth taking now and then — Settings → Backup Data.</p>
-    </div>
-    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true)">Start writing</button></div>
-    ${wizFoot(null)}` : isFileCopy() ? `
-    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Keep your work safe</div>
-    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
-      <p style="margin:0 0 10px">This is the offline copy of LCARS, running from a file on your own machine. It never touches the network, so your sims live in this browser alone — clearing your browser data would erase them.</p>
-      <p style="margin:0 0 10px">Take a backup regularly from Settings → Backup Data, and keep it somewhere safe.</p>
-      <p style="margin:0">If you'd rather have your sims backed up automatically and available on every device, use LCARS online at <strong style="color:var(--text)">${NEW_HOME.replace(/^https?:\/\//,'').replace(/\/$/,'')}</strong> — a backup from here restores straight into it.</p>
-    </div>
-    <div style="margin-top:18px"><button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true)">Start writing</button></div>
-    ${wizFoot(null)}` : `
-    <div style="font-size:1.05rem;font-weight:700;margin-bottom:10px">Keep your work safe</div>
-    <div style="font-size:0.87rem;line-height:1.7;color:var(--dim)">
-      <p style="margin:0 0 10px">You're working offline, so your sims live in this browser alone. Clearing your browser data would erase them.</p>
-      <p style="margin:0 0 10px">An account fixes that — it needs your SB118 Writer ID and a PIN of your choice, nothing else. Your work on this device comes across with you.</p>
-      <p style="margin:0">Prefer to stay offline? That's fine — just take backups from Settings regularly.</p>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
-      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="wizFinish(true);showAuthGate(true)">Set up an account</button>
-      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="wizFinish(true)">Stay offline for now</button>
-    </div>
-    ${wizFoot(null)}`
-};
-
-// Reuses the normal restore path, so the file is validated and the
-// merge/overwrite choice is the same one Settings offers.
-function wizImportBackup() {
-  closeWizard();
+// Leaving early is explicit and always available -- Close on any step, or
+// Escape. It counts as having seen the tour: the writer has been shown it and
+// asked for it to stop, and an example sim is now sitting in their sims list
+// either way, which makes them not-new on the next boot regardless.
+// The example is KEPT, never destroyed on the way out: it is a real doc in
+// S.docs by then and throwing away a writer's work without asking is not
+// something a Close button should do.
+function tourQuit() {
+  if (_tourExampleId) { tourFinishExample('keep'); return; }
   markWizardSeen();
-  importData();
+  tourEnd();
+}
+
+function tourSkip() {
+  // Skipped from the welcome card, so no example sim was ever made.
+  markWizardSeen();
+  tourEnd();
+}
+
+function tourNext() { tourGo(_tourStep + 1, 1); }
+function tourBack() { tourGo(_tourStep - 1, -1); }
+
+function tourGo(i, dir) {
+  const prev = TOUR[_tourStep];
+  if (prev && prev.after) { try { prev.after(); } catch(e){} }
+  if (i < 0 || i >= TOUR.length) return;
+  const step = TOUR[i];
+  if (step.before) { try { step.before(); } catch(e){} }
+  const commit = () => {
+    // A target with no box on this screen is skipped, never pointed at --
+    // unless the step asked to be soft, in which case it shows as a centred
+    // card instead. The last step carries the keep-or-delete choice and must
+    // never be skipped, and App Feedback is hidden for an offline writer.
+    if (step.target && !step.softTarget && !tourRect(step.target)) {
+      const d = dir || 1;
+      if (i + d < 0 || i + d >= TOUR.length) { tourEnd(); markWizardSeen(); return; }
+      return tourGo(i + d, d);
+    }
+    _tourStep = i;
+    tourPaint();
+  };
+  // A step that opened something has to wait for it to arrive. The sims
+  // drawer and the app menu slide in on a transform, so measuring on the same
+  // tick puts the spotlight where the panel WAS -- off the right-hand edge,
+  // 0px wide, which then reads as "not on screen" and skips a step that was
+  // about to be perfectly visible.
+  if (step.before) setTimeout(commit, 320); else commit();
+}
+
+// The union of every named target that has a box ON SCREEN, in viewport
+// coordinates. Off-screen is the same as absent for a spotlight's purposes:
+// a hole punched past the edge of the window lights nothing.
+function tourRect(sel) {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let box = null;
+  sel.split(',').forEach(one => {
+    const el = document.querySelector(one.trim());
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    if (r.right <= 2 || r.bottom <= 2 || r.left >= vw - 2 || r.top >= vh - 2) return;
+    box = box ? { top:Math.min(box.top,r.top), left:Math.min(box.left,r.left),
+                  bottom:Math.max(box.bottom,r.bottom), right:Math.max(box.right,r.right) }
+              : { top:r.top, left:r.left, bottom:r.bottom, right:r.right };
+  });
+  return box;
+}
+
+function tourPaint() {
+  const el = document.getElementById('tour');
+  if (!el) return;
+  const step = TOUR[_tourStep];
+  const hole = document.getElementById('tour-hole');
+  const tip  = document.getElementById('tour-tip');
+  const vw = window.innerWidth, vh = window.innerHeight;
+
+  const last = _tourStep === TOUR.length - 1;
+  const first = _tourStep === 0;
+  const body = (tourMobile() && step.mobBody)
+    ? step.body + '<div class="tour-mob">' + step.mobBody + '</div>' : step.body;
+  tip.innerHTML = `
+    <div class="tour-count">STEP ${_tourStep + 1} OF ${TOUR.length}</div>
+    <div class="tour-ttl">${esc(step.title)}</div>
+    <div class="tour-body">${body}</div>
+    <div class="tour-act">${
+      first ? `<button class="btn btn-p" onclick="tourBegin()">Show me around</button>
+               <button class="btn btn-s" onclick="tourSkip()">Skip</button>`
+      : last ? `<button class="btn btn-s" onclick="tourBack()">Back</button>
+                <div style="flex:1"></div>
+                <span class="tour-choice">
+                  <button class="btn btn-p" onclick="tourFinishExample('keep')">Keep it</button>
+                  <button class="btn btn-s" onclick="tourFinishExample('delete')">Delete it</button>
+                </span>`
+      : `<button class="btn btn-s" onclick="tourBack()">Back</button>
+         <div style="flex:1"></div>
+         <button class="btn btn-s" onclick="tourQuit()">Close</button>
+         <button class="btn btn-p" onclick="tourNext()">Next</button>`
+    }</div>`;
+
+  const box = step.target ? tourRect(step.target) : null;
+  if (!box) {
+    // No target: no hole, so the shadow dims the whole screen and the card
+    // sits in the middle of it.
+    hole.style.cssText = 'top:50%;left:50%;width:0;height:0;border-radius:0';
+    tip.style.top = '50%'; tip.style.left = '50%';
+    tip.style.transform = 'translate(-50%,-50%)';
+    return;
+  }
+  tip.style.transform = 'none';
+  const pad = 6;
+  const t = Math.max(0, box.top - pad), l = Math.max(0, box.left - pad);
+  const w = Math.min(vw, box.right + pad) - l, h = Math.min(vh, box.bottom + pad) - t;
+  hole.style.cssText = `top:${t}px;left:${l}px;width:${w}px;height:${h}px;border-radius:8px`;
+
+  const tw = tip.offsetWidth, th = tip.offsetHeight, gap = 14;
+  let top;
+  if (t + h + gap + th <= vh - 8)      top = t + h + gap;      // below
+  else if (t - gap - th >= 8)          top = t - gap - th;     // above
+  else                                 top = Math.max(8, Math.min(vh - th - 8, t + h + gap));
+  let left = l + w / 2 - tw / 2;
+  left = Math.max(10, Math.min(vw - tw - 10, left));
+  tip.style.top = Math.round(top) + 'px';
+  tip.style.left = Math.round(left) + 'px';
+}
+
+// Pressing "Show me around" is what makes the example sim -- skipping never
+// leaves one behind.
+function tourBegin() {
+  const id = tourMakeExample();
+  openDoc(id);
+  // openDoc paints the editor and, on a phone, may move furniture around.
+  // Measure on the next frame or the first spotlight lands on a stale box.
+  requestAnimationFrame(() => requestAnimationFrame(() => tourGo(1, 1)));
+}
+
+// Deletion goes through delDoc so a joint sim, the nav, the sync and the
+// dashboard counts are all somebody else's problem, exactly as they are for
+// every other sim. The mission and the scene go with it -- they were made for
+// this and nothing else is in them.
+function tourFinishExample(what) {
+  const id = _tourExampleId;
+  _tourExampleId = null;
+  markWizardSeen();
+  tourEnd();
+  if (!id || !S.docs[id]) { showDashboard(); return; }
+  if (what === 'keep') { openDoc(id); return; }
+  const doc = S.docs[id];
+  const mId = doc.missionId, scId = doc.sceneId;
+  delDoc(id, true);
+  if (scId && S.scenes[scId] && !Object.values(S.docs).some(d => d.sceneId === scId)) delete S.scenes[scId];
+  if (mId && S.missions[mId] && !Object.values(S.docs).some(d => d.missionId === mId)) delete S.missions[mId];
+  persist(); schedSync(); renderNav();
+  showDashboard();
 }
 
 // ================================================================
@@ -3493,6 +3963,12 @@ function renderDashboard() {
           <div class="dash-stat-item" title="${dspTip}"><div class="dash-stat-num" style="color:${dspColor}">${dspVal}</div><div class="dash-stat-lbl">SINCE LAST POST</div></div>
         </div>
       </div>
+      <div class="dash-header-right">
+        <button class="dash-wn" id="dash-wn" onclick="wnOpen('new')"
+          title="What's new in LCARS, and what is planned">
+          ${ic('sparkles')}<span>WHAT'S NEW</span>
+        </button>
+      </div>
     </div>
     ${inProgress.length ? `
       <div class="dash-section">IN PROGRESS</div>
@@ -3548,10 +4024,10 @@ function renderDashboard() {
       </button>
     </div>
     <div class="dash-actions">
-      <button class="dash-action" onclick="showWizard()">
+      <button class="dash-action" onclick="tourStart()">
         <div class="da-icon">${ic('sparkles')}</div>
         <div class="da-label">Getting Started</div>
-        <div class="da-hint">A quick tour, and how to bring old sims across</div>
+        <div class="da-hint">A quick tour of the app and where everything lives</div>
       </button>
       <button class="dash-action" onclick="window.open('LCARS-Guide-v2.html','_blank')">
         <div class="da-icon">${ic('book-open')}</div>
@@ -3559,6 +4035,11 @@ function renderDashboard() {
         <div class="da-hint">Open the full user guide</div>
       </button>
     </div>`;
+  // A badge on the Dashboard rather than a popup at boot. Boot already raises
+  // four prompts on a timer and they have collided three times; this one waits
+  // to be noticed instead of joining the queue.
+  const wnBtn = document.getElementById('dash-wn');
+  if (wnBtn) wnBtn.classList.toggle('has-new', wnHasNew());
 }
 
 
@@ -5212,6 +5693,83 @@ function updateCharsPanel(doc) {
   }).join('');
 }
 
+// "a, b and c" -- a comma-joined list reads as a stutter in a warning.
+function listJoin(a) {
+  if (a.length <= 1) return a[0] || '';
+  return a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+}
+
+// Unticking a character who has a record in Characters. Two different
+// intentions wear the same gesture -- "not in this sim" and "not mine at
+// all" -- so it asks which, rather than silently picking one.
+//
+// The prompt says what would actually be destroyed. A record LCARS made from
+// a tick holds nothing but a name and is free to throw away; one the writer
+// has filled in holds aliases, a colour, a picture and notes, and removing it
+// is the expensive answer. Same question either way, different warning.
+function untickAsk(doc, name, char, di, gi) {
+  const extras = [];
+  if ((char.aliases || []).length) extras.push((char.aliases.length) + ' alias' + (char.aliases.length === 1 ? '' : 'es'));
+  if (char.pictureDataUrl) extras.push('their picture');
+  if (char.charType || char.rank || char.division || char.species) extras.push('their details');
+  if ((char.notes || '').trim()) extras.push('your notes');
+  const colour = (doc.charColors || {})[name];
+  if (colour) extras.push('their colour');
+  const others = Object.values(S.docs).filter(d => d.id !== doc.id
+    && (d.myChars || []).some(m => sameCharName(m, name))).length;
+
+  const warn = extras.length
+    ? `<div style="font-size:0.8rem;line-height:1.6;color:var(--dim);border-left:3px solid var(--amber);padding:8px 11px;margin-top:12px">
+         Removing them from Characters also destroys ${esc(listJoin(extras))}. That cannot be undone.
+       </div>`
+    : `<div style="font-size:0.8rem;line-height:1.6;color:var(--dim);margin-top:12px">
+         Nothing else is stored against them, so there is nothing to lose.
+       </div>`;
+  const elsewhere = others
+    ? `<div style="font-size:0.8rem;line-height:1.6;color:var(--dim);margin-top:8px">
+         They are also marked as yours in ${others} other sim${others === 1 ? '' : 's'}, which ${others === 1 ? 'is' : 'are'} not changed.
+       </div>`
+    : '';
+
+  _untickPending = { docId: doc.id, name, charId: char.id, di, gi };
+  openModal(`REMOVE ${(name || '').toUpperCase()}?`, `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <strong>${esc(name)}</strong> is in your Characters list. Take them out of this sim only,
+      or out of your characters entirely?
+    </div>${warn}${elsewhere}`,
+    null, {
+      noCancel: false,
+      extra: [
+        { label: 'This sim only', cls: 'btn-p', fn: 'untickDo(false)' },
+        { label: 'Remove from Characters', cls: 'btn-s', fn: 'untickDo(true)' },
+      ],
+    });
+}
+
+let _untickPending = null;
+
+function untickDo(alsoRemoveRecord) {
+  const p = _untickPending; _untickPending = null;
+  closeModal();
+  if (!p) return;
+  const doc = S.docs[p.docId]; if (!doc) return;
+  // Re-find rather than trusting the indexes: the panel can repaint while the
+  // question is on screen, and acting on a stale index is how the alias editor
+  // used to save onto the wrong row.
+  const di = (doc.myChars || []).findIndex(m => sameCharName(m, p.name));
+  if (di >= 0) doc.myChars.splice(di, 1);
+  const gi = (S.settings.myChars || []).findIndex(m => sameCharName(m, p.name));
+  if (gi >= 0) S.settings.myChars.splice(gi, 1);
+  if (alsoRemoveRecord && S.characters && S.characters[p.charId]) {
+    delete S.characters[p.charId];
+    if (_curCharId === p.charId) _curCharId = null;
+  }
+  jpRememberMyChars(doc);
+  persist(); updateCharsPanel(doc);
+  if (isCloud()) schedSync();
+  if (_routeView === 'characters') refreshManifest();
+}
+
 function toggleMyChar(i) {
   const name = _charList[i]; if (!name || !curId) return;
   const doc = S.docs[curId]; if (!doc) return;
@@ -5223,11 +5781,21 @@ function toggleMyChar(i) {
   const di = doc.myChars.findIndex(m => sameCharName(m, name));
   const gi = S.settings.myChars.findIndex(m => sameCharName(m, name));
   if (di>=0) {
+    // Ticking now creates a character record, so unticking has to be able to
+    // undo exactly that -- otherwise a mis-tap leaves somebody in your
+    // Characters list with no obvious way out. Ask, rather than guessing which
+    // of the two the writer meant.
+    const char = findCharByAnyName(name);
+    if (char) { untickAsk(doc, name, char, di, gi); return; }
     doc.myChars.splice(di,1);
     if (gi>=0) S.settings.myChars.splice(gi,1);
   } else {
     doc.myChars.push(name);
-    if (gi<0) S.settings.myChars.push(name);
+    // Ticking is the claim, so register the character here and now. It used to
+    // land in S.settings.myChars alone and reach S.characters only the next
+    // time the Characters view was opened -- so until you went there, the name
+    // you had just called yours did not catch in a sim title.
+    claimChar(name);
   }
   jpRememberMyChars(doc);
   persist(); updateCharsPanel(doc);
@@ -6888,12 +7456,12 @@ function delScene(id){
   persist(); renderNav();
 }
 
-function delDoc(id){
+function delDoc(id, noConfirm){
   // A joint sim does not live in S.docs alone -- deleting the local copy left
   // the shared row untouched, so the next refresh pulled it straight back and
   // the sim was, in practice, undeletable.
   if (isJointDoc(S.docs[id])) return jpDeleteOrLeave(id);
-  if(!confirm('Delete this sim? This cannot be undone.')) return;
+  if(!noConfirm && !confirm('Delete this sim? This cannot be undone.')) return;
   if(curId===id){ curId=null; curView=null; curViewId=null; showDashboard(); }
   delete S.docs[id]; persist();
   schedSync();     // or the server copy comes back on the next device that syncs
@@ -7429,7 +7997,7 @@ function settingsAppearanceCard() {
         <div class="ml">VISUAL STYLE</div>
         <div class="set-tiles" style="margin-top:6px">
           ${pick(skin==='prime', "setStyleFromSettings('prime',this,event)", 'sparkles',
-            `Delta Prime (${STYLE_VERSION})`, 'The current look. Still being tuned.')}
+            'Delta Prime', 'The current look. Still being tuned.')}
           ${pick(skin==='classic', "setStyleFromSettings('classic',this,event)", 'layout-grid',
             'Classic LCARS (4.21)', 'The original look, kept available.')}
         </div>
@@ -7802,7 +8370,7 @@ function settingsAboutCard() {
         </div>
         <div id="ver-hist" class="hidden set-changelog">${renderVersionHistory()}</div>
         <div class="set-tiles" style="margin-top:12px">
-          ${setBtn('showWizard()', 'sparkles', 'Getting Started', 'The quick tour of how LCARS works.')}
+          ${setBtn('tourStart()', 'sparkles', 'Getting Started', 'A guided tour of how LCARS works, pointing at the real controls.')}
           ${setBtn("window.open('LCARS-Guide-v2.html','_blank')", 'book-open', 'Full user guide', 'Every part of the tool, in detail.')}
           ${setBtn('showBuiltWith()', 'circle-dot', 'Built with Claude Code', 'How this tool was made, and what it does not do.')}
         </div>
@@ -7966,17 +8534,40 @@ function getCharInitials(name) {
 
 // Everything the manifest needs before it is shown. Called by showView, which
 // owns the actual display and the URL.
+// One place a name becomes one of YOUR characters, used by every route in:
+// ticking a name in a sim, opening the Characters view, and adding a character
+// by hand. The two halves have to move together or they disagree:
+//   S.characters        -- the character RECORD. Registering here is what makes
+//                          the name catch in a sim title, because charsFromTitle
+//                          reads getRegisteredAliases(), which reads this.
+//   S.settings.myChars  -- the names you have claimed, which is what pre-ticks
+//                          them in the next sim you write.
+// Writing one without the other is the bug this fixes: a name ticked in twenty
+// sims was claimed but never registered, so it never caught in a title until
+// you happened to open the Characters view, which seeded it on the way past.
+// Returns the character record either way.
+function claimChar(name, charType) {
+  const n = (name || '').trim();
+  if (!n) return null;
+  if (!S.characters) S.characters = {};
+  if (!S.settings.myChars) S.settings.myChars = [];
+  let char = findCharByAnyName(n);
+  if (!char) {
+    const id = uid();
+    char = { id, name:n, aliases:[], charType:charType||'', rank:'', division:'', divisionColor:'',
+      species:'', pictureDataUrl:null, wikiUrl:'', notes:'', addedAt:Date.now(), updatedAt:Date.now() };
+    S.characters[id] = char;
+  }
+  if (!S.settings.myChars.some(m => sameCharName(m, n))) S.settings.myChars.push(n);
+  return char;
+}
+
 function prepManifest() {
   flushSave(); // prune stale myChars before auto-seeding manifest
   if (!S.characters) S.characters = {};
-  // Auto-seed from myChars (checks primary name + aliases)
-  (S.settings.myChars||[]).forEach(name => {
-    if (!findCharByAnyName(name)) {
-      const id = uid();
-      S.characters[id] = {id, name, aliases:[], charType:'', rank:'', division:'', divisionColor:'',
-        species:'', pictureDataUrl:null, wikiUrl:'', notes:'', addedAt:Date.now(), updatedAt:Date.now()};
-    }
-  });
+  // Kept as a backstop for anything claimed before claimChar() existed. New
+  // ticks register on the spot, so this now finds nothing to do.
+  (S.settings.myChars||[]).slice().forEach(name => claimChar(name));
   persist();
   _manifestActiveTab = 'sims';
   renderManifestList();
@@ -8051,13 +8642,13 @@ function addNewCharacter() {
     const name = document.getElementById('cm-new-name').value.trim();
     if (!name) { alert('Please enter a name.'); return false; }
     if (!S.characters) S.characters = {};
-    const id = uid();
-    const charType = document.getElementById('cm-new-type').value;
-    S.characters[id] = {id, name, aliases:[], charType, rank:'', division:'', divisionColor:'',
-      species:'', pictureDataUrl:null, wikiUrl:'', notes:'', addedAt:Date.now(), updatedAt:Date.now()};
+    // claimChar registers the record AND claims the name, so a character you
+    // add here pre-ticks in the next sim you write rather than only catching
+    // in titles. Adding somebody to your own character list is the claim.
+    const char = claimChar(name, document.getElementById('cm-new-type').value);
     persist();
     renderManifestList();
-    selectCharacter(id);
+    selectCharacter(char.id);
   });
 }
 
@@ -9065,7 +9656,6 @@ document.addEventListener('DOMContentLoaded',()=>{
     // ID, pulls the account and decides what to show.
   } else if (isFileCopy() && !getMode()) {
     setMode('local');                   // the offline copy has only one mode
-    maybeShowStyleIntro();
     maybeShowWizard();
   } else if (!getMode()) {
     // Someone who has just asked to delete their account lands here signed out.
@@ -9096,7 +9686,6 @@ document.addEventListener('DOMContentLoaded',()=>{
         .then(() => { jpMaybePromptInvites(); });
       initAdmin();
     }
-    maybeShowStyleIntro();              // held back behind the gate on a first visit
     maybeShowWizard();
   }
 });
