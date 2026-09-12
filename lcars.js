@@ -10,7 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
-      'Fixed: on a phone, a tour step pointing at something tall — the sims list, the editor, the characters panel — had its own text box land on top of it, hiding the thing it was describing. The box now sits against an edge of the screen and the highlight stops short of it, so the two never overlap',
+      'Fixed: on a phone, a tour step pointing at something tall — the sims list, the editor, the characters panel — had its own text box land on top of it, hiding the thing it was describing. The box now sits against an edge of the screen, takes at most half of it, and scrolls its own text if there is more, so what is being pointed at always has room to be seen',
       'Unticking a character who is in your Characters list now asks whether you meant to take them out of that sim only, or out of your characters altogether. If anything is stored against them — aliases, a colour, a picture, your notes — it says exactly what removing them would destroy',
       'Ticking a character as yours in a sim now adds them to your Characters list straight away, so the name is recognised in a sim title from that moment. It used to only be remembered as a name you had claimed, and did not become a character until the next time you happened to open the Characters view — until then, titling a sim after them did nothing',
       'Adding a character in the Characters view now also counts them as yours, so they are ticked automatically in the next sim they appear in rather than waiting to be ticked by hand',
@@ -3505,9 +3505,11 @@ function tourPaint() {
   const body = (tourMobile() && step.mobBody)
     ? step.body + '<div class="tour-mob">' + step.mobBody + '</div>' : step.body;
   tip.innerHTML = `
-    <div class="tour-count">STEP ${_tourStep + 1} OF ${TOUR.length}</div>
-    <div class="tour-ttl">${esc(step.title)}</div>
-    <div class="tour-body">${body}</div>
+    <div class="tour-scroll">
+      <div class="tour-count">STEP ${_tourStep + 1} OF ${TOUR.length}</div>
+      <div class="tour-ttl">${esc(step.title)}</div>
+      <div class="tour-body">${body}</div>
+    </div>
     <div class="tour-act">${
       first ? `<button class="btn btn-p" onclick="tourBegin()">Show me around</button>
                <button class="btn btn-s" onclick="tourSkip()">Skip</button>`
