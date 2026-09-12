@@ -3489,15 +3489,6 @@ function tourRect(sel) {
   return box;
 }
 
-// Fades the last line while there is more to read, and clears it at the end.
-function tourFade() {
-  const sc = document.querySelector('#tour-tip .tour-scroll');
-  if (!sc) return;
-  const more = sc.scrollHeight - sc.clientHeight - sc.scrollTop > 4;
-  sc.classList.toggle('more', more);
-  if (!sc._bound) { sc._bound = true; sc.addEventListener('scroll', tourFade, { passive: true }); }
-}
-
 function tourPaint() {
   const el = document.getElementById('tour');
   if (!el) return;
@@ -3581,7 +3572,6 @@ function tourPaint() {
   left = Math.max(10, Math.min(vw - tw - 10, left));
   tip.style.top = Math.round(top) + 'px';
   tip.style.left = Math.round(left) + 'px';
-  tourFade();
 }
 
 // Pressing "Show me around" is what makes the example sim -- skipping never
