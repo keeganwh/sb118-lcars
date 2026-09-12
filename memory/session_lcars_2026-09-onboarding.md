@@ -192,6 +192,30 @@ Supabase (`prefs.seenWhatsNew` syncing between two devices in particular).
   dashboard rules; `#wn-panel` shares `#fb-panel`'s chrome; the phone rules are
   in the one `RESPONSIVE` section at the foot.
 
+## The phone round, and the four harnesses that lied
+
+After Batch 5B merged, the user ran the tour on a real iPhone and found the
+card covering what it pointed at, the highlight collapsed to nothing, and the
+text unscrollable. Four fixes, and **four test harnesses that reported success
+on a broken app**:
+
+| The check said | What was true |
+|---|---|
+| 0% overlap, nothing vanished | The card had squeezed the highlight to a sliver — which is not overlap |
+| Nothing over-clipped | The lit region was 270px of empty white box below the list |
+| Card fits at 390x780 | iOS Safari's chrome leaves ~600px, and `dvh` resolves to the TALL measurement |
+| Scrolling works (`scrollTop = 9999`) | Passes on an element no finger can move |
+
+The last harness — a CDP `synthesizeScrollGesture` touch drag — **still reports
+0/10 steps scrollable on a card the user can scroll with their thumb.** It is
+wrong, not the app. **When the harness and a real device disagree, the device
+is right.**
+
+The fixes worth keeping: size an overlay off `svh` and clamp it; when clipping
+a tall target keep its TOP, because that is what identifies a list; and make
+the outer box the scroller rather than an element inside a `max-height` flex
+column, with the controls `position:sticky` at its foot.
+
 ## Left for next time
 
 - **`HIGHLIGHTS` and `PLANNED` need curating on every release.** Nothing updates

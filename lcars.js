@@ -10,13 +10,16 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'Fixed: moving to the next step of the tour could open it already scrolled part-way down its own text, if the step before it had been scrolled',
+      'The tour\'s text box scrolls properly on a phone now, and fades its last line when there is more to read rather than stopping mid-sentence',
+      'Fixed: on a phone, a tour step pointing at something tall — the sims list, the editor, the characters panel — had its own text box land on top of it, hiding the thing it was describing. The box now sits against an edge of the screen, takes at most half of it, and scrolls its own text if there is more, so what is being pointed at always has room to be seen',
       'A pass over every icon in the app. Buttons that shared a symbol no longer do: the Dashboard is a house and Save as Template a copy, Characters is a pair of people and Joint Sim Invites a person with a plus, Sim Details is an information mark and the Settings contents a menu, Admin is a shield with a tick and a reply from the team a message, Snapshots is a clock rather than a camera, and Unarchive is its own mark rather than the undo arrow',
       'The App Feedback button is no longer a warning triangle. A triangle there read as something being wrong with LCARS rather than an invitation to tell us something, so it is now a message with a mark in it; the Bug half of the report form is a bug, the admin queues are an in-tray, and Send is a paper plane',
-      'A few more icons now say what they do: Start a New Mission is a heading arrow, View in Characters a person with a magnifier, Post Date a calendar with a tick, Refresh Stats a pair of circling arrows, and Overwrite, when restoring a backup, a replace mark',
+      'A few more icons now say what they do: Start a New Mission is a heading arrow, View in Characters a person with a magnifier, Post Date a calendar with a tick, Refresh Stats a pair of circling arrows, Overwrite, when restoring a backup, a replace mark, and the Academy Mode banner a graduation cap rather than the warning triangle it shared with everything else',
       'Create a new Scene is now a stack of layers, so it no longer shares its mark with the bullet-list button in the toolbar',
       'Every row in Settings has its icon back. Display name, Set up an account, Change my PIN, Sync data now, Back up my data, Restore from a backup, Built with Claude Code and the Your Account and Sim Templates entries in the contents rail were all drawing nothing, and Change my PIN is now a padlock, Sync data now a cloud, and Built with Claude Code a pair of brackets',
       'A linked Discord or Google account now reads as one: the row keeps the chain icon, and the word \'linked\' is picked out in your own accent colour \u2014 your duty post in Delta Prime, or your theme\'s colour in classic \u2014 with a tick after it. It had been showing a broken chain, which says an account is disconnected rather than connected',
-      'Four more Settings rows say what they do: Display name is a person with a pencil, Share my contact the contact card the button hands over, Sign out a door rather than the arrow that means Move to Scene, and a linked Discord or Google account shows a broken link, since clicking it unlinks the account rather than linking it again',
+      'Three more Settings rows say what they do: Display name is a person with a pencil, Share my contact the contact card the button hands over, and Sign out a door rather than the arrow that means Move to Scene',
       'Two icons that nothing in the app used have been taken out',
       'The Getting Started, What\'s New and Delta Prime mark is now the three-part sparkle rather than the single star it had been drawing',
       'Unticking a character who is in your Characters list now asks whether you meant to take them out of that sim only, or out of your characters altogether. If anything is stored against them — aliases, a colour, a picture, your notes — it says exactly what removing them would destroy',
@@ -3162,8 +3165,7 @@ const TOUR = [
       <strong>Sims</strong> are the individual writings you post to your group.
       <br><br>Have a look at the Example Mission, Scene and Sim just added to your profile to see
       this in action.`,
-    mobBody: `On a phone this list is collapsed by default and opens from the <strong>SIMS</strong>
-      tab on the right-hand edge, which is open now.`,
+    mobBody: `On a phone it opens from the <strong>SIMS</strong> tab on the right-hand edge.`,
   },
   {
     id: 'title',
@@ -3220,33 +3222,10 @@ const TOUR = [
     title: 'Characters & Colour Coding',
     body: `As characters get added to the scene, LCARS detects them automatically and adds them to
       a list. Tick one to claim it as your own.
-      <br><br>You can also give a character a preset or custom colour, which carries through all
-      of their dialogue. Once a colour is set, <strong>Shift + right-click</strong> a paragraph to
-      assign it to that character and take its colour &mdash; handy for collating other people's
-      sims into one working document.
-      <br><br>Don't worry: these colours appear in LCARS only and do not copy out when you post.`,
-    mobBody: `On a phone, characters share a drawer with the list of sims.`,
-  },
-  {
-    id: 'charlist',
-    target: '#btn-manifest-toggle',
-    before: () => {
-      tourEnsureSim();
-      if (!tourMobile()) return;
-      mobDrawer(null);
-      document.body.classList.add('mob-more');
-      const b = document.getElementById('hdr-more');
-      if (b) b.setAttribute('aria-expanded', 'true');
-    },
-    after: () => { document.body.classList.remove('mob-more'); },
-    title: 'Your Characters List',
-    body: `<strong>Characters</strong>, accessed via the top bar, is where all your claimed
-      characters live. Characters you check off as yours while writing appear here, but you can
-      also add characters manually, add their details, and even give them aliases that LCARS will
-      know to identify them with.
-      <br><br>Adding a character here is what lets LCARS recognise them in a sim title, so it is
-      worth doing for anyone you write regularly.`,
-    mobBody: `On a phone this lives behind the grid button, which is open now.`,
+      <br><br>Give a character a colour and it carries through all of their dialogue. These are
+      for writing only &mdash; they do not copy out when you post.
+      <br><br>Once a colour is set, <strong>Shift + right-click</strong> a paragraph to assign it
+      to that character, which helps when collating other people's sims.`,
   },
   {
     id: 'copy',
@@ -3279,7 +3258,27 @@ const TOUR = [
     body: `<strong>Dashboard</strong> brings you back here from anywhere. It holds your missions,
       how long it has been since you last posted, what is in progress, and what you posted
       recently.`,
-    mobBody: `On a phone this lives behind the grid button, which is open now.`,
+    mobBody: `On a phone this lives behind the grid button.`,
+  },
+  {
+    id: 'charlist',
+    target: '#btn-manifest-toggle',
+    before: () => {
+      if (curId) closeDoc();
+      if (!tourMobile()) return;
+      mobDrawer(null);
+      document.body.classList.add('mob-more');
+      const b = document.getElementById('hdr-more');
+      if (b) b.setAttribute('aria-expanded', 'true');
+    },
+    after: () => { document.body.classList.remove('mob-more'); },
+    title: 'Your Characters List',
+    body: `<strong>Characters</strong>, accessed via the top bar, is where all your claimed
+      characters live. Ones you tick while writing appear here, and you can add others by hand,
+      fill in their details, and give them aliases LCARS will recognise them by.
+      <br><br>Adding a character here is what lets LCARS pick them up from a sim title, so it is
+      worth doing for anyone you write regularly.`,
+    mobBody: `On a phone this lives behind the grid button.`,
   },
   {
     id: 'yours',
@@ -3300,7 +3299,7 @@ const TOUR = [
       backup of everything you have written. Signed in, your work saves to your account a few
       seconds after each change and follows you to any device &mdash; a backup now and then is
       still worth taking.`,
-    mobBody: `On a phone both live behind the grid button, which is open now.`,
+    mobBody: `On a phone both live behind the grid button.`,
   },
   {
     id: 'whatsnew',
@@ -3514,9 +3513,11 @@ function tourPaint() {
   const body = (tourMobile() && step.mobBody)
     ? step.body + '<div class="tour-mob">' + step.mobBody + '</div>' : step.body;
   tip.innerHTML = `
-    <div class="tour-count">STEP ${_tourStep + 1} OF ${TOUR.length}</div>
-    <div class="tour-ttl">${esc(step.title)}</div>
-    <div class="tour-body">${body}</div>
+    <div class="tour-scroll">
+      <div class="tour-count">STEP ${_tourStep + 1} OF ${TOUR.length}</div>
+      <div class="tour-ttl">${esc(step.title)}</div>
+      <div class="tour-body">${body}</div>
+    </div>
     <div class="tour-act">${
       first ? `<button class="btn btn-p" onclick="tourBegin()">Show me around</button>
                <button class="btn btn-s" onclick="tourSkip()">Skip</button>`
@@ -3548,14 +3549,44 @@ function tourPaint() {
   hole.style.cssText = `top:${t}px;left:${l}px;width:${w}px;height:${h}px;border-radius:8px`;
 
   const tw = tip.offsetWidth, th = tip.offsetHeight, gap = 14;
-  let top;
+  let top, holeT = t, holeH = h;
   if (t + h + gap + th <= vh - 8)      top = t + h + gap;      // below
   else if (t - gap - th >= 8)          top = t - gap - th;     // above
-  else                                 top = Math.max(8, Math.min(vh - th - 8, t + h + gap));
+  else {
+    // Neither side has room, which on a phone means the target is most of the
+    // screen -- the sims drawer, the editor, the app menu sheet. The old
+    // fallback clamped the card into the middle of the viewport, so it sat ON
+    // TOP of the very thing the step was pointing at. Pin it to an edge and
+    // CLIP the hole so the two never overlap: bottom edge by preference, since
+    // the top of a list is the part worth seeing.
+    // Work out how much of the target each edge would leave lit, and take the
+    // better one. A fixed threshold got this wrong: it chose the top edge
+    // whenever the bottom left under 90px, even when the top left NONE -- a
+    // target sitting above the card's own bottom clipped to a negative
+    // height and vanished, which is what happened to Style and Settings on a
+    // real phone.
+    const cardTop = vh - th - 8;
+    const aTop = t, aH = Math.max(0, Math.min(t + h, cardTop - gap) - aTop);
+    const bTop = Math.max(t, 8 + th + gap), bH = Math.max(0, (t + h) - bTop);
+    // Prefer the card at the BOTTOM, which leaves the TOP of the target lit.
+    // Taking whichever region was simply larger looked right in the numbers
+    // and was wrong on screen: the characters panel is 360px tall but its
+    // rows are all in the first 70px, so lighting the bigger lower region lit
+    // an empty white box. The top of a list is what identifies it; 60px is
+    // about two rows, which is enough to recognise.
+    if (aH >= 60 || aH >= bH) { top = cardTop; holeT = aTop; holeH = aH; }
+    else                      { top = 8;       holeT = bTop; holeH = bH; }
+    hole.style.top = Math.round(Math.max(0, holeT)) + 'px';
+    hole.style.height = Math.round(Math.max(0, holeH)) + 'px';
+  }
   let left = l + w / 2 - tw / 2;
   left = Math.max(10, Math.min(vw - tw - 10, left));
   tip.style.top = Math.round(top) + 'px';
   tip.style.left = Math.round(left) + 'px';
+  // A new step starts at the top of its own text. Without this the card keeps
+  // wherever the previous step was scrolled to, so a short step can open
+  // already scrolled past its first line.
+  if (tip.scrollTop) tip.scrollTop = 0;
 }
 
 // Pressing "Show me around" is what makes the example sim -- skipping never
