@@ -1133,11 +1133,20 @@ body.hc .contact-card-bar{color:#000}
    Safari's chrome is counted -- which left no room for the spotlight and
    squeezed the hole down to a sliver at the edge of the screen. */
 #tour-tip{position:absolute;width:min(360px,calc(100vw - 20px));
-  display:flex;flex-direction:column;max-height:calc(100dvh - 24px);
+  display:flex;flex-direction:column;max-height:calc(100svh - 24px);
   background:var(--panel);border:1px solid var(--border);border-radius:10px;
   padding:16px 18px;box-shadow:0 10px 40px rgba(0,0,0,.5);
   border-top:3px solid var(--amber)}
-.tour-scroll{overflow-y:auto;min-height:0;overscroll-behavior:contain}
+/* flex:1 1 auto and an explicit min-height:0 are both needed or the element
+   refuses to become the scroller inside a max-height flex column; touch-action
+   states the gesture so nothing higher up can swallow it. */
+.tour-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;position:relative;
+  -webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain}
+/* A card that cuts off mid-sentence with no edge to it reads as a bug, not as
+   "there is more". The mask fades the last line out and disappears once the
+   text is scrolled to the end. */
+.tour-scroll.more{-webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent);
+  mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent)}
 .tour-count{font-size:0.6rem;letter-spacing:2px;font-weight:700;color:var(--amber);
   margin-bottom:6px}
 .tour-ttl{font-size:1rem;font-weight:700;color:var(--text);margin-bottom:8px;line-height:1.35}
@@ -1387,10 +1396,13 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
      row -- Back / Close / Next on one 390px line leaves each of them a tap
      target too small to hit. */
   /* Under half the screen, so the top of whatever is being pointed at still
-     has room below the card. At 52dvh the characters panel only had 22px left
-     above the card -- less than one row -- and the placement fell back to
-     lighting the empty space underneath instead. The text scrolls inside. */
-  #tour-tip{width:calc(100vw - 20px);padding:14px 15px;max-height:44dvh}
+     has room below the card. svh, not dvh: the DYNAMIC viewport can resolve
+     to the tall chrome-hidden measurement, which is the very case that leaves
+     no room. Clamped rather than a flat percentage: a bare 40% is 224px on a
+     560px screen, which made every step scroll, while 44% of a tall phone is
+     more card than the spotlight can spare. */
+  #tour-tip{width:calc(100vw - 20px);padding:14px 15px;
+    max-height:clamp(200px, 44svh, 360px)}
   .tour-act .btn{flex:1 1 auto;justify-content:center}
   .tour-choice{flex:1 1 100%}
   .tour-choice .btn{flex:1 1 auto}
