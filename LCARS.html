@@ -40,6 +40,11 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
             intelligence:{calmLight:'#55514C',epicLight:'#55514C',dark:'#C4BDB4',inkLight:'#FFFFFF',txLight:null}};
   var d={skin:'prime',duty:'command',mode:'system',vibe:'calm'},s=d;
   try{var r=localStorage.getItem('lcars_style_v1');if(r){var p=JSON.parse(r);if(p&&typeof p==='object')s={skin:p.skin||d.skin,duty:p.duty||d.duty,mode:p.mode||d.mode,vibe:p.vibe||d.vibe};}}catch(e){}
+  /* The classic skin was removed in 4.26 and has no stylesheet left, so a
+     mirror still naming it would paint an unstyled first frame. Same mapping
+     as migrateClassicStyle() in lcars.js -- change both together. */
+  if(s.skin!=='prime'){var tm='dark';try{var lv=JSON.parse(localStorage.getItem('lcars_v1')||'{}');tm=(lv.settings&&lv.settings.theme)||'dark';}catch(e){}
+    s={skin:'prime',duty:'operations',vibe:'calm',mode:tm==='light'?'light':'dark'};}
   var mode=s.mode;
   if(mode==='system'){try{mode=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}catch(e){mode='dark';}}
   var b=document.documentElement;
@@ -164,15 +169,6 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
       <button class="btn btn-s btn-sm" id="btn-style" title="Style"
               aria-haspopup="true" aria-expanded="false" onclick="toggleStyleMenu()"><svg class="ic" aria-hidden="true"><use href="#i-palette"/></svg> Style <svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
       <div id="style-menu" role="menu" aria-label="Visual style"></div>
-    </div>
-    <div class="theme-picker">
-      <button class="btn btn-s btn-sm" id="btn-theme" title="Theme"><svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg></button>
-      <div class="theme-dropdown">
-        <button class="theme-opt" data-theme="dark" onclick="setTheme('dark')"><svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg> Dark</button>
-        <button class="theme-opt" data-theme="light" onclick="setTheme('light')"><svg class="ic" aria-hidden="true"><use href="#i-sun"/></svg> Light</button>
-        <button class="theme-opt" data-theme="hc" onclick="setTheme('hc')"><svg class="ic" aria-hidden="true"><use href="#i-contrast"/></svg> High Contrast</button>
-        <button class="theme-opt" onclick="toggleSkin(this,event)"><svg class="ic" aria-hidden="true"><use href="#i-sparkles"/></svg> Delta Prime look</button>
-      </div>
     </div>
     <button class="btn btn-s btn-sm hidden" onclick="jpShowInvites()" id="btn-jp-invites" title="Joint sim invitations"><svg class="ic" aria-hidden="true"><use href="#i-user-plus"/></svg> Invites<span id="jp-invite-badge" class="hidden"></span></button>
     <button class="btn btn-s btn-sm hidden" onclick="openAdmin()" id="btn-admin" title="Moderator tools"><svg class="ic" aria-hidden="true"><use href="#i-shield-check"/></svg> Admin<span id="admin-badge" class="hidden"></span></button>

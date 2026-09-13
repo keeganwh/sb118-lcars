@@ -10,6 +10,8 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'Changed: the classic LCARS look has been retired and Delta Prime is now the only style. If you were still using the classic look you have been moved across to the closest equivalent \u2014 Operations gold, in Calm, keeping whichever of light or dark you were on. High Contrast now opens in dark. Nothing about your sims or settings is affected, and you can change any of it from Style in the top bar',
+      'Changed: the Style menu is just the three choices now \u2014 duty post, appearance and mood. The button for reverting to the classic look, the What\u2019s New shortcut and the note about the classic look staying available have all gone; What\u2019s New is still on the Dashboard',
       'Added: three new duty colours \u2014 Diplomacy purple, Marines green and Intelligence grey \u2014 bringing the Style menu to seven. Pick one the same way as before',
       'Changed: Medical teal is a little deeper, and the writing on top of it is now white rather than black. The old pairing was hard to read in light mode; going slightly darker fixed both that and the teal used as text',
       'Changed: the writing on top of a duty colour is now chosen per colour rather than being black for all of them \u2014 white on Command red, Medical teal, Diplomacy, Marines and Intelligence, black on Operations gold and Science blue, because that is the more readable one in each case. Every other colour is unchanged',
@@ -493,7 +495,8 @@ let _sourceMode = false;
 // is applied as attributes on <html>, and every component reads CSS custom
 // properties — no component knows which skin is active.
 //
-// Skin 'classic' falls back entirely to the 4.21 Dark/Light/HC themes.
+// Delta Prime is the only skin as of 4.26; the classic 4.21 Dark/Light/HC
+// themes were removed and anyone still on one is migrated below.
 // ================================================================
 const STYLE_KEY = 'lcars_style_v1';   // tiny mirror for flash-free first paint
 // An accent has THREE values, not one, because it does three different jobs
@@ -537,10 +540,29 @@ const DUTY_LABELS = {
 };
 const STYLE_DEFAULTS = { skin:'prime', duty:'command', mode:'system', vibe:'calm' };
 
-function getStyle() { return Object.assign({}, STYLE_DEFAULTS, S.settings.style || {}); }
+// The classic 4.21 skin was removed in 4.26. A writer still on it is carried
+// across to the nearest Delta Prime setting rather than being dropped on the
+// default: their dark/light choice is kept, high contrast resolves to dark
+// (it was the darker of the two), the accent becomes Operations gold as the
+// closest thing to classic's amber, and the vibe is Calm -- Epic's frosting
+// and gradients are a long way from the flat look they chose.
+const CLASSIC_MODE_MAP = { dark:'dark', light:'light', hc:'dark' };
+function migrateClassicStyle(style, theme) {
+  return { skin:'prime', duty:'operations', vibe:'calm',
+           mode: CLASSIC_MODE_MAP[theme] || 'dark' };
+}
+
+// Coerces on every read as well as at load. The stored value can still say
+// 'classic' -- from a device that has not synced, or a cloud payload written
+// by an older build -- and there is no stylesheet left to render it.
+function getStyle() {
+  const st = Object.assign({}, STYLE_DEFAULTS, S.settings.style || {});
+  if (st.skin !== 'prime') return Object.assign(st, migrateClassicStyle(st, S.settings.theme));
+  return st;
+}
 
 // Space Grotesk (display) + Public Sans (body). Loaded once, only for Prime —
-// classic users never pay for them. Matches the id used by the first-paint script.
+// Matches the id used by the first-paint script, which loads them too.
 function ensurePrimeFonts() {
   if (document.getElementById('gf-delta-prime')) return;
   const l = document.createElement('link');
@@ -596,13 +618,10 @@ function applyStyle() {
   // one, so a body-level --on-ac would silently outrank this.
   r.style.setProperty('--on-ac', resolveAccentInk(s));
   r.style.setProperty('--ac-tx', resolveAccentText(s));
-  if (s.skin === 'prime') {
-    ensurePrimeFonts();
-    // Classic theme classes would otherwise override the Prime token blocks
-    document.body.classList.remove('light','hc');
-  } else {
-    setTheme(S.settings.theme || 'dark', true);
-  }
+  ensurePrimeFonts();
+  // Left over on a body that was last painted by the classic skin. Harmless
+  // once its rules are gone, but removed so nothing downstream reads them.
+  document.body.classList.remove('light','hc');
   try { localStorage.setItem(STYLE_KEY, JSON.stringify(s)); } catch(e){}
   updateStyleMenu();
 }
@@ -678,18 +697,8 @@ function updateStyleMenu() {
     m.querySelectorAll('[data-vibe-opt]').forEach(b =>
       b.setAttribute('aria-checked', String(b.dataset.vibeOpt === s.vibe)));
   });
-  const rev = document.getElementById('sty-revert');
-  if (rev) rev.innerHTML = s.skin === 'prime'
-    ? ic('chevron-left') + ' Revert to the classic LCARS look'
-    : ic('sparkles') + ' Switch to the Delta Prime look';
   const btn = document.getElementById('btn-style');
-  if (btn) btn.title = s.skin === 'prime'
-    ? `Style: ${s.duty} · ${s.mode} · ${s.vibe}` : 'Style: classic LCARS';
-}
-
-function toggleSkin(el, ev) {
-  const next = getStyle().skin === 'prime' ? 'classic' : 'prime';
-  setStyle({ skin: next }, el, ev);
+  if (btn) btn.title = `Style: ${DUTY_LABELS[s.duty]||s.duty} · ${s.mode} · ${s.vibe}`;
 }
 
 function closeStyleMenu(){ toggleStyleMenu(false); }
@@ -718,50 +727,8 @@ function styleControlsHtml() {
 function renderStyleMenu() {
   const m = document.getElementById('style-menu');
   if (!m) return;
-  m.innerHTML = styleControlsHtml() + `
-    <div class="sty-sep"></div>
-    <div class="sty-foot">
-      <button id="sty-revert" onclick="toggleSkin(this,event)">${ic('chevron-left')} Revert to the classic LCARS look</button>
-      <button onclick="closeStyleMenu();wnOpen('new')">${ic('sparkles')} What's new in LCARS</button>
-    </div>
-    <div class="sty-feedback">The classic look stays available while this one settles.
-      Feedback on either is welcome.</div>`;
+  m.innerHTML = styleControlsHtml();
   updateStyleMenu();
-}
-
-// ================================================================
-// THEME (classic skin only)
-// ================================================================
-function setTheme(t, keepSkin) {
-  const acad = document.body.classList.contains('academy');
-  document.body.classList.remove('light','hc');
-  if (t !== 'dark') document.body.classList.add(t);
-  if (acad) document.body.classList.add('academy');
-  S.settings.theme = t;
-  // Picking a classic theme from Settings implies wanting the classic skin
-  if (!keepSkin && getStyle().skin !== 'classic') {
-    S.settings.style = Object.assign(getStyle(), { skin:'classic' });
-    try { localStorage.setItem(STYLE_KEY, JSON.stringify(getStyle())); } catch(e){}
-    document.documentElement.setAttribute('data-skin','classic');
-    updateStyleMenu();
-  }
-  persist();
-  updateThemeBtn();
-}
-function cycleTheme() {
-  const order = ['dark','light','hc'];
-  const cur = S.settings.theme || 'dark';
-  setTheme(order[(order.indexOf(cur) + 1) % order.length]);
-}
-function updateThemeBtn() {
-  const t = S.settings.theme || 'dark';
-  const btn = document.getElementById('btn-theme');
-  if (!btn) return;
-  btn.innerHTML = ic(t === 'light' ? 'sun' : t === 'hc' ? 'contrast' : 'moon');
-  btn.title = `Theme: ${t}`;
-  document.querySelectorAll('.theme-opt').forEach(o => {
-    o.classList.toggle('active', o.dataset.theme === t);
-  });
 }
 
 // ================================================================
@@ -983,7 +950,6 @@ function applyImport(mode) {
     }
     persist();
     curId = null; curView = null; curViewId = null;
-    setTheme(S.settings.theme||'dark', true);
     applyStyle();
     applyPrefs();
     renderNav();
@@ -2778,7 +2744,6 @@ function adoptCloudState(remote) {
   for (const k in joint) S.docs[k] = joint[k];
   persist();
   curId = null; curView = null; curViewId = null;
-  setTheme(S.settings.theme || 'dark', true);
   applyStyle(); applyPrefs(); applyPanelStates(); renderNav(); showDashboard();
 }
 
@@ -6360,21 +6325,6 @@ document.addEventListener('click', e => {
     document.querySelectorAll('.tb-dd').forEach(d => d.classList.remove('open'));
 }, true);
 
-function setThemeFromSettings(t) {
-  setTheme(t);
-  document.querySelectorAll('.st-btn').forEach(b =>
-    b.classList.toggle('btn-p', b.dataset.theme === t)
-  );
-}
-// Switching skin swaps which controls the panel shows, so re-render it in place
-function setStyleFromSettings(skin, el, ev) {
-  setStyle({ skin }, el, ev);
-  if (_routeView === 'settings') {
-    const y = document.getElementById('set-scroll').scrollTop;
-    renderSettingsView();
-    document.getElementById('set-scroll').scrollTop = y;
-  }
-}
 function toggleFmt(type) {
   fmts[type] = !fmts[type];
   document.getElementById({action:'tbb-am',comms:'tbb-cm',thought:'tbb-th'}[type])
@@ -8151,33 +8101,13 @@ function settingsAccountCard() {
 
 function settingsAppearanceCard() {
   const p = getPrefs();
-  const theme = S.settings.theme || 'dark';
-  const skin = getStyle().skin;
-  // The style and theme pickers are choices, so they use the same button as the
-  // actions elsewhere on the page with a selected state rather than a row of
-  // pill buttons that look like nothing else here.
-  const pick = (on, onclick, icon, label, desc) =>
-    setBtn(onclick, icon, label, desc, { on });
   return `
     <div class="set-card" id="set-sec-appearance">
       <div class="msec">LCARS APPEARANCE</div>
 
       <div class="set-block">
         <div class="ml">VISUAL STYLE</div>
-        <div class="set-tiles" style="margin-top:6px">
-          ${pick(skin==='prime', "setStyleFromSettings('prime',this,event)", 'sparkles',
-            'Delta Prime', 'The current look. Still being tuned.')}
-          ${pick(skin==='classic', "setStyleFromSettings('classic',this,event)", 'layout-grid',
-            'Classic LCARS (4.21)', 'The original look, kept available.')}
-        </div>
-        ${skin==='prime' ? `
-        <div id="sty-settings" style="margin-top:12px">${styleControlsHtml()}</div>` : `
-        <div class="ml" style="margin-top:14px">THEME</div>
-        <div class="set-tiles" style="margin-top:6px">
-          ${pick(theme==='dark', "setThemeFromSettings('dark')", 'moon', 'Dark', 'Light text on a dark panel.')}
-          ${pick(theme==='light', "setThemeFromSettings('light')", 'sun', 'Light', 'Dark text on a light panel.')}
-          ${pick(theme==='hc', "setThemeFromSettings('hc')", 'contrast', 'High Contrast', 'Maximum separation, for readability.')}
-        </div>`}
+        <div id="sty-settings" style="margin-top:6px">${styleControlsHtml()}</div>
       </div>
 
       <div class="set-block">
@@ -9757,8 +9687,6 @@ function updateShareButton() {
 // INIT
 // ================================================================
 document.addEventListener('DOMContentLoaded',()=>{
-  setTheme(S.settings.theme||'dark', true);
-  updateThemeBtn();
   renderStyleMenu();
   applyStyle();
   applyPrefs();
