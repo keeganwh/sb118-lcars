@@ -15,7 +15,7 @@ const VERSIONS = [
       'Changed: the Style menu is just the three choices now \u2014 duty post, appearance and mood. The button for reverting to the classic look, the What\u2019s New shortcut and the note about the classic look staying available have all gone; What\u2019s New is still on the Dashboard',
       'Added: three new duty colours \u2014 Diplomacy purple, Marines green and Intelligence grey \u2014 bringing the Style menu to seven. Pick one the same way as before',
       'Changed: Medical teal is a little deeper, and the writing on top of it is now white rather than black. The old pairing was hard to read in light mode; going slightly darker fixed both that and the teal used as text',
-      'Changed: the writing on top of a duty colour is now chosen per colour rather than being black for all of them \u2014 white on every colour except Science blue, which keeps black. Operations gold has also been taken down a shade in light mode to give the white a little more room; in dark mode it is unchanged',
+      'Changed: the writing on top of a duty colour is white on every colour now, rather than black on all of them as before. Operations gold and Science blue are each a shade deeper in light mode to give the white room; both are unchanged in dark mode, and no other colour has moved',
       'Fixed: LCARS now holds together on small and unusual screens \u2014 a folded Galaxy Fold at 280px wide, an iPad held upright, and a phone turned on its side, all of which pushed part of the page off the edge before. Titles, statistics and buttons now wrap onto another line when the space they are given is tight, instead of squashing each other, and a table too wide for its column scrolls inside its own box rather than taking the page with it',
       'Fixed: Save as Template in the Sim Details panel was cut off at the edge of the panel and could not be read. Controls that do not fit beside their label now sit underneath it',
       'Fixed: on the Delta Prime skin in its Epic setting, the frosted panels did not frost on iPhones and iPads running iOS 17 or older \u2014 they were simply see-through, which made text over them hard to read',
@@ -527,8 +527,11 @@ const DUTY_ACCENTS = {
   // room there is. Deliberate: they would rather it match the other six.
   operations:  { calmLight:'#B8850F', epicLight:'#B8850F', dark:'#F2B441',
                  inkLight:'#FFFFFF', txLight:'#946D1D' },   // fill 3.28, text 4.63
-  science:     { calmLight:'#2F7FC9', epicLight:'#2F7FC9', dark:'#5FB2FF',
-                 inkLight:DUTY_INK_DARK, txLight:'#3077BA' },// fill 4.32, text 4.62
+  // One shade deeper than #2F7FC9 so white works, which also took the fill
+  // from 4.32 (the palette's last sub-threshold value) to 4.61 and lifted the
+  // accent-as-text over the line, so blue no longer needs a variant at all.
+  science:     { calmLight:'#2878C2', epicLight:'#2878C2', dark:'#5FB2FF',
+                 inkLight:'#FFFFFF', txLight:null      },   // fill 4.61, text 4.54
   medical:     { calmLight:'#1A8375', epicLight:'#1A8375', dark:'#48D3BE',
                  inkLight:'#FFFFFF', txLight:'#1B8274' },   // fill 4.62, text 4.60
   diplomacy:   { calmLight:'#6E4596', epicLight:'#6E4596', dark:'#C3A6EE',
