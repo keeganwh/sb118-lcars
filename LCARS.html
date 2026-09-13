@@ -39,7 +39,8 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
             marines:{calmLight:'#4A7C2F',epicLight:'#4A7C2F',dark:'#8FD16A',inkLight:'#FFFFFF',txLight:null},
             intelligence:{calmLight:'#55514C',epicLight:'#55514C',dark:'#C4BDB4',inkLight:'#FFFFFF',txLight:null}};
   var d={skin:'prime',duty:'command',mode:'system',vibe:'calm'},s=d;
-  try{var r=localStorage.getItem('lcars_style_v1');if(r){var p=JSON.parse(r);if(p&&typeof p==='object')s={skin:p.skin||d.skin,duty:p.duty||d.duty,mode:p.mode||d.mode,vibe:p.vibe||d.vibe};}}catch(e){}
+  var mir={};
+  try{var r=localStorage.getItem('lcars_style_v1');if(r){var p=JSON.parse(r);if(p&&typeof p==='object'){mir=p;s={skin:p.skin||d.skin,duty:p.duty||d.duty,mode:p.mode||d.mode,vibe:p.vibe||d.vibe};}}}catch(e){}
   /* The classic skin was removed in 4.26 and has no stylesheet left, so a
      mirror still naming it would paint an unstyled first frame. Same mapping
      as migrateClassicStyle() in lcars.js -- change both together. */
@@ -54,11 +55,14 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
   b.setAttribute('data-mode',mode);
   b.setAttribute('data-vibe',s.vibe);
   b.setAttribute('data-duty',s.duty);
-  var t=DUTY[s.duty]||DUTY.command;
+  var t=DUTY[s.duty]||DUTY.command;   /* 'custom' lands here; mir._ac covers it */
+  /* applyStyle() mirrors the RESOLVED hexes alongside the choice, so a custom
+     accent needs no OKLCH maths here. The table below is the fallback for a
+     mirror written before that existed, or one that has lost them. */
   var lit=s.vibe==='epic'?t.epicLight:t.calmLight;
-  b.style.setProperty('--ac',mode==='dark'?t.dark:lit);
-  b.style.setProperty('--on-ac',mode==='dark'?DK:(t.inkLight||DK));
-  b.style.setProperty('--ac-tx',mode==='dark'?t.dark:(t.txLight||lit));
+  b.style.setProperty('--ac',    mir._ac  || (mode==='dark'?t.dark:lit));
+  b.style.setProperty('--on-ac', mir._ink || (mode==='dark'?DK:(t.inkLight||DK)));
+  b.style.setProperty('--ac-tx', mir._tx  || (mode==='dark'?t.dark:(t.txLight||lit)));
   if(s.skin==='prime'){
     var l=document.createElement('link');l.rel='stylesheet';l.id='gf-delta-prime';
     l.href='https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&family=Space+Grotesk:wght@600;700&display=swap';

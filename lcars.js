@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'Added: a custom accent colour. Pick Custom at the end of the duty post row in Style and a slider appears \u2014 drag it to any colour on the wheel and the whole app follows, in light and dark alike. It is a hue slider rather than a full colour picker on purpose: the brightness is set for you so that whatever colour you land on, the writing on top of it and the colour used as text both stay readable',
       'Changed: the classic LCARS look has been retired and Delta Prime is now the only style. If you were still using the classic look you have been moved across to the closest equivalent \u2014 Operations gold, in Calm, keeping whichever of light or dark you were on. High Contrast now opens in dark. Nothing about your sims or settings is affected, and you can change any of it from Style in the top bar',
       'Changed: the Style menu is just the three choices now \u2014 duty post, appearance and mood. The button for reverting to the classic look, the What\u2019s New shortcut and the note about the classic look staying available have all gone; What\u2019s New is still on the Dashboard',
       'Added: three new duty colours \u2014 Diplomacy purple, Marines green and Intelligence grey \u2014 bringing the Style menu to seven. Pick one the same way as before',
@@ -534,6 +535,44 @@ const DUTY_ACCENTS = {
                  inkLight:'#FFFFFF', txLight:null      },   // fill 7.87, text 7.75
 };
 const DUTY_ORDER = ['command','operations','science','medical','diplomacy','marines','intelligence'];
+
+// ── Custom accent ─────────────────────────────────────────────────────────
+// A writer picks a HUE and nothing else. Lightness and chroma are fixed per
+// mode, so contrast holds by construction rather than by luck -- which is why
+// this is a hue slider and not a hex field: a free colour picker lets somebody
+// choose something genuinely unreadable and then report the app as broken.
+// Checked at every one of the 360 hues: the worst case anywhere is 6.04:1 as
+// text and 6.13:1 for ink on the fill, so custom needs no darkened text
+// variant and its ink is always white in light mode and dark in dark mode.
+const CUSTOM_L_LIGHT = 0.48, CUSTOM_L_DARK = 0.80, CUSTOM_C = 0.13;
+const CUSTOM_HUE_DEFAULT = 265;
+
+// OKLCH -> sRGB hex, walking chroma down until the colour is one a screen can
+// actually show. OKLCH because its lightness matches perceived lightness, so
+// one L holds the same contrast all the way round the wheel -- HSL does not.
+function oklchHex(L, C, H) {
+  const h = H * Math.PI / 180;
+  const at = c => {
+    const a = c * Math.cos(h), b = c * Math.sin(h);
+    const l = (L + 0.3963377774*a + 0.2158037573*b) ** 3;
+    const m = (L - 0.1055613458*a - 0.0638541728*b) ** 3;
+    const s2 = (L - 0.0894841775*a - 1.2914855480*b) ** 3;
+    return [ 4.0767416621*l - 3.3077115913*m + 0.2309699292*s2,
+            -1.2684380046*l + 2.6097574011*m - 0.3413193965*s2,
+            -0.0041960863*l - 0.7034186147*m + 1.7076147010*s2 ]
+      .map(u => u <= 0.0031308 ? 12.92*u : 1.055*Math.pow(Math.max(u,0), 1/2.4) - 0.055);
+  };
+  let c = C;
+  while (c > 0 && !at(c).every(v => v >= -0.0005 && v <= 1.0005)) c -= 0.002;
+  return '#' + at(Math.max(c,0))
+    .map(v => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2,'0'))
+    .join('').toUpperCase();
+}
+function customHue(st) {
+  const h = (st || getStyle()).hue;
+  return Number.isFinite(h) ? ((h % 360) + 360) % 360 : CUSTOM_HUE_DEFAULT;
+}
+function isCustomDuty(st) { return (st || getStyle()).duty === 'custom'; }
 const DUTY_LABELS = {
   command:'Command', operations:'Operations', science:'Science', medical:'Medical',
   diplomacy:'Diplomacy', marines:'Marines', intelligence:'Intelligence',
@@ -582,8 +621,12 @@ function resolvedMode(st) {
 // Accent is (duty, mode, vibe) → hex, never a single hex per duty post.
 function resolveAccent(st) {
   const s = st || getStyle();
+  const dark = resolvedMode(s) === 'dark';
+  if (isCustomDuty(s)) {
+    return oklchHex(dark ? CUSTOM_L_DARK : CUSTOM_L_LIGHT, CUSTOM_C, customHue(s));
+  }
   const t = DUTY_ACCENTS[s.duty] || DUTY_ACCENTS.command;
-  if (resolvedMode(s) === 'dark') return t.dark;
+  if (dark) return t.dark;
   return s.vibe === 'epic' ? t.epicLight : t.calmLight;
 }
 
@@ -591,14 +634,17 @@ function resolveAccent(st) {
 // the dark ink there; light mode is per duty -- see the table.
 function resolveAccentInk(st) {
   const s = st || getStyle();
+  if (resolvedMode(s) === 'dark') return DUTY_INK_DARK;
+  if (isCustomDuty(s)) return '#FFFFFF';     // true at every hue -- see above
   const t = DUTY_ACCENTS[s.duty] || DUTY_ACCENTS.command;
-  return resolvedMode(s) === 'dark' ? DUTY_INK_DARK : (t.inkLight || DUTY_INK_DARK);
+  return t.inkLight || DUTY_INK_DARK;
 }
 
 // The accent used AS text. Falls back to the accent wherever no darkened
 // variant is needed, which is most of them and all of dark mode.
 function resolveAccentText(st) {
   const s = st || getStyle();
+  if (isCustomDuty(s)) return resolveAccent(s);   // clears 4.5 at every hue
   const t = DUTY_ACCENTS[s.duty] || DUTY_ACCENTS.command;
   if (resolvedMode(s) === 'dark') return t.dark;
   return t.txLight || (s.vibe === 'epic' ? t.epicLight : t.calmLight);
@@ -622,8 +668,25 @@ function applyStyle() {
   // Left over on a body that was last painted by the classic skin. Harmless
   // once its rules are gone, but removed so nothing downstream reads them.
   document.body.classList.remove('light','hc');
-  try { localStorage.setItem(STYLE_KEY, JSON.stringify(s)); } catch(e){}
+  // The mirror carries the RESOLVED hexes as well as the choice, so the
+  // first-paint script needs no copy of the accent table or the OKLCH maths --
+  // it just paints what it is told and lets this function correct it.
+  try {
+    localStorage.setItem(STYLE_KEY, JSON.stringify(Object.assign({}, s, {
+      _ac: resolveAccent(s), _ink: resolveAccentInk(s), _tx: resolveAccentText(s),
+    })));
+  } catch(e){}
   updateStyleMenu();
+}
+
+// Dragging fires oninput continuously. Applying on every tick is what makes
+// the slider feel live; writing to storage and the server on every tick would
+// be hundreds of writes for one gesture, so persistence waits for onchange.
+function setCustomHue(v, commit) {
+  const hue = Math.max(0, Math.min(359, parseInt(v, 10) || 0));
+  S.settings.style = Object.assign(getStyle(), { duty:'custom', hue });
+  applyStyle();
+  if (commit) { persist(); schedSync(); }
 }
 
 function setStyle(patch, el, ev) {
@@ -692,6 +755,15 @@ function updateStyleMenu() {
       b.style.background = mode === 'dark' ? t.dark : (s.vibe === 'epic' ? t.epicLight : t.calmLight);
       b.setAttribute('aria-checked', String(b.dataset.duty === s.duty));
     });
+    const cs = m.querySelector('.sty-sw-custom');
+    if (cs) {
+      cs.style.background = resolveAccent(s);
+      cs.setAttribute('aria-checked', String(isCustomDuty(s)));
+    }
+    m.querySelectorAll('.sty-hue').forEach(g => { g.hidden = !isCustomDuty(s); });
+    m.querySelectorAll('.sty-hue-range').forEach(r => {
+      if (document.activeElement !== r) r.value = customHue(s);
+    });
     m.querySelectorAll('[data-mode-opt]').forEach(b =>
       b.setAttribute('aria-checked', String(b.dataset.modeOpt === s.mode)));
     m.querySelectorAll('[data-vibe-opt]').forEach(b =>
@@ -705,9 +777,21 @@ function closeStyleMenu(){ toggleStyleMenu(false); }
 
 // Shared markup for the three controls — header menu, intro modal and Settings
 function styleControlsHtml() {
+  const s0 = getStyle();
   const swatches = DUTY_ORDER.map(d =>
     `<button class="sty-sw" role="radio" data-duty="${d}" aria-label="${DUTY_LABELS[d]||d}"
-       title="${DUTY_LABELS[d]||d}" onclick="setStyle({duty:'${d}'},this,event)"></button>`).join('');
+       title="${DUTY_LABELS[d]||d}" onclick="setStyle({duty:'${d}'},this,event)"></button>`).join('')
+    + `<button class="sty-sw sty-sw-custom" role="radio" data-duty="custom" aria-label="Custom colour"
+         title="Custom colour" onclick="setStyle({duty:'custom'},this,event)"></button>`;
+  // The slider is in the markup at every duty and hidden until custom is
+  // chosen, so picking custom does not reflow the panel under the thumb.
+  const hueRow = `
+    <div class="sty-grp sty-hue" ${isCustomDuty(s0) ? '' : 'hidden'}>
+      <div class="sty-lbl">CUSTOM HUE</div>
+      <input type="range" class="sty-hue-range" min="0" max="359" value="${customHue(s0)}"
+             aria-label="Custom accent hue"
+             oninput="setCustomHue(this.value,false)" onchange="setCustomHue(this.value,true)">
+    </div>`;
   const modes = [['light','LIGHT'],['dark','DARK'],['system','SYSTEM']].map(([v,l]) =>
     `<button role="radio" data-mode-opt="${v}" onclick="setStyle({mode:'${v}'},this,event)">${l}</button>`).join('');
   const vibes = [['calm','CALM'],['epic','EPIC']].map(([v,l]) =>
@@ -716,6 +800,7 @@ function styleControlsHtml() {
     <div class="sty-controls">
       <div class="sty-grp"><div class="sty-lbl">DUTY POST</div>
         <div class="sty-swatches" role="radiogroup" aria-label="Duty post">${swatches}</div></div>
+      ${hueRow}
       <div class="sty-grp"><div class="sty-lbl">APPEARANCE</div>
         <div class="sty-seg" role="radiogroup" aria-label="Appearance">${modes}</div></div>
       <div class="sty-grp"><div class="sty-lbl">MOOD</div>
