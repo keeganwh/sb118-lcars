@@ -10,6 +10,9 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-07',
     changes: [
+      'Added: three new duty colours \u2014 Diplomacy purple, Marines green and Intelligence grey \u2014 bringing the Style menu to seven. Pick one the same way as before',
+      'Changed: Medical teal is a little deeper, and the writing on top of it is now white rather than black. The old pairing was hard to read in light mode; going slightly darker fixed both that and the teal used as text',
+      'Changed: the writing on top of a duty colour is now chosen per colour rather than being black for all of them \u2014 white on Command red, Medical teal, Diplomacy, Marines and Intelligence, black on Operations gold and Science blue, because that is the more readable one in each case. Every other colour is unchanged',
       'Fixed: LCARS now holds together on small and unusual screens \u2014 a folded Galaxy Fold at 280px wide, an iPad held upright, and a phone turned on its side, all of which pushed part of the page off the edge before. Titles, statistics and buttons now wrap onto another line when the space they are given is tight, instead of squashing each other, and a table too wide for its column scrolls inside its own box rather than taking the page with it',
       'Fixed: Save as Template in the Sim Details panel was cut off at the edge of the panel and could not be read. Controls that do not fit beside their label now sit underneath it',
       'Fixed: on the Delta Prime skin in its Epic setting, the frosted panels did not frost on iPhones and iPads running iOS 17 or older \u2014 they were simply see-through, which made text over them hard to read',
@@ -493,13 +496,45 @@ let _sourceMode = false;
 // Skin 'classic' falls back entirely to the 4.21 Dark/Light/HC themes.
 // ================================================================
 const STYLE_KEY = 'lcars_style_v1';   // tiny mirror for flash-free first paint
+// An accent has THREE values, not one, because it does three different jobs
+// and a single hex cannot hold all of them down:
+//   the accent   -- the filled shape: tile, pill, panel header, rail tab
+//   ink          -- the text ON that fill. Per duty, not per vibe: black on
+//                   Command Red is 3.35 where white is 5.41, and a charcoal
+//                   Intelligence fill cannot take black ink at all.
+//   tx           -- the accent used AS small text on a panel. `null` means the
+//                   accent itself already clears 4.5:1 there and is used
+//                   directly; a hex means it does not and this is the accent
+//                   darkened until it does.
+// Every figure below is measured, not chosen by eye. The one value still short
+// is Science's black-on-fill at 4.32 (passes as large/bold, not as small text);
+// lightening the fill to fix it would change a blue that was signed off.
+//
+// KEPT IN TWO PLACES. The first-paint script at the top of LCARS.html carries
+// its own copy so the very first frame is not the wrong colour -- change both
+// or a reload flashes the old accent.
+const DUTY_INK_DARK = '#1A1510';   // dark mode accents are light; ink is always dark
 const DUTY_ACCENTS = {
-  command:    { calmLight:'#B4463C', epicLight:'#C0433A', dark:'#F0705F' },
-  science:    { calmLight:'#2F7FC9', epicLight:'#2F7FC9', dark:'#5FB2FF' },
-  operations: { calmLight:'#C8901C', epicLight:'#C8901C', dark:'#F2B441' },
-  medical:    { calmLight:'#1E8E7E', epicLight:'#1E8E7E', dark:'#48D3BE' },
+  command:     { calmLight:'#B4463C', epicLight:'#C0433A', dark:'#F0705F',
+                 inkLight:'#FFFFFF', txLight:null      },   // fill 5.41, text 5.33
+  operations:  { calmLight:'#C8901C', epicLight:'#C8901C', dark:'#F2B441',
+                 inkLight:DUTY_INK_DARK, txLight:'#946D25' },// fill 6.44, text 4.62
+  science:     { calmLight:'#2F7FC9', epicLight:'#2F7FC9', dark:'#5FB2FF',
+                 inkLight:DUTY_INK_DARK, txLight:'#3077BA' },// fill 4.32, text 4.62
+  medical:     { calmLight:'#1A8375', epicLight:'#1A8375', dark:'#48D3BE',
+                 inkLight:'#FFFFFF', txLight:'#1B8274' },   // fill 4.62, text 4.60
+  diplomacy:   { calmLight:'#6E4596', epicLight:'#6E4596', dark:'#C3A6EE',
+                 inkLight:'#FFFFFF', txLight:null      },   // fill 7.11, text 7.00
+  marines:     { calmLight:'#4A7C2F', epicLight:'#4A7C2F', dark:'#8FD16A',
+                 inkLight:'#FFFFFF', txLight:null      },   // fill 4.98, text 4.91
+  intelligence:{ calmLight:'#55514C', epicLight:'#55514C', dark:'#C4BDB4',
+                 inkLight:'#FFFFFF', txLight:null      },   // fill 7.87, text 7.75
 };
-const DUTY_ORDER = ['command','science','operations','medical'];
+const DUTY_ORDER = ['command','operations','science','medical','diplomacy','marines','intelligence'];
+const DUTY_LABELS = {
+  command:'Command', operations:'Operations', science:'Science', medical:'Medical',
+  diplomacy:'Diplomacy', marines:'Marines', intelligence:'Intelligence',
+};
 const STYLE_DEFAULTS = { skin:'prime', duty:'command', mode:'system', vibe:'calm' };
 
 function getStyle() { return Object.assign({}, STYLE_DEFAULTS, S.settings.style || {}); }
@@ -530,6 +565,23 @@ function resolveAccent(st) {
   return s.vibe === 'epic' ? t.epicLight : t.calmLight;
 }
 
+// The ink that sits ON the accent. Dark mode accents are light, so it is always
+// the dark ink there; light mode is per duty -- see the table.
+function resolveAccentInk(st) {
+  const s = st || getStyle();
+  const t = DUTY_ACCENTS[s.duty] || DUTY_ACCENTS.command;
+  return resolvedMode(s) === 'dark' ? DUTY_INK_DARK : (t.inkLight || DUTY_INK_DARK);
+}
+
+// The accent used AS text. Falls back to the accent wherever no darkened
+// variant is needed, which is most of them and all of dark mode.
+function resolveAccentText(st) {
+  const s = st || getStyle();
+  const t = DUTY_ACCENTS[s.duty] || DUTY_ACCENTS.command;
+  if (resolvedMode(s) === 'dark') return t.dark;
+  return t.txLight || (s.vibe === 'epic' ? t.epicLight : t.calmLight);
+}
+
 function applyStyle() {
   const s = getStyle();
   const mode = resolvedMode(s);
@@ -539,6 +591,11 @@ function applyStyle() {
   r.setAttribute('data-vibe', s.vibe);
   r.setAttribute('data-duty', s.duty);          // carried for edge cases; styling reads --ac
   r.style.setProperty('--ac', resolveAccent(s));
+  // Set on <html> so they inherit into body. They must NOT also be declared on
+  // body in the stylesheet -- an element's own declaration beats an inherited
+  // one, so a body-level --on-ac would silently outrank this.
+  r.style.setProperty('--on-ac', resolveAccentInk(s));
+  r.style.setProperty('--ac-tx', resolveAccentText(s));
   if (s.skin === 'prime') {
     ensurePrimeFonts();
     // Classic theme classes would otherwise override the Prime token blocks
@@ -640,8 +697,8 @@ function closeStyleMenu(){ toggleStyleMenu(false); }
 // Shared markup for the three controls — header menu, intro modal and Settings
 function styleControlsHtml() {
   const swatches = DUTY_ORDER.map(d =>
-    `<button class="sty-sw" role="radio" data-duty="${d}" aria-label="${d[0].toUpperCase()+d.slice(1)}"
-       title="${d[0].toUpperCase()+d.slice(1)}" onclick="setStyle({duty:'${d}'},this,event)"></button>`).join('');
+    `<button class="sty-sw" role="radio" data-duty="${d}" aria-label="${DUTY_LABELS[d]||d}"
+       title="${DUTY_LABELS[d]||d}" onclick="setStyle({duty:'${d}'},this,event)"></button>`).join('');
   const modes = [['light','LIGHT'],['dark','DARK'],['system','SYSTEM']].map(([v,l]) =>
     `<button role="radio" data-mode-opt="${v}" onclick="setStyle({mode:'${v}'},this,event)">${l}</button>`).join('');
   const vibes = [['calm','CALM'],['epic','EPIC']].map(([v,l]) =>

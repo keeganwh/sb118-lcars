@@ -27,10 +27,17 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
    rather than parsing the ~900 KB main payload. Kept deliberately dependency
    free; the real state lives in S.settings.style and is written back on save. */
 (function(){
-  var DUTY={command:{calmLight:'#B4463C',epicLight:'#C0433A',dark:'#F0705F'},
-            science:{calmLight:'#2F7FC9',epicLight:'#2F7FC9',dark:'#5FB2FF'},
-            operations:{calmLight:'#C8901C',epicLight:'#C8901C',dark:'#F2B441'},
-            medical:{calmLight:'#1E8E7E',epicLight:'#1E8E7E',dark:'#48D3BE'}};
+  /* MIRRORS DUTY_ACCENTS in lcars.js -- change both, or the first frame paints
+     the old accent and then snaps. ink/tx follow the same rules as there:
+     tx null means the accent already reads fine as text. */
+  var DK='#1A1510';
+  var DUTY={command:{calmLight:'#B4463C',epicLight:'#C0433A',dark:'#F0705F',inkLight:'#FFFFFF',txLight:null},
+            operations:{calmLight:'#C8901C',epicLight:'#C8901C',dark:'#F2B441',inkLight:DK,txLight:'#946D25'},
+            science:{calmLight:'#2F7FC9',epicLight:'#2F7FC9',dark:'#5FB2FF',inkLight:DK,txLight:'#3077BA'},
+            medical:{calmLight:'#1A8375',epicLight:'#1A8375',dark:'#48D3BE',inkLight:'#FFFFFF',txLight:'#1B8274'},
+            diplomacy:{calmLight:'#6E4596',epicLight:'#6E4596',dark:'#C3A6EE',inkLight:'#FFFFFF',txLight:null},
+            marines:{calmLight:'#4A7C2F',epicLight:'#4A7C2F',dark:'#8FD16A',inkLight:'#FFFFFF',txLight:null},
+            intelligence:{calmLight:'#55514C',epicLight:'#55514C',dark:'#C4BDB4',inkLight:'#FFFFFF',txLight:null}};
   var d={skin:'prime',duty:'command',mode:'system',vibe:'calm'},s=d;
   try{var r=localStorage.getItem('lcars_style_v1');if(r){var p=JSON.parse(r);if(p&&typeof p==='object')s={skin:p.skin||d.skin,duty:p.duty||d.duty,mode:p.mode||d.mode,vibe:p.vibe||d.vibe};}}catch(e){}
   var mode=s.mode;
@@ -43,7 +50,10 @@ l.rel='apple-touch-icon';l.href=i.href;document.head.appendChild(l);})();
   b.setAttribute('data-vibe',s.vibe);
   b.setAttribute('data-duty',s.duty);
   var t=DUTY[s.duty]||DUTY.command;
-  b.style.setProperty('--ac',mode==='dark'?t.dark:(s.vibe==='epic'?t.epicLight:t.calmLight));
+  var lit=s.vibe==='epic'?t.epicLight:t.calmLight;
+  b.style.setProperty('--ac',mode==='dark'?t.dark:lit);
+  b.style.setProperty('--on-ac',mode==='dark'?DK:(t.inkLight||DK));
+  b.style.setProperty('--ac-tx',mode==='dark'?t.dark:(t.txLight||lit));
   if(s.skin==='prime'){
     var l=document.createElement('link');l.rel='stylesheet';l.id='gf-delta-prime';
     l.href='https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&family=Space+Grotesk:wght@600;700&display=swap';

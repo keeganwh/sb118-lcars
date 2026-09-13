@@ -764,22 +764,18 @@ body.hc .contact-card-bar{color:#000}
 /* ── Surface tokens: 2 modes × 2 vibes ── */
 :root[data-skin="prime"][data-mode="light"][data-vibe="calm"] body{
   --bg:#EBE8E2;--panel:#FFFDFA;--ink:#241F1A;--dim:#6B6155;--line:#DED8CE;--bar:#2B2521;--rail:#E3DFD7;
-  --on-ac:#1A1510;
   --blue:#2F7FC9;--blue2:#1F5E9E;--gold:#8A6410;--green:#1A7A54;--red:#B3352B;
 }
 :root[data-skin="prime"][data-mode="dark"][data-vibe="calm"] body{
   --bg:#14110E;--panel:#1E1A16;--ink:#F0EAE2;--dim:#A2968A;--line:#2E2822;--bar:#0D0B09;--rail:#171410;
-  --on-ac:#1A1510;
   --blue:#5FB2FF;--blue2:#8CC8FF;--gold:#E0B54A;--green:#48D3BE;--red:#F0705F;
 }
 :root[data-skin="prime"][data-mode="light"][data-vibe="epic"] body{
   --bg:#E7EDF4;--panel:#FFFFFF;--ink:#0E1720;--dim:#57697A;--line:rgba(14,23,32,.13);--bar:#0B1520;--rail:#DDE6EF;
-  --on-ac:#0B0F14;
   --blue:#2F7FC9;--blue2:#1F5E9E;--gold:#8A6410;--green:#1A7A54;--red:#B3352B;
 }
 :root[data-skin="prime"][data-mode="dark"][data-vibe="epic"] body{
   --bg:#050A10;--panel:#101923;--ink:#E9F2FA;--dim:#8FA3B6;--line:rgba(255,255,255,.14);--bar:#02060A;--rail:#08111A;
-  --on-ac:#0B0F14;
   --blue:#5FB2FF;--blue2:#8CC8FF;--gold:#E0B54A;--green:#48D3BE;--red:#F0705F;
 }
 
@@ -789,10 +785,17 @@ body.hc .contact-card-bar{color:#000}
   --border:var(--line);
   --panel2:var(--rail);
   --amber:var(--ac);
-  --amber2:color-mix(in oklab,var(--ac) 78%,var(--ink));
+  /* The accent AS TEXT. Was a flat 78% mix toward the ink, which was applied
+     inconsistently and still left Operations Gold at 4.08 on a light panel.
+     Now a measured value per duty -- and for most duties it IS the accent,
+     because most of them already read fine. */
+  --amber2:var(--ac-tx,var(--ac));
   --scroll:color-mix(in oklab,var(--ac) 42%,var(--line));
   --hover:color-mix(in oklab,var(--ac) 12%,transparent);
-  --panel-hdr:var(--ac);--panel-hdr-cp:var(--ac);--panel-hdr-tx:var(--on-ac);
+  /* --on-ac and --ac-tx are set on <html> by applyStyle(), per DUTY and mode.
+     The fallbacks keep the skin sane for the one frame before it runs and if
+     it ever fails: the dark ink, and the accent used as text unchanged. */
+  --panel-hdr:var(--ac);--panel-hdr-cp:var(--ac);--panel-hdr-tx:var(--on-ac,#1A1510);
   --title-active:var(--ink);
   /* Consumed by the base `body` rule, so a user font set in Settings still wins */
   --ui-font:'Public Sans',system-ui,-apple-system,Segoe UI,sans-serif;
