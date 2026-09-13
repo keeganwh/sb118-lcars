@@ -1,6 +1,6 @@
 # LCARS SB118 Writing Tool — Roadmap
 
-_Outstanding work only. Current version: **4.25**, released 2026-09-05 — Batches 1 and 2 and the Batch 4 mobile pass are all in it, and their entries are now in `CHANGELOG.md`. **Batches 5 and 5B are both shipped to `main` and live (5 on 2026-09-10, 5B on 2026-09-12), but NEITHER is cut as a version** — there are pending entries in the `VERSIONS` array waiting on a bump._
+_Outstanding work only. Current version: **4.3**, released 2026-09-13. Everything through Batch 5C is in it, along with the mobile dashboard pass and the skin rework: the classic skin retired, seven duty accents plus a custom hue. `VERSIONS` and `CHANGELOG.md` are in step and hold no pending entries._
 
 Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same `main` with a moving notice.
 

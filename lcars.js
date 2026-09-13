@@ -4,11 +4,11 @@
 const ZWS = String.fromCharCode(0x200B); // zero-width space used as caret anchor after marker spans
 const SKEY = 'lcars_v1';
 
-const APP_VERSION = '4.25';
+const APP_VERSION = '4.3';
 const VERSIONS = [
   {
-    version: 'pending',
-    date: '2026-09-07',
+    version: '4.3',
+    date: '2026-09-13',
     changes: [
       'Added: a custom accent colour. Pick Custom at the end of the duty post row in Style and a slider appears \u2014 drag it to any colour on the wheel and the whole app follows, in light and dark alike. It is a hue slider rather than a full colour picker on purpose: the brightness is set for you so that whatever colour you land on, the writing on top of it and the colour used as text both stay readable',
       'Changed: the classic LCARS look has been retired and Delta Prime is now the only style. If you were still using the classic look you have been moved across to the closest equivalent \u2014 Operations gold, in Calm, keeping whichever of light or dark you were on. High Contrast now opens in dark. Nothing about your sims or settings is affected, and you can change any of it from Style in the top bar',
@@ -3038,6 +3038,15 @@ async function checkDeletionPending() {
 // what's-new mechanism keyed on its own version number. It had been stuck at
 // 4.22 for three releases, which is the argument against keeping two.
 const HIGHLIGHTS = [
+  {
+    date: '2026-09-13',
+    title: 'Seven duty colours, or one of your own',
+    body: `<strong>Style</strong> now offers seven duty posts &mdash; Command, Operations, Science,
+      Medical and the new <em>Diplomacy</em>, <em>Marines</em> and <em>Intelligence</em> &mdash; or
+      pick <em>Custom</em> at the end of the row and choose any colour on the wheel with a slider.
+      The classic LCARS look has been retired; if you were still on it you have been moved to the
+      nearest Delta Prime setting.`,
+  },
   {
     date: '2026-09-10',
     title: 'App Feedback',

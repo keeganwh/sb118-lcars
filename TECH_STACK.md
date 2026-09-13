@@ -6,7 +6,7 @@ backend:vercel-serverless
 lib:none
 ```
 
-_The whole stack at a glance. Current app version: **4.25**._
+_The whole stack at a glance. Current app version: **4.3**._
 
 ## The short version
 
@@ -34,7 +34,7 @@ Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same 
 | **Offline** | First-class mode | The first-run gate offers an account or offline-only. Every network call is gated on `isCloud()`. |
 | **Hosting** | Vercel | `vercel.json` rewrites `/`, `/settings`, `/manifest` to `LCARS.html` and `/guide` to the guide, and sets no-cache headers on the three app files. |
 | **Serverless** | `api/download.js` | Re-inlines the app files into one self-contained `LCARS.html` on demand. **Frozen at v4.24 — do not extend.** |
-| **Styling / UI** | Hand-written CSS | LCARS-inspired. Classic skin (Dark / Light / High-contrast) plus the Delta Prime skin, via CSS variables. Resizable sidebar panels. |
+| **Styling / UI** | Hand-written CSS | LCARS-inspired. **Delta Prime is the only skin** since 4.3 — seven duty accents plus a custom hue, × light/dark/system, × calm/epic, via CSS variables. Resizable sidebar panels. |
 | **Fonts** | Google Fonts | Droid Sans preloaded. UI and editor fonts user-selectable from ~56 families, loaded dynamically by injecting a `<link>`. |
 | **Auth secrets** | Anon key only | The Supabase anon key is embedded in the page and safe there — RLS protects the data. The `service_role` key must never appear in this repo or the app. |
 

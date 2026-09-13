@@ -417,6 +417,19 @@ code {
     border-radius: 4px;
   }
 }
+
+/* ── Out-of-date notice (4.3) ──────────────────────────────────────────────
+   Deliberately loud and first: someone landing here should know before they
+   read a word of it. Colours are stated literally rather than taken from the
+   guide's tokens, so it survives the rebuild this file is waiting for. */
+.stale-notice{
+  background:#FBEFED;border:1px solid #D8A9A2;border-left:5px solid #B4463C;
+  border-radius:0 10px 10px 0;color:#4A2420;
+  padding:16px 20px;margin:0 0 26px;font-size:15px;line-height:1.65;
+}
+.stale-notice strong{color:#8E3229;display:block;margin-bottom:4px;font-size:16px}
+.stale-notice em{font-style:normal;font-weight:700;color:#8E3229}
+@media (max-width:640px){ .stale-notice{padding:14px 16px;font-size:14.5px} }
 </style>
 </head>
 <body>
@@ -425,6 +438,18 @@ code {
 <button id="back-to-top" title="Back to top" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
 
 <div class="page" id="top">
+
+<!-- OUT-OF-DATE NOTICE — added 4.3. Remove when the rebuilt guide replaces
+     this file (ROADMAP Batch 9). -->
+<div class="stale-notice" role="status">
+  <strong>This guide is out of date.</strong>
+  It was written before accounts, Joint Posts, share links, the Delta&nbsp;Prime
+  look and the phone layout, so parts of it describe an LCARS that no longer
+  exists. It is being rewritten from scratch. In the meantime the app itself is
+  the better guide: <em>Getting Started</em> on the Dashboard walks you through
+  the real thing, and <em>App&nbsp;Feedback</em> in the top bar reaches the team
+  if something here does not match what you see.
+</div>
 
 <!-- COVER -->
 <div class="cover">
