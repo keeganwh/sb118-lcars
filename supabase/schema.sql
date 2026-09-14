@@ -1872,7 +1872,14 @@ begin
            -- JSON rather than a table. A joint sim is an ordinary doc in there
            -- too, which is why it is counted separately below rather than
            -- assumed to be absent.
-           coalesce(jsonb_array_length(s.payload -> 'docs'), 0)::int as doc_count,
+           --
+           -- S.docs IS AN OBJECT KEYED BY ID, NOT AN ARRAY. jsonb_array_length()
+           -- on it raises 'cannot get array length of a non-array', which took
+           -- the whole report down rather than one column -- the first version
+           -- of this function did exactly that. Both shapes are read, and
+           -- anything else counts as nothing, so a payload written by some
+           -- future version cannot break the page again.
+           coalesce(dc.n, 0)::int                                    as doc_count,
            coalesce(sn.n, 0)::int                                    as snapshot_count,
            coalesce(jp.n, 0)::int                                    as joint_count,
            coalesce(ob.b, 0)::bigint                                 as file_bytes,
@@ -1882,6 +1889,12 @@ begin
             + coalesce(ob.b, 0))::bigint                             as bytes
       from public.writers w
       left join public.state s on s.writer_uid = w.id
+      left join lateral (
+        select case jsonb_typeof(s.payload -> 'docs')
+                 when 'object' then (select count(*) from jsonb_object_keys(s.payload -> 'docs'))
+                 when 'array'  then jsonb_array_length(s.payload -> 'docs')
+                 else 0 end as n
+      ) dc on true
       left join lateral (
         select count(*) n, sum(pg_column_size(x.html))::bigint b
           from public.snapshots x where x.writer_uid = w.id
