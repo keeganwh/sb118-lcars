@@ -14,6 +14,7 @@ const VERSIONS = [
       'Added: reports are numbered now. Your own reports show their ticket number, which means you can point at one in a conversation instead of describing it again',
       'Changed: the technical details attached to a report \u2014 which screen you were on, which browser, and anything the app logged \u2014 are still sent, but harmless browser chatter is no longer collected with them. Every report was arriving with five copies of a warning that meant nothing',
       'Fixed: the Storage and Usage report in the Admin panel showed nothing but an error. It counted sims the wrong way and fell over on every account',
+      'Changed: Storage and Usage now opens with two bars showing how much of the project\u2019s space is gone and what is filling it \u2014 sims, joint sims, snapshots and files, each counted separately. The account-by-account figures are still there, folded underneath and sorted heaviest first',
     ],
   },
   {
@@ -2259,33 +2260,113 @@ function fbConfirmDelete(id) {
 // because both landed in one schema migration.
 let _usage = [];
 
+// WHAT THE ALLOWANCE IS. Supabase publishes no API that reports the plan, so
+// the two limits are stated here. THEY ARE SEPARATE ALLOWANCES and are never
+// added together: the database and the file buckets are metered apart, which is
+// why this draws two bars rather than one. Change these if the project moves
+// off the free tier.
+const SUPA_DB_LIMIT   = 500 * 1024 * 1024;        // 500 MB of database
+const SUPA_FILE_LIMIT = 1024 * 1024 * 1024;       // 1 GB of file storage
+
 function adminUsageCard() {
   return `
     <div class="set-card">
       <div class="msec">STORAGE &amp; USAGE</div>
       <div class="set-block">
-        <span class="set-note" style="margin:0 0 10px">What each account is storing. Sizes are what the
-          database actually holds after compression, so they read smaller than the raw text.</span>
-        <div id="adm-usage"><span class="set-note">Loading…</span></div>
+        <span class="set-note" style="margin:0 0 12px">How much of the project's allowance is gone, and what
+          is taking it up. Sizes are what the database actually holds after compression, so they read
+          smaller than the raw text.</span>
+        <div id="adm-cap"><span class="set-note">Loading…</span></div>
+        <details class="adm-usage-more" id="adm-usage-more">
+          <summary>Usage per account</summary>
+          <span class="set-note" style="margin:6px 0 10px">Heaviest first.</span>
+          <div id="adm-usage"><span class="set-note">Loading…</span></div>
+        </details>
       </div>
     </div>`;
 }
 
 function loadUsage() {
   if (!isSuperAdmin()) return;
+  const fail = (id, e) => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<span class="set-note" style="color:var(--red,#c66)">' + esc(e.message) + '</span>';
+  };
+  // The two reads are independent on purpose: the per-account table is the
+  // older function, and a database that has not had the newer one applied yet
+  // should still draw everything it can rather than one error where both were.
+  supaRpc('admin_storage_totals')
+    .then(rows => { _caps = (rows || [])[0] || null; paintCaps(); })
+    .catch(e => fail('adm-cap', e));
   supaRpc('admin_usage_overview')
     .then(rows => { _usage = rows || []; paintUsage(); })
-    .catch(e => {
-      const el = document.getElementById('adm-usage');
-      if (el) el.innerHTML = '<span class="set-note" style="color:var(--red,#c66)">' + esc(e.message) + '</span>';
-    });
+    .catch(e => fail('adm-usage', e));
+}
+
+// ── The capacity bars ─────────────────────────────────────────────────────
+// One bar per allowance, segmented by what is filling it. A segment carries a
+// minimum width so that something small enough to round to nothing still shows
+// as present rather than vanishing -- the bar is there to say WHAT is in the
+// space, and a type that has disappeared cannot say anything.
+let _caps = null;
+
+function capBar(title, used, limit, parts) {
+  const pct = limit ? Math.min(100, (used / limit) * 100) : 0;
+  const shown = parts.filter(p => p.bytes > 0);
+  return `
+    <div class="cap">
+      <div class="cap-hd">
+        <span class="cap-ttl">${esc(title)}</span>
+        <span class="cap-fig">${esc(fmtBytes(used))} of ${esc(fmtBytes(limit))}
+          · ${pct < 0.1 && used > 0 ? 'under 0.1' : pct.toFixed(1)}%</span>
+      </div>
+      <div class="cap-bar" role="img"
+        aria-label="${esc(title + ': ' + fmtBytes(used) + ' of ' + fmtBytes(limit) + ' used')}">
+        ${shown.map(p => `<span class="cap-seg" title="${esc(p.label + ' — ' + fmtBytes(p.bytes))}"
+          style="width:${limit ? Math.min(100, (p.bytes / limit) * 100) : 0}%;background:${p.colour}"></span>`).join('')}
+      </div>
+      <div class="cap-key">
+        ${shown.length ? shown.map(p => `<span class="cap-k"><i style="background:${p.colour}"></i>${esc(p.label)}
+          <b>${esc(fmtBytes(p.bytes))}</b>${p.n != null ? ' <span class="cap-n">' + esc(String(p.n)) + '</span>' : ''}</span>`).join('')
+        : '<span class="set-note" style="margin:0">Nothing stored yet.</span>'}
+      </div>
+    </div>`;
+}
+
+function paintCaps() {
+  const el = document.getElementById('adm-cap');
+  if (!el) return;
+  const c = _caps;
+  if (!c) { el.innerHTML = '<span class="set-note">No figures to show.</span>'; return; }
+  const n = k => Number(c[k]) || 0;
+  // Whatever the database holds beyond the app's own three -- indexes, the auth
+  // schema, Postgres itself. It counts against the allowance, so it is drawn
+  // rather than left out to make the bar look tidier.
+  const other = Math.max(0, n('db_bytes') - n('doc_bytes') - n('snapshot_bytes') - n('joint_bytes'));
+  const files = n('pic_bytes') + n('capture_bytes');
+  el.innerHTML =
+    capBar('Database', n('db_bytes'), SUPA_DB_LIMIT, [
+      { label: 'Sims',        bytes: n('doc_bytes'),      n: n('doc_n'),      colour: 'var(--amber)' },
+      { label: 'Joint sims',  bytes: n('joint_bytes'),    n: n('joint_n'),    colour: 'var(--green)' },
+      { label: 'Snapshots',   bytes: n('snapshot_bytes'), n: n('snapshot_n'), colour: 'var(--blue)' },
+      { label: 'Everything else', bytes: other,           n: null,            colour: 'var(--dim)' },
+    ]) +
+    capBar('Files', files, SUPA_FILE_LIMIT, [
+      { label: 'Character pictures', bytes: n('pic_bytes'),     n: n('pic_n'),     colour: 'var(--amber)' },
+      { label: 'Feedback captures',  bytes: n('capture_bytes'), n: n('capture_n'), colour: 'var(--blue)' },
+    ]) +
+    `<div class="cap-foot">${esc(String(n('writer_n')))} account${n('writer_n') === 1 ? '' : 's'} ·
+      the two allowances are metered separately, so they are never added together</div>`;
 }
 
 function fmtBytes(n) {
   n = Number(n) || 0;
   if (n < 1024) return n + ' B';
   if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB';
-  return (n / 1048576).toFixed(1) + ' MB';
+  // The storage allowance is quoted in GB, and '1024.0 MB of 1024.0 MB' is not
+  // a sentence anybody reads as full.
+  if (n < 1024 * 1024 * 1024) return (n / 1048576).toFixed(1) + ' MB';
+  return (n / 1073741824).toFixed(n < 10 * 1073741824 ? 2 : 1) + ' GB';
 }
 
 function fmtAgo(iso) {
@@ -2301,16 +2382,16 @@ function paintUsage() {
   const el = document.getElementById('adm-usage');
   if (!el) return;
   if (!_usage.length) { el.innerHTML = '<span class="set-note">No accounts yet.</span>'; return; }
-  const total = _usage.reduce((a, u) => a + (Number(u.bytes) || 0), 0);
-  const docs  = _usage.reduce((a, u) => a + (Number(u.doc_count) || 0) + (Number(u.joint_count) || 0), 0);
+  // admin_usage_overview() already orders by size, but the sort is stated here
+  // as well: this panel's whole promise is heaviest first, and it should not
+  // quietly depend on the order a function happens to return.
+  const rows = _usage.slice().sort((a, b) => (Number(b.bytes) || 0) - (Number(a.bytes) || 0));
   el.innerHTML = `
-    <div class="adm-w-count">${_usage.length} account${_usage.length === 1 ? '' : 's'} ·
-      ${docs} sim${docs === 1 ? '' : 's'} · ${fmtBytes(total)} in total</div>
     <div class="adm-w-scroll">
       <table class="adm-w-tbl">
         <thead><tr><th>Writer ID</th><th>Sims</th><th>Joint</th><th>Snapshots</th><th>Files</th><th>Total</th><th>Last active</th></tr></thead>
         <tbody>
-          ${_usage.map(u => `
+          ${rows.map(u => `
             <tr>
               <td class="adm-w-id">${esc(u.writer_id)}${u.display_name ? '<span class="adm-w-none"> ' + esc(u.display_name) + '</span>' : ''}</td>
               <td>${u.doc_count}</td>

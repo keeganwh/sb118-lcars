@@ -1091,6 +1091,39 @@ body.academy #editor .om{font-style:normal}
 .adm-w-going td{opacity:0.6}
 .adm-w-role{padding:3px 6px;font-size:0.76rem;min-width:120px}
 
+/* ── Storage capacity ──
+   TWO BARS, NEVER ONE. The database and the file buckets are metered against
+   separate allowances, so a single combined bar would be a number that does not
+   exist. Each is segmented by what is filling it. */
+.cap{margin:0 0 16px}
+.cap-hd{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  flex-wrap:wrap;margin-bottom:6px}
+.cap-ttl{font-size:0.72rem;letter-spacing:2px;text-transform:uppercase;font-weight:bold}
+.cap-fig{font-size:0.78rem;color:var(--dim)}
+.cap-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;
+  /* A flat neutral rather than a theme token: --bar is a dark rail under Prime,
+     which painted the empty part of the bar almost black in light mode and made
+     an almost-empty allowance look full. */
+  background:color-mix(in oklab, var(--text) 14%, transparent);
+  border:1px solid var(--border)}
+/* A segment too small to round to a pixel still has to be visible: the bar's
+   job is to say WHAT is in the space, and a type that has vanished says
+   nothing. */
+.cap-seg{min-width:3px;display:block}
+.cap-key{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px}
+.cap-k{display:flex;align-items:center;gap:6px;font-size:0.76rem;color:var(--dim)}
+.cap-k i{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
+.cap-k b{color:var(--text);font-weight:bold}
+/* How many of the thing, as opposed to how many bytes it takes. */
+.cap-n{opacity:0.7}
+.cap-n::before{content:'('}
+.cap-n::after{content:')'}
+.cap-foot{font-size:0.72rem;color:var(--dim);line-height:1.6;margin-bottom:4px}
+/* The per-account table is the detail behind the bars, so it is folded away. */
+.adm-usage-more{margin-top:6px}
+.adm-usage-more>summary{font-size:0.72rem;letter-spacing:1px;text-transform:uppercase;
+  color:var(--dim);cursor:pointer}
+
 /* ── App Feedback, admin side ──
    A TICKET LIST, not a wall of reports. A long report used to push everything
    under it off the screen, so each one is now a single scannable row -- number,

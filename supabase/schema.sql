@@ -1978,6 +1978,71 @@ revoke all on function public.admin_usage_overview() from public, anon;
 grant execute on function public.admin_usage_overview() to authenticated;
 
 -- ---------------------------------------------------------------------------
+-- admin_storage_totals() : one row, for the capacity bars
+-- ---------------------------------------------------------------------------
+-- admin_usage_overview() answers "who is using the space". This answers the
+-- question that comes first: HOW MUCH IS LEFT, and what is taking it up.
+--
+-- THE TWO LIMITS ARE SEPARATE AND MUST NOT BE ADDED TOGETHER. Supabase meters
+-- the database and the file buckets against different allowances, so this hands
+-- back two independent totals and the app draws two bars. db_bytes is the whole
+-- database -- indexes, the auth schema, everything -- because that is the
+-- number the allowance is measured against; the three columns beside it say how
+-- much of it the app's own data accounts for, and the rest is the difference.
+select public.jp_drop_overloads('admin_storage_totals');
+create or replace function public.admin_storage_totals()
+returns table (
+  writer_n       integer,
+  doc_n          integer,
+  doc_bytes      bigint,
+  snapshot_n     integer,
+  snapshot_bytes bigint,
+  joint_n        integer,
+  joint_bytes    bigint,
+  db_bytes       bigint,
+  pic_n          integer,
+  pic_bytes      bigint,
+  capture_n      integer,
+  capture_bytes  bigint
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if public.my_role() <> 'super_admin' then
+    raise exception 'Only a super admin can view usage.';
+  end if;
+  return query
+    select
+      (select count(*) from public.writers)::int,
+      -- Solo sims are inside the payload blobs, so the count is a sum over the
+      -- objects rather than a row count. Same shape-tolerance as the overview.
+      (select coalesce(sum(case jsonb_typeof(x.payload -> 'docs')
+                             when 'object' then (select count(*) from jsonb_object_keys(x.payload -> 'docs'))
+                             when 'array'  then jsonb_array_length(x.payload -> 'docs')
+                             else 0 end), 0)
+         from public.state x)::int,
+      (select coalesce(sum(pg_column_size(x.payload)), 0) from public.state x)::bigint,
+      (select count(*) from public.snapshots)::int,
+      (select coalesce(sum(pg_column_size(x.html)), 0) from public.snapshots x)::bigint,
+      (select count(*) from public.jp_docs)::int,
+      (select coalesce(sum(pg_column_size(d.content) + pg_column_size(d.meta)), 0)
+         from public.jp_docs d)::bigint,
+      pg_database_size(current_database())::bigint,
+      (select count(*) from storage.objects o where o.bucket_id = 'character-pics')::int,
+      (select coalesce(sum(coalesce((o.metadata ->> 'size')::bigint, 0)), 0)
+         from storage.objects o where o.bucket_id = 'character-pics')::bigint,
+      (select count(*) from storage.objects o where o.bucket_id = 'app-feedback')::int,
+      (select coalesce(sum(coalesce((o.metadata ->> 'size')::bigint, 0)), 0)
+         from storage.objects o where o.bucket_id = 'app-feedback')::bigint;
+end $$;
+
+revoke all on function public.admin_storage_totals() from public, anon;
+grant execute on function public.admin_storage_totals() to authenticated;
+
+-- ---------------------------------------------------------------------------
 -- feedback: the status vocabulary, revised
 -- ---------------------------------------------------------------------------
 -- 'responded' described the mechanism rather than an outcome: any note an

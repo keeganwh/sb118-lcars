@@ -272,6 +272,32 @@ select pg_temp.ok((select bytes from public.admin_usage_overview()
 select pg_temp.ok((select count(*) from public.admin_usage_overview()) = 3,
                   'every writer appears, including the ones storing nothing');
 
+-- --- the capacity totals -----------------------------------------------------
+select pg_temp.be('a');
+do $$ begin
+  perform public.admin_storage_totals();
+  raise exception 'FAIL: an ordinary writer read the storage totals';
+exception when others then
+  if position('FAIL:' in sqlerrm) = 1 then raise; end if;
+end $$;
+select pg_temp.ok(true, 'an ordinary writer cannot read the storage totals');
+
+select pg_temp.be('c');
+select pg_temp.ok((select doc_n from public.admin_storage_totals()) = 5,
+                  'the totals count every sim across every payload, object or array');
+select pg_temp.ok((select pic_bytes from public.admin_storage_totals()) = 5000,
+                  'and the character pictures separately from the database');
+select pg_temp.ok((select doc_bytes from public.admin_storage_totals()) > 0,
+                  'the payload blobs have a size of their own');
+-- The whole database is what the allowance is measured against, so it has to be
+-- larger than the app's own rows rather than equal to them.
+select pg_temp.ok((select db_bytes from public.admin_storage_totals())
+                  > (select doc_bytes + snapshot_bytes + joint_bytes
+                       from public.admin_storage_totals()),
+                  'db_bytes is the whole database, not just the app''s own tables');
+select pg_temp.ok((select writer_n from public.admin_storage_totals()) = 3,
+                  'and every account is counted');
+
 -- --- tickets: a number and a headline -------------------------------------
 select pg_temp.be('a');
 select public.feedback_submit('33333333-3333-3333-3333-333333333333', 'bug',
