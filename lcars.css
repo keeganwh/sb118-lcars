@@ -1091,9 +1091,73 @@ body.academy #editor .om{font-style:normal}
 .adm-w-going td{opacity:0.6}
 .adm-w-role{padding:3px 6px;font-size:0.76rem;min-width:120px}
 
+/* ── Storage capacity ──
+   TWO BARS, NEVER ONE. The database and the file buckets are metered against
+   separate allowances, so a single combined bar would be a number that does not
+   exist. Each is segmented by what is filling it. */
+.cap{margin:0 0 16px}
+.cap-hd{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  flex-wrap:wrap;margin-bottom:6px}
+.cap-ttl{font-size:0.72rem;letter-spacing:2px;text-transform:uppercase;font-weight:bold}
+.cap-fig{font-size:0.78rem;color:var(--dim)}
+.cap-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;
+  /* A flat neutral rather than a theme token: --bar is a dark rail under Prime,
+     which painted the empty part of the bar almost black in light mode and made
+     an almost-empty allowance look full. */
+  background:color-mix(in oklab, var(--text) 14%, transparent);
+  border:1px solid var(--border)}
+/* A segment too small to round to a pixel still has to be visible: the bar's
+   job is to say WHAT is in the space, and a type that has vanished says
+   nothing. */
+.cap-seg{min-width:3px;display:block}
+.cap-key{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px}
+.cap-k{display:flex;align-items:center;gap:6px;font-size:0.76rem;color:var(--dim)}
+.cap-k i{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
+.cap-k b{color:var(--text);font-weight:bold}
+/* How many of the thing, as opposed to how many bytes it takes. */
+.cap-n{opacity:0.7}
+.cap-n::before{content:'('}
+.cap-n::after{content:')'}
+.cap-foot{font-size:0.72rem;color:var(--dim);line-height:1.6;margin-bottom:4px}
+/* The per-account table is the detail behind the bars, so it is folded away. */
+.adm-usage-more{margin-top:6px}
+.adm-usage-more>summary{font-size:0.72rem;letter-spacing:1px;text-transform:uppercase;
+  color:var(--dim);cursor:pointer}
+
 /* ── App Feedback, admin side ──
-   Same card shell as the reset queue, with a row of controls under each report:
-   the status, one note back to the writer, and the two ways to end it. */
+   A TICKET LIST, not a wall of reports. A long report used to push everything
+   under it off the screen, so each one is now a single scannable row -- number,
+   kind, headline, who, when, status -- that opens on click. The list scrolls in
+   its own box so the rest of the Admin page stays reachable. */
+.adm-fb-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 10px}
+.adm-fb-q{flex:1 1 240px;font-size:0.8rem}
+.adm-fb-count{margin:0;white-space:nowrap}
+.adm-fb-list{max-height:62vh;overflow:auto;padding-right:4px}
+/* The summary is a button so it takes a keyboard as well as a finger, which
+   means undoing every default a button carries. */
+.adm-fb-sum{display:flex;align-items:center;gap:10px;width:100%;flex-wrap:wrap;
+  background:none;border:none;padding:0;margin:0;cursor:pointer;text-align:left;
+  color:inherit;font:inherit}
+.adm-fb-no{font-family:var(--mono,monospace);font-size:0.78rem;font-weight:bold;
+  color:var(--dim);letter-spacing:1px;flex:0 0 auto}
+/* The headline takes the room that is left and truncates rather than wrapping:
+   a row that stays one line is what makes the list scannable. */
+.adm-fb-ttl{flex:1 1 180px;min-width:0;font-size:0.86rem;font-weight:bold;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adm-fb-who{font-family:var(--mono,monospace);font-size:0.74rem;color:var(--dim);
+  letter-spacing:1px;flex:0 0 auto}
+.adm-fb-sum .fb-st{margin-left:0}
+.adm-fb-chev{display:flex;color:var(--dim);transition:transform 0.15s;flex:0 0 auto;margin-left:auto}
+.adm-fb-open .adm-fb-chev{transform:rotate(180deg)}
+.adm-fb-det{display:none}
+.adm-fb-open>.adm-fb-det{display:block;margin-top:10px;
+  border-top:1px solid var(--border);padding-top:10px}
+/* The context line and the console errors are a diagnosis, not a report. They
+   were the first thing on every ticket and said nothing to anyone reading the
+   queue, so they fold away. */
+.adm-fb-tech{margin-top:10px}
+.adm-fb-tech>summary{font-size:0.72rem;letter-spacing:1px;text-transform:uppercase;
+  color:var(--dim);cursor:pointer}
 .adm-fb-bug{border-color:var(--red,#c66);color:var(--red,#c66)}
 .adm-fb-feature{border-color:var(--amber);color:var(--amber)}
 .adm-fb-ctx{font-size:0.72rem;color:var(--dim);margin-top:8px;font-family:var(--mono,monospace)}
@@ -1102,9 +1166,12 @@ body.academy #editor .om{font-style:normal}
 .adm-fb-errs{font-size:0.7rem;color:var(--red,#c66);margin-top:6px;white-space:pre-wrap;
   overflow-wrap:anywhere;max-height:6.5em;overflow:auto}
 .adm-fb-caps{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center}
-.adm-fb-act{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center}
-.adm-fb-status{min-width:150px;padding:3px 6px;font-size:0.76rem}
-.adm-fb-note{flex:1 1 220px;font-size:0.8rem}
+.adm-fb-act{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:flex-start}
+.adm-fb-status{flex:0 0 170px;width:auto;min-width:150px;padding:3px 6px;font-size:0.76rem}
+/* The note is prefilled with what the writer was last told, so it is a box to
+   edit in rather than a line to type once. */
+.adm-fb-note{flex:1 1 220px;font-size:0.8rem;resize:vertical;line-height:1.5}
+.adm-fb-btns{display:flex;gap:8px;flex-wrap:wrap;flex:1 1 100%}
 .adm-fb-reply{margin-top:10px;font-size:0.8rem;line-height:1.6;padding:8px 10px;
   border-left:3px solid var(--amber);overflow-wrap:anywhere}
 .adm-fb-reply .adm-req-foot{display:block}
@@ -1197,6 +1264,10 @@ body.academy #editor .om{font-style:normal}
 .fb-send{align-self:flex-start}
 .fb-item{border:1px solid var(--border);border-radius:8px;padding:10px 12px}
 .fb-item-hd{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.fb-item-ttl{font-size:0.88rem;font-weight:bold;margin-bottom:6px}
+/* The headline on the form. It is the first field, so it reads as the title of
+   what is being written under it. */
+.fb-title{font-size:0.88rem;font-weight:bold}
 .fb-st{font-size:0.66rem;letter-spacing:1px;text-transform:uppercase;color:var(--dim);
   margin-left:auto}
 .fb-st-implementing,.fb-st-in_development{color:var(--amber)}
@@ -1389,6 +1460,11 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   /* The feedback controls are a row on a desktop and a stack on a phone --
      a status select and a note field side by side leave neither usable. */
   .adm-fb-act .btn,.adm-fb-act .mi{flex:1 1 100%}
+  /* A ticket row wraps onto two lines on a phone rather than truncating the
+     headline down to nothing, and the list gets the screen it can spare. */
+  .adm-fb-list{max-height:70svh}
+  .adm-fb-ttl{flex:1 1 100%;white-space:normal}
+  .adm-fb-q{font-size:16px}
   /* The panel is the full width of a phone, and its text fields clear the
      16px floor or iOS Safari zooms the whole app in on focus. */
   #fb-panel,#wn-panel{width:100vw;border-left:none}
@@ -1408,6 +1484,7 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   .tour-choice{flex:1 1 100%}
   .tour-choice .btn{flex:1 1 auto}
   .fb-text{font-size:16px}
+  .fb-title{font-size:16px}
   .adm-fb-note{font-size:16px}   /* iOS Safari zooms into any focused field under 16px */
 }
 

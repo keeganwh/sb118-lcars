@@ -228,9 +228,18 @@ select pg_temp.ok((select count(*) from public.feedback_reports) = 0,
                   'a super admin can delete a report outright');
 
 -- --- usage overview ---------------------------------------------------------
+-- S.docs IS AN OBJECT KEYED BY SIM ID. The first version of this fixture used
+-- an array, which is the only reason the shipped function -- which called
+-- jsonb_array_length() on it -- passed these checks while failing on every real
+-- account with 'cannot get array length of a non-array'. The object shape is
+-- the one the app actually writes, so it is the one tested first.
 insert into public.state (writer_uid, payload) values
   ('00000000-0000-0000-0000-00000000000a',
-   '{"docs":[{"id":"d1"},{"id":"d2"},{"id":"d3"}]}'::jsonb);
+   '{"docs":{"d1":{"t":"one"},"d2":{"t":"two"},"d3":{"t":"three"}}}'::jsonb),
+  ('00000000-0000-0000-0000-00000000000b',
+   '{"docs":[{"id":"d1"},{"id":"d2"}]}'::jsonb),
+  ('00000000-0000-0000-0000-00000000000c',
+   '{"docs":null}'::jsonb);
 insert into storage.objects (bucket_id, name, metadata) values
   ('character-pics', '00000000-0000-0000-0000-00000000000a/pic.png',
    '{"size": 5000}'::jsonb);
@@ -248,6 +257,12 @@ select pg_temp.be('c');
 select pg_temp.ok((select doc_count from public.admin_usage_overview()
                     where writer_id = 'A111') = 3,
                   'the usage overview counts sims out of the payload blob');
+select pg_temp.ok((select doc_count from public.admin_usage_overview()
+                    where writer_id = 'B222') = 2,
+                  'and reads an array-shaped payload too, rather than failing');
+select pg_temp.ok((select doc_count from public.admin_usage_overview()
+                    where writer_id = 'C333') = 0,
+                  'and counts a payload that is neither as nothing');
 select pg_temp.ok((select file_bytes from public.admin_usage_overview()
                     where writer_id = 'A111') = 5000,
                   'and counts the writer''s stored files');
@@ -256,6 +271,93 @@ select pg_temp.ok((select bytes from public.admin_usage_overview()
                   'total bytes include the payload as well as the files');
 select pg_temp.ok((select count(*) from public.admin_usage_overview()) = 3,
                   'every writer appears, including the ones storing nothing');
+
+-- --- the capacity totals -----------------------------------------------------
+select pg_temp.be('a');
+do $$ begin
+  perform public.admin_storage_totals();
+  raise exception 'FAIL: an ordinary writer read the storage totals';
+exception when others then
+  if position('FAIL:' in sqlerrm) = 1 then raise; end if;
+end $$;
+select pg_temp.ok(true, 'an ordinary writer cannot read the storage totals');
+
+select pg_temp.be('c');
+select pg_temp.ok((select doc_n from public.admin_storage_totals()) = 5,
+                  'the totals count every sim across every payload, object or array');
+select pg_temp.ok((select pic_bytes from public.admin_storage_totals()) = 5000,
+                  'and the character pictures separately from the database');
+select pg_temp.ok((select doc_bytes from public.admin_storage_totals()) > 0,
+                  'the payload blobs have a size of their own');
+-- The whole database is what the allowance is measured against, so it has to be
+-- larger than the app's own rows rather than equal to them.
+select pg_temp.ok((select db_bytes from public.admin_storage_totals())
+                  > (select doc_bytes + snapshot_bytes + joint_bytes
+                       from public.admin_storage_totals()),
+                  'db_bytes is the whole database, not just the app''s own tables');
+select pg_temp.ok((select writer_n from public.admin_storage_totals()) = 3,
+                  'and every account is counted');
+
+-- --- tickets: a number and a headline -------------------------------------
+select pg_temp.be('a');
+select public.feedback_submit('33333333-3333-3333-3333-333333333333', 'bug',
+       'The editor ate my sim.', '4.3', '{}'::jsonb, null, null,
+       'Editor loses text on paste');
+select public.feedback_submit('44444444-4444-4444-4444-444444444444', 'feature',
+       'Please add a dark mode for the manifest.', '4.3', '{}'::jsonb, null, null, null);
+
+select pg_temp.ok((select title from public.feedback_reports
+                    where id = '33333333-3333-3333-3333-333333333333')
+                  = 'Editor loses text on paste',
+                  'a report carries the headline it was filed with');
+select pg_temp.ok((select title from public.feedback_reports
+                    where id = '44444444-4444-4444-4444-444444444444') is null,
+                  'and a report filed without one is left null for the app to stand in for');
+select pg_temp.ok((select ticket_no from public.feedback_reports
+                    where id = '44444444-4444-4444-4444-444444444444')
+                  > (select ticket_no from public.feedback_reports
+                      where id = '33333333-3333-3333-3333-333333333333'),
+                  'ticket numbers are handed out in the order reports arrive');
+
+do $$ begin
+  perform public.feedback_submit('55555555-5555-5555-5555-555555555555', 'bug',
+          'x', '4.3', '{}'::jsonb, null, null, repeat('y', 101));
+  raise exception 'FAIL: a 101-character headline was accepted';
+exception when others then
+  if position('FAIL:' in sqlerrm) = 1 then raise; end if;
+end $$;
+select pg_temp.ok(true, 'a headline over 100 characters is refused');
+
+select pg_temp.be('c');
+select pg_temp.ok((select title from public.admin_list_feedback()
+                    where id = '33333333-3333-3333-3333-333333333333')
+                  = 'Editor loses text on paste',
+                  'the queue hands the headline to the admin panel');
+select pg_temp.ok((select ticket_no from public.admin_list_feedback()
+                    where id = '33333333-3333-3333-3333-333333333333') is not null,
+                  'and the ticket number with it');
+
+-- The note box in the panel is prefilled and editable, so an empty box has to
+-- mean "deleted" rather than "unchanged" -- which is the one thing a null on
+-- its own could not say.
+select public.admin_feedback_status('33333333-3333-3333-3333-333333333333',
+       'implementing', 'Looking at it now.');
+select public.admin_feedback_status('33333333-3333-3333-3333-333333333333',
+       'implementing', 'Fixed in the next version.');
+select pg_temp.ok((select admin_note from public.feedback_reports
+                    where id = '33333333-3333-3333-3333-333333333333')
+                  = 'Fixed in the next version.',
+                  'an admin can edit the note they already sent');
+select public.admin_feedback_status('33333333-3333-3333-3333-333333333333',
+       'implementing', null, true);
+select pg_temp.ok((select admin_note from public.feedback_reports
+                    where id = '33333333-3333-3333-3333-333333333333') is null,
+                  'and can clear it outright with p_clear_note');
+select public.admin_feedback_status('33333333-3333-3333-3333-333333333333',
+       'will_revisit', null);
+select pg_temp.ok((select status from public.feedback_reports
+                    where id = '33333333-3333-3333-3333-333333333333') = 'will_revisit',
+                  'while a plain null still leaves the note alone');
 
 reset role;
 \echo '--- all feedback database checks passed ---'

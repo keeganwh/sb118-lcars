@@ -294,13 +294,56 @@ version bump along with Batch 5's. See `memory/session_lcars_2026-09-onboarding.
 
 **Why alone, and why late:** it documents the app, so every batch above changes what it has to say. Building it before Batches 1–5 means writing it twice.
 
-- [ ] **[+3] A new guide, from the ground up.**
-      `LCARS-Guide-v2.html` predates accounts, Delta Prime, Joint Posts, share links and the importer removal. Start fresh and rethink the format rather than patching.
-      **Two tiers:**
-      1. **"What you need to get started"** — short, and **merged with the current wizards and popups** so the in-app onboarding and the guide are one thing rather than two that drift.
-      2. **Full feature reference** — everything else, in detail.
-      **Plus:** a working **search**, and a clear, accessible **sidebar table of contents whose structure mirrors the Settings menu**, so the guide and the app agree on how the tool is organised. Styled to match the app.
-      _Done when: the guide matches the shipped app, onboarding is not duplicated between the wizard and the guide, and a writer can find any feature by searching or by scanning the sidebar._
+**Sequenced AFTER the Joint Posts branch** (`claude/jp-open-everyone-ylzf4u`), agreed 2026-09-13. Joint Posts is a major piece of functionality and the guide should not be written around a moving target — but it ships **with** a Collaboration → Joint Posts entry marked *in development*, so a writer who finds the button gets something rather than silence. That entry is filled in when JPs land.
+
+## What this is, and who it is for
+
+**A reference manual, not an introduction.** The in-app Getting Started tour is the introduction and stays the introduction; the guide is what you go to when the tour was not enough. It serves two readers at once:
+
+- a **new writer** who wants more detail than the walkthrough gave them, and
+- an **existing writer** looking up something specific or advanced.
+
+That dual audience is what killed the old guide, which tried to be a tutorial and a manual at once. The resolution: **the guide never introduces, it explains.** Structure for scanning, because it will be scanned far more often than read.
+
+## Sections, in order
+
+Runs from "what am I looking at" to "how do I manage this thing".
+
+1. **The Basics** — navigating the app, what each section is for, the information hierarchy (mission → scene → sim), online vs offline and what an account actually buys you.
+2. **Writing A Sim** — from nothing: creating a mission, a scene, a sim. The writing tools, **markers and visual aids as a lookup table** (every marker, what it does, what it looks like in the editor, what arrives in the group — this is the most-consulted page in the manual and should be built to be consulted mid-sim, not read). The copy-out and post process. Spotting a stale scene. **Templates** and **Academy Mode** both live here as well as in Settings, with **worked examples** — the user has now used Academy Mode in practice and has real material to draw on.
+3. **Characters** — the character list, adding and editing, detection in sim text and in titles, colours, assigning paragraphs, claiming.
+4. **Collaboration** — read-only share links, **Joint Posts (stub, in development)**, display names, who you write with most, linked accounts.
+5. **Settings and Styles** — in depth. Seven duty accents, the custom hue, mode and vibe.
+6. **Data & Account Management** — in depth, including account recovery.
+7. **App Feedback** — bug reports and feature requests.
+8. **LCARS on a phone** — what differs and what does not: the rail, the sims drawer, the grouped toolbar, the hide-furniture button, the Actions menu on a dashboard. Almost none of it is self-evident and it is now a substantial part of the app.
+9. **Troubleshooting / FAQ** — deliberately last, and deliberately **a living section the user extends as real questions arrive**. Seeds: why a pasted sim comes out double-spaced, why an alias was not picked up, why a scene looks stale. These are real questions whose answers would otherwise be scattered across four sections.
+
+**Keyboard shortcuts are NOT their own section.** There are few unique enough to warrant one; they appear as *Tips* inside the section each belongs to.
+
+**Every section opens with an "at a glance" block** — three or four lines on what it is and where it lives. Agreed to try in the draft and judge from there.
+
+## How it gets built
+
+The pattern that worked twice in the 2026-09-13 session (the dashboard mockups and the duty colour review):
+
+1. Claude writes the **full first draft as an artifact** — settings-style sidebar nav, responsive, in the current Delta Prime look.
+2. It carries **per-section review controls**: a good / needs-work toggle and a notes box, saved with the artifact `db` capability so the markup persists and Claude can read it straight back with `read_db`.
+3. The user goes through at their own pace; Claude revises.
+4. **Only once settled** does it become `LCARS-Guide-v3.html` in the repo, replacing v2 at `/guide`.
+
+Do not write it straight into the repo. The point of the artifact stage is that the user can mark it up without a commit round-trip.
+
+**`LCARS-Guide-v2.html` carries an out-of-date notice at its top as of 4.3.** Remove it with the file when v3 replaces it.
+
+## Carried over from the earlier plan
+
+- A working **search**.
+- A **sidebar table of contents** — the Settings-style nav the user asked for, which also makes the guide and the app agree on how the tool is organised.
+- Styled to match the app.
+- Do not duplicate the onboarding: the tour introduces, the guide explains.
+
+_Done when: the guide matches the shipped app, a writer can find any feature by searching or scanning the sidebar, it reads well on a phone, and the JP section is either filled in or clearly marked as pending._
 
 ---
 

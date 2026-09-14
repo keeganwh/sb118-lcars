@@ -7,6 +7,17 @@ const SKEY = 'lcars_v1';
 const APP_VERSION = '4.3';
 const VERSIONS = [
   {
+    version: 'pending',
+    date: '2026-09-14',
+    changes: [
+      'Changed: a bug report or a feature request now starts with a short headline, so the team can tell at a glance what each one is about. It is the first box on the form, and it is limited to 100 characters',
+      'Added: reports are numbered now. Your own reports show their ticket number, which means you can point at one in a conversation instead of describing it again',
+      'Changed: the technical details attached to a report \u2014 which screen you were on, which browser, and anything the app logged \u2014 are still sent, but harmless browser chatter is no longer collected with them. Every report was arriving with five copies of a warning that meant nothing',
+      'Fixed: the Storage and Usage report in the Admin panel showed nothing but an error. It counted sims the wrong way and fell over on every account',
+      'Changed: Storage and Usage now opens with two bars showing how much of the project\u2019s space is gone and what is filling it \u2014 sims, joint sims, snapshots and files, each counted separately. The account-by-account figures are still there, folded underneath and sorted heaviest first',
+    ],
+  },
+  {
     version: '4.3',
     date: '2026-09-13',
     changes: [
@@ -1572,6 +1583,25 @@ async function supaRpc(fn, args) {
   return j;
 }
 
+// AN ARGUMENT THE DATABASE MAY NOT HAVE YET. The deploy always goes out before
+// the migration (old code tolerates a column it does not use; new code does not
+// tolerate one that is missing), which leaves a window where this build is
+// sending an argument the deployed function has never heard of. PostgREST says
+// so plainly -- it cannot find a function of that shape -- and the call is
+// retried without the new arguments rather than failing in front of a writer.
+// Once the migration is run the first call succeeds and the retry never fires.
+async function supaRpcSoft(fn, args, optional) {
+  try {
+    return await supaRpc(fn, args);
+  } catch (e) {
+    const m = String((e && e.message) || '');
+    if (!/PGRST202|schema cache|Could not find the function|does not exist/i.test(m)) throw e;
+    const lean = Object.assign({}, args);
+    optional.forEach(k => { delete lean[k]; });
+    return await supaRpc(fn, lean);
+  }
+}
+
 // The role is read once per boot and cached. It decides what is drawn, never
 // what is permitted, so a stale copy costs a wasted click and nothing more.
 async function loadMyRole() {
@@ -1966,6 +1996,10 @@ async function fbDeleteObjects(paths) {
 
 let _fbReports = [];
 let _fbArchived = false;
+let _fbQuery = '';
+// Which tickets are expanded, kept across a reload of the queue so that saving
+// a reply does not collapse the thing you were reading.
+const _fbOpen = {};
 
 function fbAdminCard() {
   return `
@@ -1978,6 +2012,12 @@ function fbAdminCard() {
         <div class="adm-tabs">
           <button class="btn ${_fbArchived ? 'btn-s' : 'btn-p'}" onclick="fbAdminTab(false)">${ic('inbox')} Open</button>
           <button class="btn ${_fbArchived ? 'btn-p' : 'btn-s'}" onclick="fbAdminTab(true)">${ic('archive')} Including archived</button>
+        </div>
+        <div class="adm-fb-tools">
+          <input class="mi adm-fb-q" id="fb-q" type="search" autocomplete="off"
+            placeholder="Search tickets — number, headline, writer, words in the report…"
+            oninput="fbSearch(this.value)" value="${esc(_fbQuery)}">
+          <span class="set-note adm-fb-count" id="fb-count"></span>
         </div>
         <div id="adm-fb"><span class="set-note">Loading…</span></div>
       </div>
@@ -2006,50 +2046,119 @@ function fbContextLine(c) {
   if (c.skin)     bits.push(c.skin + '/' + (c.mode || '?') + '/' + (c.vibe || '?'));
   if (c.viewport) bits.push(c.viewport);
   if (c.docType)  bits.push(c.docType === 'joint' ? 'joint sim open' : 'sim open');
-  if (c.platform) bits.push(c.platform);
-  return bits.join(' · ');
+  // Reports filed before 4.3 have only the raw user-agent, so it is condensed
+  // on the way out instead.
+  bits.push(c.browser || (c.platform ? fbBrowser(c.platform) : ''));
+  return bits.filter(Boolean).join(' · ');
+}
+
+// A ticket number, once the migration that assigns them has been run. A row
+// filed before that has none, and says so rather than inventing one.
+function fbTicket(f) { return f.ticket_no ? '#' + f.ticket_no : '—'; }
+
+// Every report needs a line an admin can scan. A headline is asked for on the
+// form now, but the ones filed before that was true have none, so a readable
+// stand-in is built from what the row does have.
+function fbHeadline(f) {
+  const t = String(f.title || '').trim();
+  if (t) return t;
+  return (f.kind === 'bug' ? 'Bug report' : 'Feature request') +
+         ' from ' + (f.writer_id || 'a writer');
+}
+
+// One string per report to match against, so a search can find a ticket by its
+// number, its headline, who filed it, its status, or a word in the body.
+function fbHaystack(f) {
+  return [fbTicket(f), fbHeadline(f), f.writer_id, f.display_name, f.body,
+          f.admin_note, f.kind === 'bug' ? 'bug' : 'feature request',
+          fbStatusLabel(f.status)].filter(Boolean).join(' ').toLowerCase();
+}
+
+function fbSearch(q) {
+  _fbQuery = q || '';
+  paintFeedback();
+}
+
+// Expanding a ticket is done on the row itself rather than by repainting the
+// list: a repaint would throw away a reply half-typed in another ticket.
+function fbToggle(id) {
+  const row = document.getElementById('fbrow-' + id);
+  if (!row) return;
+  const open = row.classList.toggle('adm-fb-open');
+  if (open) _fbOpen[id] = true; else delete _fbOpen[id];
+  const sum = row.querySelector('.adm-fb-sum');
+  if (sum) sum.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
 function paintFeedback() {
   const el = document.getElementById('adm-fb');
+  const cnt = document.getElementById('fb-count');
   if (!el) return;
   if (!_fbReports.length) {
     el.innerHTML = '<span class="set-note">Nothing filed yet.</span>';
+    if (cnt) cnt.textContent = '';
     return;
   }
-  el.innerHTML = _fbReports.map(f => {
-    const errs = (f.context && Array.isArray(f.context.errors)) ? f.context.errors : [];
+  const q = _fbQuery.trim().toLowerCase();
+  const rows = q ? _fbReports.filter(f => fbHaystack(f).indexOf(q) >= 0) : _fbReports;
+  if (cnt) {
+    cnt.textContent = q ? rows.length + ' of ' + _fbReports.length + ' tickets'
+                        : _fbReports.length + ' ticket' + (_fbReports.length === 1 ? '' : 's');
+  }
+  if (!rows.length) {
+    el.innerHTML = '<span class="set-note">Nothing matches that.</span>';
+    return;
+  }
+  el.innerHTML = '<div class="adm-fb-list">' + rows.map(f => {
+    const errs = fbCleanErrors(f.context && f.context.errors);
+    const ctx = fbContextLine(f.context);
+    const ua = (f.context && f.context.platform) || '';
+    const open = !!_fbOpen[f.id];
     return `
-    <div class="adm-req adm-fb${f.archived_at ? ' adm-req-done' : ''}">
-      <div class="adm-req-hdr">
-        <span class="adm-req-tag adm-fb-${f.kind}">${f.kind === 'bug' ? 'Bug' : 'Feature request'}</span>
-        <span class="adm-req-wid">${esc(f.writer_id || 'unknown')}${f.display_name ? ' · ' + esc(f.display_name) : ''}</span>
-        <span class="adm-req-when">${esc(fmtWhen(f.created_at))}${f.app_version ? ' · v' + esc(f.app_version) : ''}</span>
+    <div class="adm-req adm-fb${f.archived_at ? ' adm-req-done' : ''}${open ? ' adm-fb-open' : ''}" id="fbrow-${f.id}">
+      <button class="adm-fb-sum" onclick="fbToggle('${f.id}')" aria-expanded="${open ? 'true' : 'false'}">
+        <span class="adm-fb-no">${esc(fbTicket(f))}</span>
+        <span class="adm-req-tag adm-fb-${f.kind}">${f.kind === 'bug' ? 'Bug' : 'Feature'}</span>
+        <span class="adm-fb-ttl">${esc(fbHeadline(f))}</span>
+        <span class="adm-fb-who">${esc(f.writer_id || 'unknown')}</span>
+        <span class="adm-req-when">${esc(fmtWhen(f.created_at))}</span>
+        <span class="fb-st fb-st-${esc(f.status)}">${esc(fbStatusLabel(f.status))}</span>
         ${f.archived_at ? '<span class="adm-req-tag">Archived</span>' : ''}
+        <span class="adm-fb-chev">${ic('chevron-down')}</span>
+      </button>
+      <div class="adm-fb-det">
+        <div class="adm-req-note">${esc(f.body)}</div>
+        ${(ctx || errs.length || ua) ? `
+        <details class="adm-fb-tech">
+          <summary>Technical details</summary>
+          ${ctx ? `<div class="adm-fb-ctx">${esc(ctx)}${f.app_version ? ' · v' + esc(f.app_version) : ''}</div>` : ''}
+          ${ua ? `<div class="adm-fb-ctx">${esc(ua)}</div>` : ''}
+          ${errs.length ? `<div class="adm-fb-errs">${errs.map(e => esc(String(e))).join('<br>')}</div>` : ''}
+        </details>` : ''}
+        <div class="adm-fb-caps">
+          ${f.capture_shot ? `<button class="btn btn-s" onclick="fbOpenCapture('${esc(f.capture_shot)}')">${ic('image')} Screenshot</button>`
+            : `<span class="set-note" style="margin:0">${f.capture_purged_at ? 'Screenshot destroyed.' : 'No screenshot attached.'}</span>`}
+        </div>
+        ${f.archived_at ? (f.admin_note
+          ? `<div class="adm-fb-reply"><strong>${esc(fbStatusLabel(f.status))}</strong> — ${esc(f.admin_note)}
+              <span class="adm-req-foot">${esc(f.status_by || '')} ${esc(fmtWhen(f.status_at))}</span></div>`
+          : '') : `
+        <div class="adm-fb-act">
+          <select class="mi adm-fb-status" id="fb-st-${f.id}">
+            ${FB_STATUS.map(st => `<option value="${st.v}"${fbStatusLabel(f.status) === st.l ? ' selected' : ''}>${st.l}</option>`).join('')}
+          </select>
+          <textarea class="mi adm-fb-note" id="fb-nt-${f.id}" rows="2" maxlength="2000"
+            placeholder="A note back to the writer (optional)…">${esc(f.admin_note || '')}</textarea>
+          <div class="adm-fb-btns">
+            <button class="btn btn-p" onclick="fbSaveStatus('${f.id}')">${ic('check')} Save</button>
+            <button class="btn btn-s" onclick="fbConfirmArchive('${f.id}')">${ic('archive')} Archive</button>
+            <button class="btn btn-s" onclick="fbConfirmDelete('${f.id}')">${ic('trash')} Delete</button>
+          </div>
+          ${f.status_at ? `<span class="adm-req-foot">Last actioned by ${esc(f.status_by || 'someone')} · ${esc(fmtWhen(f.status_at))}${f.admin_note ? ' · the note above is what the writer sees, and editing it sends the new one' : ''}</span>` : ''}
+        </div>`}
       </div>
-      <div class="adm-req-note">${esc(f.body)}</div>
-      <div class="adm-fb-ctx">${esc(fbContextLine(f.context))}</div>
-      ${errs.length ? `<div class="adm-fb-errs">${errs.map(e => esc(String(e))).join('<br>')}</div>` : ''}
-      <div class="adm-fb-caps">
-        ${f.capture_shot ? `<button class="btn btn-s" onclick="fbOpenCapture('${esc(f.capture_shot)}')">${ic('image')} Screenshot</button>`
-          : `<span class="set-note" style="margin:0">${f.capture_purged_at ? 'Screenshot destroyed.' : 'No screenshot attached.'}</span>`}
-      </div>
-      ${f.archived_at ? '' : `
-      <div class="adm-fb-act">
-        <select class="mi adm-fb-status" id="fb-st-${f.id}">
-          ${FB_STATUS.map(s => `<option value="${s.v}"${fbStatusLabel(f.status) === s.l ? ' selected' : ''}>${s.l}</option>`).join('')}
-        </select>
-        <input class="mi adm-fb-note" id="fb-nt-${f.id}" placeholder="A note back to the writer (optional)…"
-               autocomplete="off" maxlength="2000">
-        <button class="btn btn-p" onclick="fbSaveStatus('${f.id}')">${ic('check')} Save</button>
-        <button class="btn btn-s" onclick="fbConfirmArchive('${f.id}')">${ic('archive')} Archive</button>
-        <button class="btn btn-s" onclick="fbConfirmDelete('${f.id}')">${ic('trash')} Delete</button>
-      </div>`}
-      ${f.admin_note ? `<div class="adm-fb-reply"><strong>${esc(fbStatusLabel(f.status))}</strong> — ${esc(f.admin_note)}
-        <span class="adm-req-foot">${esc(f.status_by || '')} ${esc(fmtWhen(f.status_at))}</span></div>`
-        : `<div class="adm-req-foot">${esc(fbStatusLabel(f.status))}${f.status_at ? ' · ' + esc(fmtWhen(f.status_at)) : ''}</div>`}
     </div>`;
-  }).join('');
+  }).join('') + '</div>';
 }
 
 // ── Looking at a screenshot ───────────────────────────────────────────────
@@ -2088,13 +2197,19 @@ function fbOpenCapture(path) {
     .catch(e => showToast(e.message || 'That screenshot could not be opened.', 4200));
 }
 
+// The note box is prefilled with whatever the writer has already been told, so
+// it is an EDIT rather than a fresh line. That changes what an empty box means:
+// it used to mean "leave the old note alone", and now it means the admin has
+// deleted it, which p_clear_note says out loud rather than leaving to a guess.
 function fbSaveStatus(id) {
   const st = document.getElementById('fb-st-' + id);
   const nt = document.getElementById('fb-nt-' + id);
   if (!st) return;
-  supaRpc('admin_feedback_status', {
-    p_id: id, p_status: st.value, p_note: (nt && nt.value.trim()) || null
-  }).then(() => { showToast('Report updated'); loadFeedback(); })
+  const note = (nt && nt.value.trim()) || '';
+  supaRpcSoft('admin_feedback_status', {
+    p_id: id, p_status: st.value, p_note: note || null, p_clear_note: !note
+  }, ['p_clear_note'])
+    .then(() => { showToast('Report updated'); loadFeedback(); })
     .catch(e => showToast(e.message, 5200));
 }
 
@@ -2145,33 +2260,113 @@ function fbConfirmDelete(id) {
 // because both landed in one schema migration.
 let _usage = [];
 
+// WHAT THE ALLOWANCE IS. Supabase publishes no API that reports the plan, so
+// the two limits are stated here. THEY ARE SEPARATE ALLOWANCES and are never
+// added together: the database and the file buckets are metered apart, which is
+// why this draws two bars rather than one. Change these if the project moves
+// off the free tier.
+const SUPA_DB_LIMIT   = 500 * 1024 * 1024;        // 500 MB of database
+const SUPA_FILE_LIMIT = 1024 * 1024 * 1024;       // 1 GB of file storage
+
 function adminUsageCard() {
   return `
     <div class="set-card">
       <div class="msec">STORAGE &amp; USAGE</div>
       <div class="set-block">
-        <span class="set-note" style="margin:0 0 10px">What each account is storing. Sizes are what the
-          database actually holds after compression, so they read smaller than the raw text.</span>
-        <div id="adm-usage"><span class="set-note">Loading…</span></div>
+        <span class="set-note" style="margin:0 0 12px">How much of the project's allowance is gone, and what
+          is taking it up. Sizes are what the database actually holds after compression, so they read
+          smaller than the raw text.</span>
+        <div id="adm-cap"><span class="set-note">Loading…</span></div>
+        <details class="adm-usage-more" id="adm-usage-more">
+          <summary>Usage per account</summary>
+          <span class="set-note" style="margin:6px 0 10px">Heaviest first.</span>
+          <div id="adm-usage"><span class="set-note">Loading…</span></div>
+        </details>
       </div>
     </div>`;
 }
 
 function loadUsage() {
   if (!isSuperAdmin()) return;
+  const fail = (id, e) => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<span class="set-note" style="color:var(--red,#c66)">' + esc(e.message) + '</span>';
+  };
+  // The two reads are independent on purpose: the per-account table is the
+  // older function, and a database that has not had the newer one applied yet
+  // should still draw everything it can rather than one error where both were.
+  supaRpc('admin_storage_totals')
+    .then(rows => { _caps = (rows || [])[0] || null; paintCaps(); })
+    .catch(e => fail('adm-cap', e));
   supaRpc('admin_usage_overview')
     .then(rows => { _usage = rows || []; paintUsage(); })
-    .catch(e => {
-      const el = document.getElementById('adm-usage');
-      if (el) el.innerHTML = '<span class="set-note" style="color:var(--red,#c66)">' + esc(e.message) + '</span>';
-    });
+    .catch(e => fail('adm-usage', e));
+}
+
+// ── The capacity bars ─────────────────────────────────────────────────────
+// One bar per allowance, segmented by what is filling it. A segment carries a
+// minimum width so that something small enough to round to nothing still shows
+// as present rather than vanishing -- the bar is there to say WHAT is in the
+// space, and a type that has disappeared cannot say anything.
+let _caps = null;
+
+function capBar(title, used, limit, parts) {
+  const pct = limit ? Math.min(100, (used / limit) * 100) : 0;
+  const shown = parts.filter(p => p.bytes > 0);
+  return `
+    <div class="cap">
+      <div class="cap-hd">
+        <span class="cap-ttl">${esc(title)}</span>
+        <span class="cap-fig">${esc(fmtBytes(used))} of ${esc(fmtBytes(limit))}
+          · ${pct < 0.1 && used > 0 ? 'under 0.1' : pct.toFixed(1)}%</span>
+      </div>
+      <div class="cap-bar" role="img"
+        aria-label="${esc(title + ': ' + fmtBytes(used) + ' of ' + fmtBytes(limit) + ' used')}">
+        ${shown.map(p => `<span class="cap-seg" title="${esc(p.label + ' — ' + fmtBytes(p.bytes))}"
+          style="width:${limit ? Math.min(100, (p.bytes / limit) * 100) : 0}%;background:${p.colour}"></span>`).join('')}
+      </div>
+      <div class="cap-key">
+        ${shown.length ? shown.map(p => `<span class="cap-k"><i style="background:${p.colour}"></i>${esc(p.label)}
+          <b>${esc(fmtBytes(p.bytes))}</b>${p.n != null ? ' <span class="cap-n">' + esc(String(p.n)) + '</span>' : ''}</span>`).join('')
+        : '<span class="set-note" style="margin:0">Nothing stored yet.</span>'}
+      </div>
+    </div>`;
+}
+
+function paintCaps() {
+  const el = document.getElementById('adm-cap');
+  if (!el) return;
+  const c = _caps;
+  if (!c) { el.innerHTML = '<span class="set-note">No figures to show.</span>'; return; }
+  const n = k => Number(c[k]) || 0;
+  // Whatever the database holds beyond the app's own three -- indexes, the auth
+  // schema, Postgres itself. It counts against the allowance, so it is drawn
+  // rather than left out to make the bar look tidier.
+  const other = Math.max(0, n('db_bytes') - n('doc_bytes') - n('snapshot_bytes') - n('joint_bytes'));
+  const files = n('pic_bytes') + n('capture_bytes');
+  el.innerHTML =
+    capBar('Database', n('db_bytes'), SUPA_DB_LIMIT, [
+      { label: 'Sims',        bytes: n('doc_bytes'),      n: n('doc_n'),      colour: 'var(--amber)' },
+      { label: 'Joint sims',  bytes: n('joint_bytes'),    n: n('joint_n'),    colour: 'var(--green)' },
+      { label: 'Snapshots',   bytes: n('snapshot_bytes'), n: n('snapshot_n'), colour: 'var(--blue)' },
+      { label: 'Everything else', bytes: other,           n: null,            colour: 'var(--dim)' },
+    ]) +
+    capBar('Files', files, SUPA_FILE_LIMIT, [
+      { label: 'Character pictures', bytes: n('pic_bytes'),     n: n('pic_n'),     colour: 'var(--amber)' },
+      { label: 'Feedback captures',  bytes: n('capture_bytes'), n: n('capture_n'), colour: 'var(--blue)' },
+    ]) +
+    `<div class="cap-foot">${esc(String(n('writer_n')))} account${n('writer_n') === 1 ? '' : 's'} ·
+      the two allowances are metered separately, so they are never added together</div>`;
 }
 
 function fmtBytes(n) {
   n = Number(n) || 0;
   if (n < 1024) return n + ' B';
   if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB';
-  return (n / 1048576).toFixed(1) + ' MB';
+  // The storage allowance is quoted in GB, and '1024.0 MB of 1024.0 MB' is not
+  // a sentence anybody reads as full.
+  if (n < 1024 * 1024 * 1024) return (n / 1048576).toFixed(1) + ' MB';
+  return (n / 1073741824).toFixed(n < 10 * 1073741824 ? 2 : 1) + ' GB';
 }
 
 function fmtAgo(iso) {
@@ -2187,16 +2382,16 @@ function paintUsage() {
   const el = document.getElementById('adm-usage');
   if (!el) return;
   if (!_usage.length) { el.innerHTML = '<span class="set-note">No accounts yet.</span>'; return; }
-  const total = _usage.reduce((a, u) => a + (Number(u.bytes) || 0), 0);
-  const docs  = _usage.reduce((a, u) => a + (Number(u.doc_count) || 0) + (Number(u.joint_count) || 0), 0);
+  // admin_usage_overview() already orders by size, but the sort is stated here
+  // as well: this panel's whole promise is heaviest first, and it should not
+  // quietly depend on the order a function happens to return.
+  const rows = _usage.slice().sort((a, b) => (Number(b.bytes) || 0) - (Number(a.bytes) || 0));
   el.innerHTML = `
-    <div class="adm-w-count">${_usage.length} account${_usage.length === 1 ? '' : 's'} ·
-      ${docs} sim${docs === 1 ? '' : 's'} · ${fmtBytes(total)} in total</div>
     <div class="adm-w-scroll">
       <table class="adm-w-tbl">
         <thead><tr><th>Writer ID</th><th>Sims</th><th>Joint</th><th>Snapshots</th><th>Files</th><th>Total</th><th>Last active</th></tr></thead>
         <tbody>
-          ${_usage.map(u => `
+          ${rows.map(u => `
             <tr>
               <td class="adm-w-id">${esc(u.writer_id)}${u.display_name ? '<span class="adm-w-none"> ' + esc(u.display_name) + '</span>' : ''}</td>
               <td>${u.doc_count}</td>
@@ -2289,12 +2484,16 @@ function fbSetKind(k) { _fbKind = k; fbPaintForm(true); }
 function fbPaintForm(keep) {
   const el = document.getElementById('fb-body');
   if (!el) return;
-  const prev = keep ? ((document.getElementById('fb-text') || {}).value || '') : '';
+  const prev  = keep ? ((document.getElementById('fb-text')  || {}).value || '') : '';
+  const prevT = keep ? ((document.getElementById('fb-title') || {}).value || '') : '';
   el.innerHTML = `
     <div class="fb-kind">
       <button class="btn ${_fbKind === 'bug' ? 'btn-p' : 'btn-s'}" onclick="fbSetKind('bug')">${ic('bug')} Bug</button>
       <button class="btn ${_fbKind === 'feature' ? 'btn-p' : 'btn-s'}" onclick="fbSetKind('feature')">${ic('sparkles')} Feature request</button>
     </div>
+    <input class="mi fb-title" id="fb-title" maxlength="100" autocomplete="off"
+      placeholder="${_fbKind === 'bug' ? 'In a few words: what is broken?' : 'In a few words: what would you like?'}"
+      value="${esc(prevT)}">
     <textarea class="mi fb-text" id="fb-text" rows="7" maxlength="4000"
       placeholder="${_fbKind === 'bug'
         ? 'What went wrong, and what were you doing when it happened?'
@@ -2433,28 +2632,89 @@ function fbContext() {
     viewport: window.innerWidth + '×' + window.innerHeight,
     docType:  fbOpenDocType(),
     online:   navigator.onLine,
+    // A 120-character user-agent string on the front of every report was
+    // unreadable and told an admin nothing they would act on. The short name
+    // is what gets shown; the raw string is kept behind the technical details
+    // for the day it matters.
+    browser:  fbBrowser(navigator.userAgent),
     platform: navigator.userAgent.slice(0, 180),
     errors:   _fbErrors.slice(-5),
   };
 }
 
+// "Chrome 152 on Windows" out of the usual pile of nonsense. Deliberately
+// rough -- it is a label, not a capability test, and the full string is still
+// in the report if the label turns out to be wrong.
+function fbBrowser(ua) {
+  ua = String(ua || '');
+  let b = 'Unknown browser';
+  const m = ua.match(/(Edg|OPR|Firefox|Chrome|Version)\/(\d+)/);
+  if (m) {
+    const name = { Edg: 'Edge', OPR: 'Opera', Version: 'Safari' }[m[1]] || m[1];
+    b = name + ' ' + m[2];
+  }
+  const os = /iPhone|iPad|iPod/.test(ua) ? 'iOS'
+    : /Android/.test(ua)      ? 'Android'
+    : /Windows/.test(ua)      ? 'Windows'
+    : /Mac OS X/.test(ua)     ? 'macOS'
+    : /Linux/.test(ua)        ? 'Linux' : '';
+  return os ? b + ' on ' + os : b;
+}
+
 // Errors are collected from the moment the app boots, because the writer files
 // the report after the thing went wrong, not during it.
 const _fbErrors = [];
-window.addEventListener('error', e => {
-  _fbErrors.push((e.message || 'error') + ' @ ' + (e.filename || '?') + ':' + (e.lineno || 0));
+
+// NOT EVERY ERROR IS A BUG. "ResizeObserver loop completed with undelivered
+// notifications" is the browser saying it needed a second layout pass -- every
+// real report was arriving with five copies of it and nothing else, which made
+// the report look alarming and said nothing. The same goes for the cross-origin
+// image warning and for a script a browser extension injected. They are dropped
+// here, and dropped again on the way to the screen, because the reports already
+// filed still hold them.
+const FB_ERR_NOISE = [
+  /ResizeObserver loop/i,
+  /^Script error/i,
+  /cross-origin image/i,
+  /extension:\/\//i,
+];
+function fbErrNoise(m) { return FB_ERR_NOISE.some(re => re.test(String(m || ''))); }
+
+// Repeats say no more than one does, so an error already in the list is not
+// added again.
+function fbPushErr(m) {
+  if (fbErrNoise(m)) return;
+  if (_fbErrors.includes(m)) return;
+  _fbErrors.push(m);
   if (_fbErrors.length > 20) _fbErrors.shift();
+}
+
+// Reading them back out. Old reports were captured before the filter existed.
+function fbCleanErrors(errs) {
+  const out = [];
+  (Array.isArray(errs) ? errs : []).forEach(e => {
+    const m = String(e || '');
+    if (!m || fbErrNoise(m) || out.includes(m)) return;
+    out.push(m);
+  });
+  return out;
+}
+
+window.addEventListener('error', e => {
+  fbPushErr((e.message || 'error') + ' @ ' + (e.filename || '?') + ':' + (e.lineno || 0));
 });
 window.addEventListener('unhandledrejection', e => {
-  _fbErrors.push('unhandled promise: ' + String((e.reason && e.reason.message) || e.reason || '').slice(0, 200));
-  if (_fbErrors.length > 20) _fbErrors.shift();
+  fbPushErr('unhandled promise: ' + String((e.reason && e.reason.message) || e.reason || '').slice(0, 200));
 });
 
 async function fbSend() {
   const ta = document.getElementById('fb-text');
+  const ti = document.getElementById('fb-title');
   const msg = document.getElementById('fb-msg');
   const body = (ta && ta.value.trim()) || '';
+  const title = (ti && ti.value.trim().slice(0, 100)) || '';
   const say = (t, bad) => { if (msg) { msg.style.color = bad ? 'var(--red,#c66)' : 'var(--dim)'; msg.textContent = t; } };
+  if (!title) { say('Give it a short headline first — it is what we see in the queue.', true); if (ti) ti.focus(); return; }
   if (!body) { say('Tell us what happened first.', true); if (ta) ta.focus(); return; }
 
   const id = fbUuid();
@@ -2474,10 +2734,11 @@ async function fbSend() {
   } catch(e) { lost++; }
 
   try {
-    await supaRpc('feedback_submit', {
+    await supaRpcSoft('feedback_submit', {
       p_id: id, p_kind: _fbKind, p_body: body, p_app_version: APP_VERSION,
-      p_context: fbContext(), p_capture_page: null, p_capture_shot: shot
-    });
+      p_context: fbContext(), p_capture_page: null, p_capture_shot: shot,
+      p_title: title
+    }, ['p_title']);
     _fbShot = null;
     showToast(lost ? 'Report sent — but the attachment could not go with it.'
                    : 'Thank you — your report has been sent.', lost ? 4600 : 3200);
@@ -2525,10 +2786,12 @@ function fbPaintMine() {
   el.innerHTML = _fbMine.map(f => `
     <div class="fb-item">
       <div class="fb-item-hd">
+        ${f.ticket_no ? `<span class="adm-fb-no">#${esc(String(f.ticket_no))}</span>` : ''}
         <span class="adm-req-tag adm-fb-${f.kind}">${f.kind === 'bug' ? 'Bug' : 'Feature request'}</span>
         <span class="adm-req-when">${esc(fmtWhen(f.created_at))}</span>
         <span class="fb-st fb-st-${esc(f.status)}">${esc(fbStatusLabel(f.status))}</span>
       </div>
+      ${f.title ? `<div class="fb-item-ttl">${esc(f.title)}</div>` : ''}
       <div class="adm-req-note">${esc(f.body)}</div>
       ${f.admin_note ? `<div class="fb-reply">${ic('message-square-warning')} ${esc(f.admin_note)}
         <span class="adm-req-foot">${esc(fmtWhen(f.status_at))}</span></div>` : ''}
