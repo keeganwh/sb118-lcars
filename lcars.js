@@ -15,6 +15,7 @@ const VERSIONS = [
       'Changed: the technical details attached to a report \u2014 which screen you were on, which browser, and anything the app logged \u2014 are still sent, but harmless browser chatter is no longer collected with them. Every report was arriving with five copies of a warning that meant nothing',
       'Fixed: the Storage and Usage report in the Admin panel showed nothing but an error. It counted sims the wrong way and fell over on every account',
       'Changed: the first screen has been rebuilt. It now says what LCARS is, notes that it is a work in progress and not an HQ project, and splits the choices into four labelled sections \u2014 signing in, creating an account, Google and Discord, and using LCARS offline \u2014 each with a line saying what it actually means. The old \u201CNot Now\u201D button, which explained nothing, is now \u201CUse LCARS on this device only\u201D',
+      'Changed: the wording on the create-account screen is clearer about what a Writer ID and a PIN are for, and about linking Google or Discord afterwards \u2014 which is optional, and is both a second way in and how you reset your own PIN',
       'Changed: the sign-in screen has its own calmer colours rather than borrowing Command Red from the duty palette. The duty colour is something you pick once you have an account, so it never made sense on the screen you see before you have one. It still follows light and dark',
       'Changed: Storage and Usage now opens with two bars showing how much of the project\u2019s space is gone and what is filling it \u2014 sims, joint sims, snapshots and files, each counted separately. The account-by-account figures are still there, folded underneath and sorted heaviest first',
     ],
@@ -4255,7 +4256,7 @@ function gateForm(kind) {
   const up = kind === 'up';
   document.getElementById('gate-body').innerHTML = `
     <div style="font-size:0.85rem;color:var(--dim);line-height:1.6;margin-bottom:14px">
-      ${up ? 'Your Writer ID identifies you; the PIN keeps your work private.' : 'Welcome back.'}
+      ${up ? 'Your Writer ID serves as a User ID. Set a PIN to sign in with.' : 'Welcome back.'}
     </div>
     <div class="mf" style="margin-bottom:10px">
       <label class="ml">WRITER ID</label>
@@ -4271,8 +4272,8 @@ function gateForm(kind) {
       <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateChoice(${!!getMode()})">Back</button>
     </div>
     ${up ? `<div style="font-size:0.71rem;color:var(--dim);line-height:1.55;margin-top:14px">
-      Once you are in, link a Google or Discord account from Settings. It is the only way to reset a
-      forgotten PIN yourself &mdash; without one you would have to ask the tool's maintainer.
+      After you create your account, you can (optionally) link your Google or Discord account from
+      Settings as an alternative login option and as a self-serve PIN reset authorization.
     </div>` : `<div style="text-align:center;margin-top:14px">
       <button class="btn btn-s" style="font-size:0.74rem;padding:4px 10px" onclick="showForgotPin()">Forgotten your PIN?</button>
     </div>`}`;
