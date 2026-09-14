@@ -1394,6 +1394,90 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
    fixes it says so rather than sitting there looking ordinary. */
 .sd-warn{border-color:var(--amber)!important;color:var(--amber)!important}
 
+/* ── THE AUTH GATE ──
+   Its own palette, not the duty accent. The accent is a personalisation that
+   only exists once somebody has an account; a signed-out visitor has no duty
+   post, so it fell through to Command Red -- the most saturated of the seven,
+   chosen by nobody, reading as an alert on a page whose job is to be inviting.
+
+   THESE ARE TOKEN OVERRIDES, NOT BUTTON OVERRIDES, and that is deliberate.
+   `:root[data-skin="prime"] body .btn-p:not(.st-btn)` is three classes deep and
+   would win any rule written here, but an element's own custom properties are
+   inherited by everything inside it -- so redefining --amber and --on-ac on
+   #auth-gate makes every .btn in the gate come out slate without touching a
+   single button rule. Nothing outside #auth-gate can see them. */
+#auth-gate{
+  --bg:#F2F0EC; --panel:#FFFFFF; --border:#DFDAD2; --line:#DFDAD2;
+  --amber:#35689B; --amber2:#2B577F; --on-ac:#FFFFFF; --ac:#35689B; --ac-tx:#35689B;
+  --text:#2B3038; --dim:#6B7480; --ink:#2B3038;
+  position:fixed; inset:0; z-index:9000; overflow:auto;
+  background:var(--bg); color:var(--text);
+}
+/* Slate holds in dark as well -- a bright white gate in front of a dark app is
+   its own kind of jolt. data-mode is always resolved to light or dark on <html>
+   by applyStyle(), so there is no system state to catch separately. */
+:root[data-mode="dark"] #auth-gate{
+  --bg:#14171C; --panel:#1B1F26; --border:#2B313A; --line:#2B313A;
+  --amber:#5B93C7; --amber2:#7CACD8; --on-ac:#FFFFFF; --ac:#5B93C7; --ac-tx:#5B93C7;
+  --text:#C8D2DC; --dim:#8996A4; --ink:#C8D2DC;
+}
+
+/* The scroller is the gate itself, and this is the track inside it. min-height
+   centres a short card while leaving room for the page to grow taller than the
+   viewport, which is what lets the card stick rather than being pinned by a
+   flex centre that has no overflow to scroll. */
+.gate-scroll{min-height:100%; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; padding:20px; gap:18px}
+.gate-card{width:100%; max-width:440px; background:var(--panel);
+  border:1px solid var(--border); border-radius:10px; padding:26px 24px;
+  display:flex; flex-direction:column; gap:18px;
+  /* Pinned to the top once there is anything below it to scroll to, so signing
+     in never means scrolling back up. */
+  position:sticky; top:20px}
+
+/* One line: mark, wordmark, and what the thing is. Reuses the icon already in
+   <head> rather than a second asset. */
+/* #gate-body is a single child of the card, so the card's gap stops at it --
+   every step of the gate draws INSIDE this, and this is what spaces them. */
+#auth-gate #gate-body{display:flex; flex-direction:column; gap:14px}
+/* The later steps carry a message line that is empty until something goes
+   wrong. As a flex child it was still taking a gap on either side of nothing,
+   which left a hole above the buttons. It reappears the moment it has text. */
+#auth-gate #gate-body > :empty{display:none}
+
+.gate-lockup{display:flex; align-items:center; gap:9px; flex-wrap:wrap}
+.gate-plate{display:inline-flex; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.8); border-radius:50%; padding:5px; flex:0 0 auto;
+  box-shadow:0 0 0 1px rgba(255,255,255,.2)}
+.gate-mark{height:22px; width:auto; display:block}
+.gate-word{font-size:1.25rem; font-weight:700; letter-spacing:0.03em; line-height:1}
+.gate-sub{font-size:0.6rem; letter-spacing:0.14em; color:var(--dim); line-height:1.3}
+
+.gate-intro{margin:0; font-size:0.87rem; line-height:1.65}
+/* A note, not a pull quote -- an earlier draft put a rule down its left edge
+   and it read as somebody being quoted. */
+.gate-disc{margin:-6px 0 0; font-size:0.75rem; line-height:1.55; color:var(--dim);
+  display:flex; align-items:flex-start; gap:6px}
+.gate-intro + .gate-disc{margin-top:-8px}
+.gate-disc .ic{flex:0 0 auto; margin-top:2px}
+
+/* Four named sections instead of one bare OR. "Not Now" was the least legible
+   thing on this page; it is a section with a heading now. */
+.gate-sect-hd{display:flex; align-items:center; gap:9px; margin-top:6px}
+.gate-sect-hd + .gate-stack{margin-top:-6px}
+.gate-sect-lbl{font-size:0.66rem; font-weight:700; letter-spacing:0.14em;
+  text-transform:uppercase; color:var(--dim); white-space:nowrap}
+.gate-sect-rule{flex:1; height:1px; background:var(--border)}
+
+.gate-stack{display:flex; flex-direction:column; gap:8px}
+.gate-btn{width:100%; justify-content:center; text-align:center}
+/* The one outlined-accent button. Most people arriving here have no account,
+   so creating one is given the weight, while the single FILLED element on the
+   page stays Sign in -- one place for the eye to land. */
+.gate-btn-create{background:transparent; color:var(--ac-tx); border-color:var(--amber)}
+.gate-btn-create:hover{background:color-mix(in oklab, var(--amber) 10%, transparent)}
+.gate-note{margin:0; font-size:0.72rem; line-height:1.6; color:var(--dim)}
+
 /* ── RESPONSIVE ──
    Kept last so it outranks the skin overrides above. Covers the header and the
    two views built as pages (Settings has its own rules with its section). */
@@ -1468,6 +1552,11 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   /* The panel is the full width of a phone, and its text fields clear the
      16px floor or iOS Safari zooms the whole app in on focus. */
   #fb-panel,#wn-panel{width:100vw;border-left:none}
+  /* The gate is the whole screen on a phone, so the card gives its edges back
+     to the text rather than keeping a desktop gutter. */
+  .gate-scroll{padding:16px}
+  .gate-card{padding:22px 18px; top:16px}
+  .gate-word{font-size:1.15rem}
   /* The tour card takes the width it can get, and its actions stop being a
      row -- Back / Close / Next on one 390px line leaves each of them a tap
      target too small to hit. */

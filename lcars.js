@@ -14,6 +14,8 @@ const VERSIONS = [
       'Added: reports are numbered now. Your own reports show their ticket number, which means you can point at one in a conversation instead of describing it again',
       'Changed: the technical details attached to a report \u2014 which screen you were on, which browser, and anything the app logged \u2014 are still sent, but harmless browser chatter is no longer collected with them. Every report was arriving with five copies of a warning that meant nothing',
       'Fixed: the Storage and Usage report in the Admin panel showed nothing but an error. It counted sims the wrong way and fell over on every account',
+      'Changed: the first screen has been rebuilt. It now says what LCARS is, notes that it is a work in progress and not an HQ project, and splits the choices into four labelled sections \u2014 signing in, creating an account, Google and Discord, and using LCARS offline \u2014 each with a line saying what it actually means. The old \u201CNot Now\u201D button, which explained nothing, is now \u201CUse LCARS on this device only\u201D',
+      'Changed: the sign-in screen has its own calmer colours rather than borrowing Command Red from the duty palette. The duty colour is something you pick once you have an account, so it never made sense on the screen you see before you have one. It still follows light and dark',
       'Changed: Storage and Usage now opens with two bars showing how much of the project\u2019s space is gone and what is filling it \u2014 sims, joint sims, snapshots and files, each counted separately. The account-by-account figures are still there, folded underneath and sorted heaviest first',
     ],
   },
@@ -4099,40 +4101,90 @@ function showAuthGate(fromSettings) {
   const el = document.createElement('div');
   _gateEl = el;
   el.id = 'auth-gate';
-  el.style.cssText = 'position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--bg,#111);overflow:auto';
+  // THE GATE DOES NOT USE THE DUTY ACCENT. The accent is a personalisation that
+  // only exists once somebody HAS an account -- a signed-out visitor has no duty
+  // post, so it fell through to Command Red, the most saturated of the seven,
+  // which nobody chose and which reads as an alert on a page whose job is to be
+  // welcoming. The gate's own palette is set on #auth-gate in the stylesheet, as
+  // token overrides rather than button overrides, so every .btn inside it just
+  // works. It still follows light and dark.
   el.innerHTML = `
-    <div style="width:100%;max-width:440px;background:var(--panel,#1b1b1b);border:1px solid var(--border,#333);border-radius:10px;padding:26px 24px">
-      <div style="font-size:1.15rem;font-weight:700;letter-spacing:0.04em;margin-bottom:6px">LCARS</div>
-      <div id="gate-body"></div>
+    <div class="gate-scroll">
+      <div class="gate-card">
+        <div class="gate-lockup">
+          <span class="gate-plate"><img class="gate-mark" alt=""></span>
+          <span class="gate-word">LCARS</span>
+          <span class="gate-sub">STARBASE 118 WRITING TOOL</span>
+        </div>
+        <div id="gate-body"></div>
+      </div>
     </div>`;
   document.body.appendChild(el);
+  // The same icon already inlined in <head>, as the header mark does -- the
+  // base64 is carried once rather than once per place it appears.
+  const mk = el.querySelector('.gate-mark');
+  const icon = document.querySelector('link[rel=icon]');
+  if (mk && icon) mk.src = icon.href;
   gateChoice(!!fromSettings);
 }
 
+// A labelled divider. It replaces the bare "OR", which said nothing about what
+// lay on either side of it -- and it is what turns four buttons in a stack into
+// four named CHOICES.
+function gateSect(label) {
+  return `<div class="gate-sect-hd"><span class="gate-sect-lbl">${esc(label)}</span>
+    <span class="gate-sect-rule"></span></div>`;
+}
+
 function gateChoice(fromSettings) {
+  // Reached from Settings, this is an upgrade rather than a front door: the
+  // writer already has sims in this browser and is deciding whether to put them
+  // somewhere safer. It stays the short version.
+  if (fromSettings) {
+    document.getElementById('gate-body').innerHTML = `
+      <p class="gate-intro">Set up an account and your sims on this device will be carried across, then
+        kept in step on every device you sign in on.</p>
+      <div class="gate-stack">
+        <button class="btn btn-p gate-btn" onclick="gateForm('up')">Create an account</button>
+        <button class="btn btn-s gate-btn" onclick="gateForm('in')">Sign in with your Writer ID</button>
+        <button class="btn btn-s gate-btn" onclick="signInWithProvider('discord')">Sign in with Discord</button>
+        <button class="btn btn-s gate-btn" onclick="signInWithProvider('google')">Sign in with Google</button>
+        <button class="btn btn-s gate-btn" onclick="gateClose()">Not now</button>
+      </div>`;
+    return;
+  }
+
   document.getElementById('gate-body').innerHTML = `
-    <div style="font-size:0.85rem;color:var(--dim);line-height:1.65;margin-bottom:18px">
-      ${fromSettings
-        ? 'Set up an account and your sims on this device will be carried across, then kept in step on every device you sign in on.'
-        : 'Sign in to keep your sims backed up and available on any device &mdash; or work offline in this browser alone.'}
+    <p class="gate-intro">An online tool for SB118 writers, built to make writing and keeping track of sims
+      as easy and supportive as possible.</p>
+    <p class="gate-disc">${ic('info')} A work in progress, and not affiliated with the SB118 HQ project.</p>
+
+    ${gateSect('Have an account?')}
+    <div class="gate-stack">
+      <button class="btn btn-p gate-btn" onclick="gateForm('in')">Sign in with your Writer ID + LCARS PIN</button>
     </div>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="gateForm('in')">Sign in with your Writer ID</button>
-      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateForm('up')">Create an account</button>
-      <div style="display:flex;align-items:center;gap:8px;margin:2px 0">
-        <span style="flex:1;height:1px;background:var(--dim);opacity:0.3"></span>
-        <span style="font-size:0.68rem;color:var(--dim);letter-spacing:0.08em">OR</span>
-        <span style="flex:1;height:1px;background:var(--dim);opacity:0.3"></span>
-      </div>
-      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="signInWithProvider('discord')">Continue with Discord</button>
-      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="signInWithProvider('google')">Continue with Google</button>
-      ${fromSettings
-        ? `<button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateClose()">Not now</button>`
-        : `<button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateUseOffline()">Use offline on this device only</button>`}
+
+    ${gateSect('New here?')}
+    <div class="gate-stack">
+      <button class="btn gate-btn gate-btn-create" onclick="gateForm('up')">Create an account with your SB118 Writer ID</button>
+      <p class="gate-note">No private information is collected. LCARS only stores Writer ID and Sims, both
+        of which are public already.</p>
     </div>
-    ${fromSettings ? '' : `<div style="font-size:0.71rem;color:var(--dim);line-height:1.55;margin-top:14px">
-      Offline keeps everything in this browser and sends nothing anywhere. Clearing your browser data will erase it, so take backups. You can switch to an account later from Settings.
-    </div>`}`;
+
+    ${gateSect('Other sign in options')}
+    <div class="gate-stack">
+      <button class="btn btn-s gate-btn" onclick="signInWithProvider('discord')">Sign in with Discord</button>
+      <button class="btn btn-s gate-btn" onclick="signInWithProvider('google')">Sign in with Google</button>
+      <p class="gate-note">Optional links that offer an easier login option &amp; PIN recovery. LCARS does
+        not capture info or post to these accounts.</p>
+    </div>
+
+    ${gateSect('Use LCARS offline')}
+    <div class="gate-stack">
+      <button class="btn btn-s gate-btn" onclick="gateUseOffline()">Use LCARS on this device only</button>
+      <p class="gate-note">No sign-in at all. Some features won't work, including syncing across devices
+        &mdash; but the core writing tools are all there.</p>
+    </div>`;
 }
 
 // ── The recovery-account step of the gate ─────────────────────────────────
