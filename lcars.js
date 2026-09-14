@@ -16,6 +16,7 @@ const VERSIONS = [
       'Fixed: the Storage and Usage report in the Admin panel showed nothing but an error. It counted sims the wrong way and fell over on every account',
       'Changed: the first screen has been rebuilt. It now says what LCARS is, notes that it is a work in progress and not an HQ project, and splits the choices into four labelled sections \u2014 signing in, creating an account, Google and Discord, and using LCARS offline \u2014 each with a line saying what it actually means. The old \u201CNot Now\u201D button, which explained nothing, is now \u201CUse LCARS on this device only\u201D',
       'Changed: the wording on the create-account screen is clearer about what a Writer ID and a PIN are for, and about linking Google or Discord afterwards \u2014 which is optional, and is both a second way in and how you reset your own PIN',
+      'Added: a What LCARS does section under the sign-in screen. Scroll down from the front page and it explains what the app is for, in plain language \u2014 what it does while you write, how it keeps track of characters and scenes, and what is coming. The sign-in card is replaced by a slim bar at the top of the screen as you go, so signing in is never more than one click away, and scrolling back up brings the card straight back',
       'Changed: the sign-in screen has its own calmer colours rather than borrowing Command Red from the duty palette. The duty colour is something you pick once you have an account, so it never made sense on the screen you see before you have one. It still follows light and dark',
       'Changed: Storage and Usage now opens with two bars showing how much of the project\u2019s space is gone and what is filling it \u2014 sims, joint sims, snapshots and files, each counted separately. The account-by-account figures are still there, folded underneath and sorted heaviest first',
     ],
@@ -4093,6 +4094,7 @@ function refreshAuthDependentViews() {
 }
 
 function gateClose() {
+  if (_gateObs) { _gateObs.disconnect(); _gateObs = null; }
   if (_gateEl) { _gateEl.remove(); _gateEl = null; }
 }
 
@@ -4109,25 +4111,167 @@ function showAuthGate(fromSettings) {
   // welcoming. The gate's own palette is set on #auth-gate in the stylesheet, as
   // token overrides rather than button overrides, so every .btn inside it just
   // works. It still follows light and dark.
+  const lockup = `
+    <span class="gate-plate"><img class="gate-mark" alt=""></span>
+    <span class="gate-word">LCARS</span>
+    <span class="gate-sub">STARBASE 118 WRITING TOOL</span>`;
+  // Reached from Settings this is a small upgrade prompt over the app, not a
+  // front page, so it gets neither the bar nor the tour of features.
+  const full = !fromSettings;
   el.innerHTML = `
-    <div class="gate-scroll">
-      <div class="gate-card">
-        <div class="gate-lockup">
-          <span class="gate-plate"><img class="gate-mark" alt=""></span>
-          <span class="gate-word">LCARS</span>
-          <span class="gate-sub">STARBASE 118 WRITING TOOL</span>
+    ${full ? `<div class="gate-bar" id="gate-bar" aria-hidden="true">
+      <div class="gate-bar-in">
+        <span class="gate-lockup">${lockup}</span>
+        <div class="gate-bar-acts">
+          <button class="btn btn-s gate-bar-btn" tabindex="-1" onclick="gateBarGo('in')">Sign in</button>
+          <button class="btn btn-p gate-bar-btn" tabindex="-1" onclick="gateBarGo('up')">Create an account</button>
         </div>
-        <div id="gate-body"></div>
       </div>
+    </div>` : ''}
+    <div class="gate-scroll">
+      <div class="gate-hero">
+        <div class="gate-card">
+          <div class="gate-lockup">${lockup}</div>
+          <div id="gate-body"></div>
+        </div>
+        ${full ? `<button class="gate-learn" onclick="gateScrollToAbout()">
+          <span>Learn more</span><span class="gate-chev">${ic('chevron-down')}</span>
+        </button>` : ''}
+      </div>
+      ${full ? gateAboutHtml() : ''}
     </div>`;
   document.body.appendChild(el);
   // The same icon already inlined in <head>, as the header mark does -- the
   // base64 is carried once rather than once per place it appears.
-  const mk = el.querySelector('.gate-mark');
   const icon = document.querySelector('link[rel=icon]');
-  if (mk && icon) mk.src = icon.href;
+  if (icon) el.querySelectorAll('.gate-mark').forEach(m => { m.src = icon.href; });
   gateChoice(!!fromSettings);
+  if (full) gateWatchScroll(el);
 }
+
+// ── The bar that takes over when the card scrolls away ────────────────────
+// An observer rather than a scroll handler, which would fire every frame to
+// compute the same boolean. The root is #auth-gate rather than the viewport:
+// the gate is a fixed overlay with its own overflow, so the document behind it
+// never scrolls at all.
+//
+// THE CARD IS WHAT IS WATCHED, not a sentinel below the first screen. A
+// sentinel there is unreachable on a wide monitor: the feature grid runs three
+// columns and ends up shorter than the viewport, so the page's whole scroll
+// range is less than one screen and the sentinel never crosses the top. The
+// bar appeared on a phone and never on a desktop. Watching the card asks the
+// question actually being asked -- has the card gone? -- at any width.
+let _gateObs = null;
+
+function gateWatchScroll(el) {
+  const card = el.querySelector('.gate-card');
+  const bar = el.querySelector('#gate-bar');
+  if (!card || !bar || typeof IntersectionObserver !== 'function') return;
+  _gateObs = new IntersectionObserver(es => {
+    es.forEach(e => {
+      // Gone ABOVE, not merely out of view: the bar is what replaces the card,
+      // so it has no business appearing for a card that is simply off-screen.
+      const past = !e.isIntersecting && e.boundingClientRect.top < 0;
+      el.classList.toggle('gate-past', past);
+      bar.setAttribute('aria-hidden', past ? 'false' : 'true');
+      // A button nobody can see should not be reachable by tab either.
+      bar.querySelectorAll('.gate-bar-btn').forEach(b => { b.tabIndex = past ? 0 : -1; });
+    });
+  }, { root: el, threshold: 0 });
+  _gateObs.observe(card);
+}
+
+function gateScrollToAbout() {
+  const a = document.querySelector('#auth-gate .gate-about');
+  if (a) a.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// A button in the bar has to bring the card back as well as open the form --
+// drawing a sign-in form a screen and a half above where somebody is looking
+// would read as the button doing nothing.
+function gateBarGo(kind) {
+  const el = document.getElementById('auth-gate');
+  if (el) el.scrollTo({ top: 0, behavior: 'smooth' });
+  gateForm(kind);
+}
+
+function gateAboutHtml() {
+  return `
+    <div class="gate-about">
+      <div class="gate-about-in">
+        <h2 class="gate-about-h">What LCARS does</h2>
+        <p class="gate-about-lede">A writing tool built around the way SB118 sims actually get written
+          &mdash; drafted between other things, on whatever device is to hand, and posted to a group.</p>
+        <div class="gate-about-grid">
+          ${GATE_ABOUT.map(g => `
+            <section class="gate-grp">
+              <h3 class="gate-grp-h">${ic(g.icon)} ${esc(g.head)}</h3>
+              <ul class="gate-grp-l">${g.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+            </section>`).join('')}
+        </div>
+        <p class="gate-about-end">There is a Getting Started tour built in, and you can report a bug or ask
+          for a feature from inside the app.</p>
+      </div>
+    </div>`;
+}
+
+// ── What LCARS is, for somebody who has never seen it ─────────────────────
+// PLAIN DATA, like TOUR and HIGHLIGHTS. Edit this, not the renderer below.
+// Written for a writer deciding whether to sign up, so every line is a thing
+// they can picture themselves doing -- not a list of subsystems.
+const GATE_ABOUT = [
+  {
+    head: 'Your writing, wherever you are',
+    icon: 'cloud-upload',
+    items: [
+      'A private account tied to your Writer ID that keeps everything in step across your phone, your laptop and anything else you sign in on.',
+      'Or no account at all — LCARS works offline in one browser if you would rather not sign up.',
+      'Built so that writing on a phone is no worse than writing at a desk.',
+    ],
+  },
+  {
+    head: 'Formatting that gets out of the way',
+    icon: 'pencil',
+    items: [
+      'Names bold themselves. So do locations. OOC lines and thoughts go italic. All of it is yours to turn on, off or change.',
+      'Special formatting is one press: ::actions::, oO thoughts Oo, =/\\= comms =/\\= and the rest.',
+      'What you copy out is clean — the on-screen colours and helpers stay behind.',
+    ],
+  },
+  {
+    head: 'Knowing where you are in a scene',
+    icon: 'users',
+    items: [
+      'LCARS spots the characters you write for and the ones you write with, and keeps track of both.',
+      'Give a character or a paragraph a colour while you draft, to see at a glance who has written what.',
+      'See how long it has been since you last posted in a scene — so you know whether you are behind, or whether it is time for an OOC.',
+    ],
+  },
+  {
+    head: 'Getting eyes on a draft',
+    icon: 'link',
+    items: [
+      'Share a read-only link to a snapshot of something you are still writing. No account needed at the other end.',
+      'What the reader sees is the finished sim, not your working copy — no draft colours, no markers.',
+    ],
+  },
+  {
+    head: 'Making it yours',
+    icon: 'palette',
+    items: [
+      'Light and dark, seven duty-post colours or one of your own, and a calm or a bolder look.',
+      'Font size and separate fonts for writing and for the app itself.',
+    ],
+  },
+  {
+    head: 'Coming soon',
+    icon: 'sparkles',
+    items: [
+      'Full Joint Post support for everyone.',
+      'Posting straight to email or Google Groups from inside the app.',
+    ],
+  },
+];
 
 // A labelled divider. It replaces the bare "OR", which said nothing about what
 // lay on either side of it -- and it is what turns four buttons in a stack into

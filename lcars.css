@@ -1422,18 +1422,65 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   --text:#C8D2DC; --dim:#8996A4; --ink:#C8D2DC;
 }
 
-/* The scroller is the gate itself, and this is the track inside it. min-height
-   centres a short card while leaving room for the page to grow taller than the
-   viewport, which is what lets the card stick rather than being pinned by a
-   flex centre that has no overflow to scroll. */
-.gate-scroll{min-height:100%; display:flex; flex-direction:column;
-  align-items:center; justify-content:center; padding:20px; gap:18px}
+/* The scroller is the gate itself; this is the track inside it. The hero holds
+   the first screen, and What LCARS does runs underneath. */
+.gate-scroll{display:flex; flex-direction:column; align-items:center}
+/* svh, not dvh: dvh is the DYNAMIC viewport and resolves to the tall
+   chrome-hidden measurement, which on a phone would push the Learn More
+   affordance off the bottom of the very screen it is meant to sit on. */
+.gate-hero{min-height:100svh; width:100%; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; padding:20px; gap:14px}
 .gate-card{width:100%; max-width:440px; background:var(--panel);
   border:1px solid var(--border); border-radius:10px; padding:26px 24px;
-  display:flex; flex-direction:column; gap:18px;
-  /* Pinned to the top once there is anything below it to scroll to, so signing
-     in never means scrolling back up. */
-  position:sticky; top:20px}
+  display:flex; flex-direction:column; gap:18px}
+
+/* ── The bar that replaces the card ──
+   FIXED, not sticky. #auth-gate is itself a fixed overlay with its own
+   overflow, so a sticky child would reserve a row of layout at the top of the
+   scroll track and shove the card down by its own height while invisible. */
+.gate-bar{position:fixed; top:0; left:0; right:0; z-index:2;
+  background:var(--panel); border-bottom:1px solid var(--border);
+  transform:translateY(-100%); opacity:0; pointer-events:none;
+  transition:transform .22s ease, opacity .22s ease}
+#auth-gate.gate-past .gate-bar{transform:none; opacity:1; pointer-events:auto}
+.gate-bar-in{max-width:960px; margin:0 auto; padding:9px 20px;
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+.gate-bar-acts{display:flex; gap:8px; margin-left:auto; flex-wrap:wrap}
+.gate-bar-btn{white-space:nowrap}
+.gate-bar .gate-word{font-size:1.05rem}
+
+/* The invitation to scroll. A button, so a keyboard gets there too. */
+.gate-learn{display:flex; flex-direction:column; align-items:center; gap:0;
+  background:none; border:none; cursor:pointer; font-family:inherit;
+  color:var(--dim); font-size:0.66rem; font-weight:700; letter-spacing:0.14em;
+  text-transform:uppercase; padding:6px 10px; border-radius:8px}
+.gate-learn:hover{color:var(--text)}
+.gate-chev{display:flex; animation:gate-nudge 2.4s ease-in-out infinite}
+@keyframes gate-nudge{0%,60%,100%{transform:translateY(0)}80%{transform:translateY(3px)}}
+@media (prefers-reduced-motion: reduce){
+  .gate-chev{animation:none}
+  .gate-bar{transition:none}
+}
+
+/* ── What LCARS does ── */
+/* scroll-margin so the heading clears the bar that is on screen by the time
+   this arrives -- without it a taller page lands the title underneath it. */
+.gate-about{width:100%; border-top:1px solid var(--border); background:var(--panel);
+  scroll-margin-top:60px}
+.gate-about-in{max-width:840px; margin:0 auto; padding:40px 20px 56px}
+.gate-about-h{margin:0; font-size:1.3rem; font-weight:700; letter-spacing:0.01em}
+.gate-about-lede{margin:8px 0 0; font-size:0.92rem; line-height:1.7; color:var(--dim);
+  max-width:60ch}
+.gate-about-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr));
+  gap:26px 34px; margin-top:30px}
+.gate-grp{display:flex; flex-direction:column; gap:9px}
+.gate-grp-h{margin:0; font-size:0.86rem; font-weight:700; letter-spacing:0.02em;
+  display:flex; align-items:center; gap:8px}
+.gate-grp-h .ic{color:var(--ac-tx); flex:0 0 auto}
+.gate-grp-l{margin:0; padding-left:17px; display:flex; flex-direction:column; gap:7px}
+.gate-grp-l li{font-size:0.82rem; line-height:1.65; color:var(--dim)}
+.gate-about-end{margin:34px 0 0; padding-top:18px; border-top:1px solid var(--border);
+  font-size:0.82rem; line-height:1.65; color:var(--dim)}
 
 /* One line: mark, wordmark, and what the thing is. Reuses the icon already in
    <head> rather than a second asset. */
@@ -1554,9 +1601,16 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   #fb-panel,#wn-panel{width:100vw;border-left:none}
   /* The gate is the whole screen on a phone, so the card gives its edges back
      to the text rather than keeping a desktop gutter. */
-  .gate-scroll{padding:16px}
-  .gate-card{padding:22px 18px; top:16px}
+  .gate-hero{padding:16px}
+  .gate-card{padding:22px 18px}
   .gate-word{font-size:1.15rem}
+  /* The bar keeps the mark and the two buttons; the tool name is the part a
+     phone has no room for. */
+  .gate-bar .gate-sub{display:none}
+  .gate-bar-in{padding:8px 14px; gap:10px}
+  .gate-bar-btn{font-size:0.73rem; padding:4px 10px}
+  .gate-about-in{padding:30px 16px 44px}
+  .gate-about-grid{gap:22px}
   /* The tour card takes the width it can get, and its actions stop being a
      row -- Back / Close / Next on one 390px line leaves each of them a tap
      target too small to hit. */
