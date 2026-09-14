@@ -1491,7 +1491,14 @@ create table if not exists public.feedback_reports (
   id                uuid primary key,
   writer_uid        uuid not null references auth.users(id) on delete cascade,
   kind              text not null check (kind in ('bug', 'feature')),
+  -- A one-line headline, so the queue can be read as a list of tickets rather
+  -- than a wall of full reports. Nullable because the reports filed before the
+  -- form asked for one do not have it; the app builds a stand-in for those.
+  title             text check (title is null or length(title) <= 100),
   body              text not null,
+  -- The human-facing ticket number. A sequence rather than a count, so a
+  -- withdrawn report does not renumber everything filed after it.
+  ticket_no         bigint,
   app_version       text,
   context           jsonb not null default '{}'::jsonb,
   -- Storage object paths, not bytes. Null once purged.
@@ -1515,6 +1522,46 @@ create table if not exists public.feedback_reports (
   writer_seen_at    timestamptz,
   created_at        timestamptz not null default now()
 );
+
+-- Added after the fact, so the table above may already exist without them.
+alter table public.feedback_reports add column if not exists title text;
+alter table public.feedback_reports add column if not exists ticket_no bigint;
+do $$ begin
+  alter table public.feedback_reports
+    add constraint feedback_title_len check (title is null or length(title) <= 100);
+exception when duplicate_object then null; end $$;
+
+create sequence if not exists public.feedback_ticket_seq owned by public.feedback_reports.ticket_no;
+
+-- Everything already in the table gets a number, oldest first, so the numbering
+-- matches the order they arrived in. The numbers are computed rather than drawn
+-- from the sequence, because nextval() in an UPDATE is not handed out in the
+-- order of the ORDER BY. Only rows without a number are touched, so this is
+-- safe to run again.
+update public.feedback_reports f
+   set ticket_no = nb.n + (select coalesce(max(ticket_no), 0) from public.feedback_reports)
+  from (select id, row_number() over (order by created_at) as n
+          from public.feedback_reports where ticket_no is null) nb
+ where f.id = nb.id;
+
+-- And the sequence picks up above them. The third argument is `is_called`: on
+-- an empty table this leaves the first ticket as #1 rather than #2.
+select setval('public.feedback_ticket_seq',
+              greatest(coalesce((select max(ticket_no) from public.feedback_reports), 0), 1),
+              coalesce((select max(ticket_no) from public.feedback_reports), 0) > 0);
+
+-- The two reports filed before the form asked for a headline, given real ones.
+-- Matched on a phrase from the body rather than on an id, and only where the
+-- headline is still empty, so re-running this cannot overwrite an edit.
+update public.feedback_reports
+   set title = 'Adding a picture to a character fails on the image URL'
+ where title is null and kind = 'bug' and body like '%add a picture%';
+update public.feedback_reports
+   set title = 'Clickable links, adjustable line spacing, and pulling in a previous post'
+ where title is null and kind = 'feature' and body like '%change the pace%';
+
+create unique index if not exists feedback_ticket_no_idx
+  on public.feedback_reports (ticket_no);
 
 create index if not exists feedback_mine_idx
   on public.feedback_reports (writer_uid, created_at desc);
@@ -1590,6 +1637,10 @@ create policy feedback_obj_delete on storage.objects
 --   * five reports an hour per writer, so the table cannot be used as storage;
 --   * the body is required and capped at 4000 characters;
 --   * capture paths must start with the caller's own uid folder.
+--
+-- p_title DEFAULTS TO NULL on purpose. A build deployed before this migration
+-- is run calls the function without it, and the default is what lets the old
+-- call and the new one reach the same function.
 select public.jp_drop_overloads('feedback_submit');
 create or replace function public.feedback_submit(
   p_id           uuid,
@@ -1598,7 +1649,8 @@ create or replace function public.feedback_submit(
   p_app_version  text,
   p_context      jsonb,
   p_capture_page text,
-  p_capture_shot text
+  p_capture_shot text,
+  p_title        text default null
 )
 returns uuid
 language plpgsql
@@ -1621,6 +1673,9 @@ begin
   if length(p_body) > 4000 then
     raise exception 'That description is too long (4000 characters maximum).';
   end if;
+  if p_title is not null and length(btrim(p_title)) > 100 then
+    raise exception 'That headline is too long (100 characters maximum).';
+  end if;
   if (select count(*) from public.feedback_reports
        where writer_uid = uid and created_at > now() - interval '1 hour') >= 5 then
     raise exception 'You have sent several reports in the last hour. Please try again shortly.';
@@ -1638,16 +1693,19 @@ begin
   end if;
 
   insert into public.feedback_reports
-    (id, writer_uid, kind, body, app_version, context, capture_page, capture_shot)
+    (id, writer_uid, kind, title, body, app_version, context,
+     capture_page, capture_shot, ticket_no)
   values
-    (p_id, uid, p_kind, btrim(p_body), p_app_version,
-     coalesce(p_context, '{}'::jsonb), p_capture_page, p_capture_shot);
+    (p_id, uid, p_kind, nullif(btrim(coalesce(p_title, '')), ''),
+     btrim(p_body), p_app_version,
+     coalesce(p_context, '{}'::jsonb), p_capture_page, p_capture_shot,
+     nextval('public.feedback_ticket_seq'));
 
   return p_id;
 end $$;
 
-revoke all on function public.feedback_submit(uuid, text, text, text, jsonb, text, text) from public, anon;
-grant execute on function public.feedback_submit(uuid, text, text, text, jsonb, text, text) to authenticated;
+revoke all on function public.feedback_submit(uuid, text, text, text, jsonb, text, text, text) from public, anon;
+grant execute on function public.feedback_submit(uuid, text, text, text, jsonb, text, text, text) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- feedback_mark_seen() : the writer has read the replies on their reports
@@ -1681,9 +1739,11 @@ select public.jp_drop_overloads('admin_list_feedback');
 create or replace function public.admin_list_feedback(p_include_archived boolean default false)
 returns table (
   id                uuid,
+  ticket_no         bigint,
   writer_id         text,
   display_name      text,
   kind              text,
+  title             text,
   body              text,
   app_version       text,
   context           jsonb,
@@ -1707,9 +1767,9 @@ begin
     raise exception 'Only a super admin can read the feedback queue.';
   end if;
   return query
-    select f.id, w.writer_id,
+    select f.id, f.ticket_no, w.writer_id,
            nullif(btrim(coalesce(w.display_name, '')), ''),
-           f.kind, f.body, f.app_version, f.context,
+           f.kind, f.title, f.body, f.app_version, f.context,
            f.capture_page, f.capture_shot,
            f.status, f.admin_note, f.status_at, f.status_by,
            f.archived_at, f.capture_purged_at, f.created_at
@@ -1754,7 +1814,8 @@ begin
 
   update public.feedback_reports
      set status     = p_status,
-         admin_note = coalesce(nullif(btrim(coalesce(p_note, '')), ''), admin_note),
+         admin_note = case when coalesce(p_clear_note, false) then null
+                      else coalesce(nullif(btrim(coalesce(p_note, '')), ''), admin_note) end,
          status_at  = now(),
          status_by  = me,
          -- A new note is unread again, so the writer's badge comes back.
@@ -1990,11 +2051,18 @@ grant execute on function public.feedback_withdraw(uuid) to authenticated;
 
 -- admin_feedback_status() learns the new vocabulary. It still accepts the old
 -- names for the same ordering reason as the constraint above.
+--
+-- AND IT LEARNS p_clear_note. The admin panel now prefills the note box with
+-- the reply already sent, so it is edited rather than written once -- and an
+-- empty box there means the admin deleted the note, not "leave it alone". A
+-- null cannot tell those apart, so the caller says which it meant. It defaults
+-- to false, which is exactly what a build deployed before this migration means.
 select public.jp_drop_overloads('admin_feedback_status');
 create or replace function public.admin_feedback_status(
-  p_id     uuid,
-  p_status text,
-  p_note   text default null
+  p_id         uuid,
+  p_status     text,
+  p_note       text default null,
+  p_clear_note boolean default false
 )
 returns void
 language plpgsql
@@ -2017,7 +2085,8 @@ begin
 
   update public.feedback_reports
      set status     = p_status,
-         admin_note = coalesce(nullif(btrim(coalesce(p_note, '')), ''), admin_note),
+         admin_note = case when coalesce(p_clear_note, false) then null
+                      else coalesce(nullif(btrim(coalesce(p_note, '')), ''), admin_note) end,
          status_at  = now(),
          status_by  = me,
          -- A new note is unread again, so the writer's badge comes back.
@@ -2031,8 +2100,8 @@ begin
   end if;
 end $$;
 
-revoke all on function public.admin_feedback_status(uuid, text, text) from public, anon;
-grant execute on function public.admin_feedback_status(uuid, text, text) to authenticated;
+revoke all on function public.admin_feedback_status(uuid, text, text, boolean) from public, anon;
+grant execute on function public.admin_feedback_status(uuid, text, text, boolean) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- feedback_reports.capture_page : retired, not dropped
