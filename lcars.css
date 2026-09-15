@@ -1492,12 +1492,17 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
 .gate-about-h{margin:0; font-size:1.3rem; font-weight:700; letter-spacing:0.01em}
 .gate-about-lede{margin:8px 0 0; font-size:0.92rem; line-height:1.7; color:var(--dim);
   max-width:60ch}
-/* ONE COLUMN, not a grid of them. The section reads as a sequence -- heading,
-   the picture of that thing, the next heading -- so every picture sits at the
-   same width directly under the words it illustrates, and nothing staggers
-   because nothing is beside anything. */
-.gate-about-grid{display:flex; flex-direction:column; gap:30px; margin-top:30px}
-.gate-grp{display:flex; flex-direction:column; gap:9px}
+/* TWO COLUMNS, and the headings and the pictures are SEPARATE ROWS: a pair of
+   headings side by side, then their two pictures beneath. The cells arrive in
+   reading order and `order` -- carried per cell as --o from the renderer --
+   arranges them. The narrow override at the foot of this file drops back to
+   one column and lets reading order stand, which puts each picture under its
+   own heading again. */
+.gate-about-grid{display:grid; grid-template-columns:1fr 1fr; gap:22px 34px;
+  align-items:start; margin-top:30px}
+.gate-cell{order:var(--o)}
+.gate-gap{display:block}
+.gate-grp{display:flex; flex-direction:column; gap:9px; margin:0}
 .gate-grp-h{margin:0; font-size:0.86rem; font-weight:700; letter-spacing:0.02em;
   display:flex; align-items:center; gap:8px}
 .gate-grp-h .ic{color:var(--ac-tx); flex:0 0 auto}
@@ -1505,7 +1510,7 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
 .gate-grp-l li{font-size:0.82rem; line-height:1.65; color:var(--dim)}
 /* A thumbnail, and a button, because it opens something. The aspect ratio is
    declared so the grid does not jump as the lazy images arrive. */
-.gate-shot{display:block; width:100%; margin-top:8px; padding:0; border:1px solid var(--border);
+.gate-shot{display:block; width:100%; padding:0; border:1px solid var(--border);
   border-radius:8px; overflow:hidden; background:var(--bg); cursor:pointer; position:relative;
   font-family:inherit; line-height:0}
 .gate-shot img{display:block; width:100%; height:auto; aspect-ratio:1600/1000; object-fit:cover;
@@ -1651,7 +1656,12 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   .gate-bar-in{padding:8px 14px; gap:10px}
   .gate-bar-btn{font-size:0.73rem; padding:4px 10px}
   .gate-about-in{padding:30px 16px 44px}
-  .gate-about-grid{gap:24px}
+  /* One column on a phone, and `order` goes with it: the cells are already in
+     reading order, so each picture falls under the heading it belongs to. */
+  .gate-about-grid{display:flex; flex-direction:column; gap:10px}
+  .gate-cell{order:0}
+  .gate-grp{margin-top:14px}
+  .gate-gap{display:none}
   /* The tour card takes the width it can get, and its actions stop being a
      row -- Back / Close / Next on one 390px line leaves each of them a tap
      target too small to hit. */

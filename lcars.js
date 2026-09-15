@@ -4233,6 +4233,47 @@ function gateBarGo(kind) {
 }
 
 function gateAboutHtml() {
+  // TWO LAYOUTS, ONE DOM.
+  //   Wide:  the two headings of a pair sit side by side, and their two
+  //          pictures sit on the row beneath them.
+  //   Phone: one column, each heading followed by its own picture.
+  //
+  // The cells are emitted in the PHONE order -- heading, its picture, the next
+  // heading -- because that is reading order, and it is what a screen reader
+  // and a narrow window both get for free. The wide arrangement is then a
+  // matter of `order` on each cell, which grid auto-placement honours, rather
+  // than a second copy of the markup that could drift out of step with this one.
+  const cells = [];
+  let n = 0;
+  for (let i = 0; i < GATE_ABOUT.length; i += 2) {
+    const pair = GATE_ABOUT.slice(i, i + 2);
+    const textAt = n; n += pair.length;
+    const shots = pair.filter(g => g.shot).length;
+    const shotAt = n; n += shots;
+    // A picture row holding one picture would leave the next pair's heading in
+    // the second column and every row after it out of step, so the gap is
+    // filled. With the current six groups this never fires; it is here so that
+    // adding a seventh, or a picture to one group of a pair, cannot quietly
+    // shear the grid.
+    if (shots % 2) n += 1;
+    let k = 0;
+    pair.forEach((g, idx) => {
+      cells.push(`<section class="gate-cell gate-grp" style="--o:${textAt + idx}">
+        <h3 class="gate-grp-h">${ic(g.icon)} ${esc(g.head)}</h3>
+        <ul class="gate-grp-l">${g.items.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+      </section>`);
+      if (g.shot) {
+        cells.push(`<button class="gate-cell gate-shot" style="--o:${shotAt + (k++)}"
+          onclick="gateShot('${esc(g.shot.src)}','${esc(g.head)}')"
+          aria-label="${esc('Enlarge: ' + g.shot.alt)}">
+          <img src="${esc(g.shot.src)}" alt="${esc(g.shot.alt)}" loading="lazy" decoding="async"
+            width="1600" height="1000">
+          <span class="gate-shot-hint">${ic('search')} Enlarge</span>
+        </button>`);
+      }
+    });
+    if (shots % 2) cells.push(`<span class="gate-cell gate-gap" style="--o:${shotAt + 1}" aria-hidden="true"></span>`);
+  }
   return `
     <div class="gate-about">
       <div class="gate-about-in">
@@ -4242,19 +4283,7 @@ function gateAboutHtml() {
           includes a sim editor with specialized visual aids and auto-formatting options, pace tracking,
           useful stats, and a lot more. No private or personal data is required to use LCARS, and you can
           even use it offline.</p>
-        <div class="gate-about-grid">
-          ${GATE_ABOUT.map(g => `
-            <section class="gate-grp">
-              <h3 class="gate-grp-h">${ic(g.icon)} ${esc(g.head)}</h3>
-              <ul class="gate-grp-l">${g.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
-              ${g.shot ? `<button class="gate-shot" onclick="gateShot('${esc(g.shot.src)}','${esc(g.head)}')"
-                aria-label="${esc('Enlarge: ' + g.shot.alt)}">
-                <img src="${esc(g.shot.src)}" alt="${esc(g.shot.alt)}" loading="lazy" decoding="async"
-                  width="1600" height="1000">
-                <span class="gate-shot-hint">${ic('search')} Enlarge</span>
-              </button>` : ''}
-            </section>`).join('')}
-        </div>
+        <div class="gate-about-grid">${cells.join('')}</div>
         <p class="gate-about-end">If you still aren't sure, try using Offline Mode first. You can run the
           Getting Started tour and try out nearly every feature &mdash; everything except data syncing and
           Joint Post authoring &mdash; and then create an account any time you like.</p>
