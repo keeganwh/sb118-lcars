@@ -2192,14 +2192,23 @@ function fbViewImage(url, title, trusted) {
     o.id = 'fb-view';
     document.body.appendChild(o);
   }
-  o.innerHTML = `
+  const hd = `
     <div class="fb-view-hd">
       <span class="fb-ttl">${esc(title || 'SCREENSHOT')}</span>
       <button class="fb-x" onclick="fbCloseView()" title="Close" aria-label="Close">&times;</button>
-    </div>
-    ${trusted
-      ? `<div class="fb-view-img"><img src="${esc(url)}" alt="${esc(title || 'Screenshot')}"></div>`
-      : `<iframe id="fb-view-frame" sandbox referrerpolicy="no-referrer" title="Screenshot"></iframe>`}`;
+    </div>`;
+  // A capture fills the screen -- it is a whole page somebody sent in, and
+  // there is nothing behind it worth seeing. One of our own pictures is a
+  // LIGHTBOX: a box over the page it was opened from, capped so it always fits
+  // the window, with the page still visible around it.
+  o.innerHTML = trusted
+    ? `<div class="fb-box" onclick="event.stopPropagation()">${hd}
+         <div class="fb-view-img"><img src="${esc(url)}" alt="${esc(title || 'Screenshot')}"></div>
+       </div>`
+    : hd + `<iframe id="fb-view-frame" sandbox referrerpolicy="no-referrer" title="Screenshot"></iframe>`;
+  // Clicking the dimmed area closes it, which is what a lightbox does. The box
+  // itself stops the click above, or every press inside would shut it.
+  o.onclick = trusted ? fbCloseView : null;
   if (!trusted) {
     o.querySelector('#fb-view-frame').srcdoc =
       '<!doctype html><html><body style="margin:0;background:#111;display:flex;' +
@@ -4291,6 +4300,7 @@ const GATE_ABOUT = [
   {
     head: 'Collaborate with other writers',
     icon: 'link',
+    shot: { src: 'img/settings.webp', alt: 'LCARS appearance settings: duty-post colours, light and dark, calm or epic, line spacing, separate fonts for the editor and the app, and the colours used for action, comms and thought lines.' },
     items: [
       'Share a read-only link of a snapshot to an in-progress sim draft with anyone, no logins required.',
       'Create Joint Post sims and invite other Writers to collab live in the app.',
@@ -4300,7 +4310,6 @@ const GATE_ABOUT = [
   {
     head: 'Make it your own',
     icon: 'palette',
-    shot: { src: 'img/settings.webp', alt: 'LCARS appearance settings: duty-post colours, light and dark, calm or epic, line spacing, separate fonts for the editor and the app, and the colours used for action, comms and thought lines.' },
     items: [
       'LCARS features two primary styles, light and dark mode support, a full suite of colours and additional options to suit your preferences.',
       'Use your preferred font, font size, and customize the colours of visual aids to match your preferred writing environment.',

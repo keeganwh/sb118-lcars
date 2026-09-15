@@ -1292,11 +1292,22 @@ body.academy #editor .om{font-style:normal}
 .fb-view-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;
   border-bottom:3px solid var(--amber);flex-shrink:0}
 #fb-view-frame{flex:1;width:100%;border:0;background:#fff}
-/* The trusted path: our own screenshot, shown directly rather than through a
-   frame. Scrolls if the picture is taller than the screen. */
-.fb-view-img{flex:1;min-height:0;overflow:auto;background:#111;
-  display:flex;align-items:flex-start;justify-content:center}
-.fb-view-img img{max-width:100%;height:auto;display:block}
+/* ── The trusted path: a lightbox, not a takeover ──
+   A capture fills the screen because it IS a screen. One of our own pictures
+   is a box over the page that opened it, capped so it always fits the window
+   with the page still showing around the edges. */
+#fb-view.gate-view{background:rgba(0,0,0,.62); align-items:center; justify-content:center;
+  padding:clamp(12px,4vw,40px)}
+.fb-box{display:flex; flex-direction:column; width:100%;
+  max-width:min(1120px,100%); max-height:100%;
+  background:var(--panel); border:1px solid var(--border); border-radius:12px;
+  overflow:hidden; box-shadow:0 24px 70px rgba(0,0,0,.45); cursor:default}
+.fb-box .fb-view-hd{flex-shrink:0}
+.fb-view-img{flex:1; min-height:0; overflow:auto; background:var(--bg);
+  display:flex; align-items:center; justify-content:center; padding:10px}
+/* contain, not cover: a screenshot cropped to fill the box is a screenshot
+   with its edges cut off. */
+.fb-view-img img{max-width:100%; max-height:100%; object-fit:contain; display:block}
 .adm-w-role:disabled{opacity:0.5;cursor:not-allowed}
 #adm-w-filter{margin-bottom:4px}
 
@@ -1481,16 +1492,12 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
 .gate-about-h{margin:0; font-size:1.3rem; font-weight:700; letter-spacing:0.01em}
 .gate-about-lede{margin:8px 0 0; font-size:0.92rem; line-height:1.7; color:var(--dim);
   max-width:60ch}
-.gate-about-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr));
-  gap:26px 34px; margin-top:30px}
-/* The cells of a grid row are the same height, so pushing the picture to the
-   bottom of its cell lines every picture in that row up with the others --
-   which is what stops them staggering when the bullet lists differ in length.
-   align-items:stretch is the default, and is what makes the cells equal in
-   the first place, so it is stated rather than relied upon. */
-.gate-about-grid{align-items:stretch}
+/* ONE COLUMN, not a grid of them. The section reads as a sequence -- heading,
+   the picture of that thing, the next heading -- so every picture sits at the
+   same width directly under the words it illustrates, and nothing staggers
+   because nothing is beside anything. */
+.gate-about-grid{display:flex; flex-direction:column; gap:30px; margin-top:30px}
 .gate-grp{display:flex; flex-direction:column; gap:9px}
-.gate-grp .gate-shot{margin-top:auto}
 .gate-grp-h{margin:0; font-size:0.86rem; font-weight:700; letter-spacing:0.02em;
   display:flex; align-items:center; gap:8px}
 .gate-grp-h .ic{color:var(--ac-tx); flex:0 0 auto}
@@ -1498,7 +1505,7 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
 .gate-grp-l li{font-size:0.82rem; line-height:1.65; color:var(--dim)}
 /* A thumbnail, and a button, because it opens something. The aspect ratio is
    declared so the grid does not jump as the lazy images arrive. */
-.gate-shot{display:block; width:100%; margin-top:4px; padding:0; border:1px solid var(--border);
+.gate-shot{display:block; width:100%; margin-top:8px; padding:0; border:1px solid var(--border);
   border-radius:8px; overflow:hidden; background:var(--bg); cursor:pointer; position:relative;
   font-family:inherit; line-height:0}
 .gate-shot img{display:block; width:100%; height:auto; aspect-ratio:1600/1000; object-fit:cover;
@@ -1644,7 +1651,7 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   .gate-bar-in{padding:8px 14px; gap:10px}
   .gate-bar-btn{font-size:0.73rem; padding:4px 10px}
   .gate-about-in{padding:30px 16px 44px}
-  .gate-about-grid{gap:22px}
+  .gate-about-grid{gap:24px}
   /* The tour card takes the width it can get, and its actions stop being a
      row -- Back / Close / Next on one 390px line leaves each of them a tap
      target too small to hit. */
