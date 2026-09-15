@@ -4199,9 +4199,12 @@ function gateAboutHtml() {
   return `
     <div class="gate-about">
       <div class="gate-about-in">
-        <h2 class="gate-about-h">What LCARS does</h2>
-        <p class="gate-about-lede">A writing tool built around the way SB118 sims actually get written
-          &mdash; drafted between other things, on whatever device is to hand, and posted to a group.</p>
+        <h2 class="gate-about-h">What is LCARS?</h2>
+        <p class="gate-about-lede">LCARS is a writing support tool for roleplayers in the StarBase 118 PBEM
+          group, structured and optimized to support how simmers actually write. The full online suite
+          includes a sim editor with specialized visual aids and auto-formatting options, pace tracking,
+          useful stats, and a lot more. No private or personal data is required to use LCARS, and you can
+          even use it offline.</p>
         <div class="gate-about-grid">
           ${GATE_ABOUT.map(g => `
             <section class="gate-grp">
@@ -4209,8 +4212,9 @@ function gateAboutHtml() {
               <ul class="gate-grp-l">${g.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
             </section>`).join('')}
         </div>
-        <p class="gate-about-end">There is a Getting Started tour built in, and you can report a bug or ask
-          for a feature from inside the app.</p>
+        <p class="gate-about-end">If you still aren't sure, try using Offline Mode first. You can run the
+          Getting Started tour and try out nearly every feature &mdash; everything except data syncing and
+          Joint Post authoring &mdash; and then create an account any time you like.</p>
       </div>
     </div>`;
 }
@@ -4221,54 +4225,57 @@ function gateAboutHtml() {
 // they can picture themselves doing -- not a list of subsystems.
 const GATE_ABOUT = [
   {
-    head: 'Your writing, wherever you are',
+    head: 'Write how you want, where you want',
     icon: 'cloud-upload',
     items: [
-      'A private account tied to your Writer ID that keeps everything in step across your phone, your laptop and anything else you sign in on.',
-      'Or no account at all — LCARS works offline in one browser if you would rather not sign up.',
-      'Built so that writing on a phone is no worse than writing at a desk.',
+      "All you need to access LCARS' full suite of features is a public Writer ID and a PIN created by you.",
+      'Drafted sims are saved to a private database that you can access on any device using your ID and PIN.',
+      'While the experience is best on desktop, LCARS is fully mobile-optimized, reducing the pain of writing on mobile.',
     ],
   },
   {
-    head: 'Formatting that gets out of the way',
+    head: 'Visual aids and automatic formatting',
     icon: 'pencil',
     items: [
-      'Names bold themselves. So do locations. OOC lines and thoughts go italic. All of it is yours to turn on, off or change.',
-      'Special formatting is one press: ::actions::, oO thoughts Oo, =/\\= comms =/\\= and the rest.',
-      'What you copy out is clean — the on-screen colours and helpers stay behind.',
+      'Wish that when you wrote, names bolded automatically? Wish that locations, OOC notes, and thoughts could auto-format? In LCARS they can.',
+      'Lose track of oO Thoughts Oo in dialogue? Want to easily insert =/\\= Comms Tags =/\\= without typing them? LCARS can do that.',
+      'The text you copy out is cleaned up and formatted for Gmail / Google Groups, stripping out unwanted formatting and colours.',
     ],
   },
   {
-    head: 'Knowing where you are in a scene',
+    head: 'Useful tracking and data',
     icon: 'users',
     items: [
-      'LCARS spots the characters you write for and the ones you write with, and keeps track of both.',
-      'Give a character or a paragraph a colour while you draft, to see at a glance who has written what.',
-      'See how long it has been since you last posted in a scene — so you know whether you are behind, or whether it is time for an OOC.',
+      'LCARS identifies each character in a scene; mark one as your own to see all their scenes and who you write with most.',
+      'Assign a colour to a character to distinguish their dialogue while drafting; assign narration to them to easily keep track of who wrote what.',
+      'Easily keep tabs on how long it has been since you last posted in a scene and which scenes need your attention most urgently.',
     ],
   },
   {
-    head: 'Getting eyes on a draft',
+    head: 'Collaborate with other writers',
     icon: 'link',
     items: [
-      'Share a read-only link to a snapshot of something you are still writing. No account needed at the other end.',
-      'What the reader sees is the finished sim, not your working copy — no draft colours, no markers.',
+      'Share a read-only link of a snapshot to an in-progress sim draft with anyone, no logins required.',
+      'Create Joint Post sims and invite other Writers to collab live in the app.',
+      'Share your thoughts on the app, report bugs, and request new features with a built-in ticketing system.',
     ],
   },
   {
-    head: 'Making it yours',
+    head: 'Make it your own',
     icon: 'palette',
     items: [
-      'Light and dark, seven duty-post colours or one of your own, and a calm or a bolder look.',
-      'Font size and separate fonts for writing and for the app itself.',
+      'LCARS features two primary styles, light and dark mode support, a full suite of colours and additional options to suit your preferences.',
+      'Use your preferred font, font size, and customize the colours of visual aids to match your preferred writing environment.',
+      'Create templates for frequently-sent messages and sim types, ideal for Academy Trainers or Mentors.',
     ],
   },
   {
-    head: 'Coming soon',
+    head: 'Still in development',
     icon: 'sparkles',
     items: [
-      'Full Joint Post support for everyone.',
-      'Posting straight to email or Google Groups from inside the app.',
+      'This app is still under active development and is not associated with the SB118 HQ system.',
+      'Bugs are being actively fixed and new features are being added every week.',
+      "Give it a try, let us know what you think, and we'll work to make LCARS suit your needs as well!",
     ],
   },
 ];
