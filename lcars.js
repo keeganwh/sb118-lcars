@@ -8,18 +8,12 @@ const APP_VERSION = '4.3';
 const VERSIONS = [
   {
     version: 'pending',
-    date: '2026-09-14',
+    date: '2026-09-15',
     changes: [
-      'Changed: a bug report or a feature request now starts with a short headline, so the team can tell at a glance what each one is about. It is the first box on the form, and it is limited to 100 characters',
-      'Added: reports are numbered now. Your own reports show their ticket number, which means you can point at one in a conversation instead of describing it again',
-      'Changed: the technical details attached to a report \u2014 which screen you were on, which browser, and anything the app logged \u2014 are still sent, but harmless browser chatter is no longer collected with them. Every report was arriving with five copies of a warning that meant nothing',
-      'Fixed: the Storage and Usage report in the Admin panel showed nothing but an error. It counted sims the wrong way and fell over on every account',
-      'Changed: the first screen has been rebuilt. It now says what LCARS is, notes that it is a work in progress and not an HQ project, and splits the choices into four labelled sections \u2014 signing in, creating an account, Google and Discord, and using LCARS offline \u2014 each with a line saying what it actually means. The old \u201CNot Now\u201D button, which explained nothing, is now \u201CUse LCARS on this device only\u201D',
-      'Changed: the wording on the create-account screen is clearer about what a Writer ID and a PIN are for, and about linking Google or Discord afterwards \u2014 which is optional, and is both a second way in and how you reset your own PIN',
-      'Added: a What LCARS does section under the sign-in screen. Scroll down from the front page and it explains what the app is for, in plain language \u2014 what it does while you write, how it keeps track of characters and scenes, and what is coming. The sign-in card is replaced by a slim bar at the top of the screen as you go, so signing in is never more than one click away, and scrolling back up brings the card straight back',
-      'Added: four screenshots of LCARS in use sit alongside the What is LCARS text, under the headings they illustrate \u2014 the editor with its formatting and colour coding, a character profile, the dashboard, and the appearance settings. Click one to see it full size',
-      'Changed: the sign-in screen has its own calmer colours rather than borrowing Command Red from the duty palette. The duty colour is something you pick once you have an account, so it never made sense on the screen you see before you have one. It still follows light and dark',
-      'Changed: Storage and Usage now opens with two bars showing how much of the project\u2019s space is gone and what is filling it \u2014 sims, joint sims, snapshots and files, each counted separately. The account-by-account figures are still there, folded underneath and sorted heaviest first',
+      'Changed: a bug report or a feature request now starts with a short headline, and reports are numbered \u2014 so you can point at one by its number in a conversation instead of describing it again. The headline is the first box on the form and is limited to 100 characters',
+      'Changed: the first screen has been rebuilt. It says what LCARS is, notes that it is a work in progress and not an HQ project, and splits the choices into four labelled sections \u2014 signing in, creating an account, Google and Discord, and using LCARS offline \u2014 each with a line saying what it actually means. It has its own calmer colours now rather than borrowing Command Red from the duty palette, and scrolling down reveals a What is LCARS section, with screenshots, explaining what the app is for',
+      'Changed: clearer wording on the create-account screen about what a Writer ID and a PIN are for, and about linking Google or Discord afterwards \u2014 which is optional, and is both a second way in and how you reset your own PIN',
+      'Fixed: the Storage and Usage report in the Admin panel showed nothing but an error on every account. It now opens with bars showing how much of the space is gone and what is filling it',
     ],
   },
   {
