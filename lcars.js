@@ -17,6 +17,7 @@ const VERSIONS = [
       'Changed: the first screen has been rebuilt. It now says what LCARS is, notes that it is a work in progress and not an HQ project, and splits the choices into four labelled sections \u2014 signing in, creating an account, Google and Discord, and using LCARS offline \u2014 each with a line saying what it actually means. The old \u201CNot Now\u201D button, which explained nothing, is now \u201CUse LCARS on this device only\u201D',
       'Changed: the wording on the create-account screen is clearer about what a Writer ID and a PIN are for, and about linking Google or Discord afterwards \u2014 which is optional, and is both a second way in and how you reset your own PIN',
       'Added: a What LCARS does section under the sign-in screen. Scroll down from the front page and it explains what the app is for, in plain language \u2014 what it does while you write, how it keeps track of characters and scenes, and what is coming. The sign-in card is replaced by a slim bar at the top of the screen as you go, so signing in is never more than one click away, and scrolling back up brings the card straight back',
+      'Added: three screenshots of LCARS in use sit alongside the What is LCARS text, under the headings they illustrate \u2014 the editor with its formatting and colour coding, a character profile, and the dashboard. Click one to see it full size',
       'Changed: the sign-in screen has its own calmer colours rather than borrowing Command Red from the duty palette. The duty colour is something you pick once you have an account, so it never made sense on the screen you see before you have one. It still follows light and dark',
       'Changed: Storage and Usage now opens with two bars showing how much of the project\u2019s space is gone and what is filling it \u2014 sims, joint sims, snapshots and files, each counted separately. The account-by-account figures are still there, folded underneath and sorted heaviest first',
     ],
@@ -2191,7 +2192,7 @@ function fbViewImage(url, title) {
 
 function fbCloseView() {
   const o = document.getElementById('fb-view');
-  if (o) { o.classList.add('hidden'); o.innerHTML = ''; }
+  if (o) { o.classList.add('hidden'); o.classList.remove('gate-view'); o.innerHTML = ''; }
 }
 
 function fbOpenCapture(path) {
@@ -4181,6 +4182,14 @@ function gateWatchScroll(el) {
   _gateObs.observe(card);
 }
 
+function gateShot(src, title) {
+  fbViewImage(src, title);
+  // The viewer lives on <body>, outside the gate, so it has to be told which
+  // palette it was opened from.
+  const v = document.getElementById('fb-view');
+  if (v) v.classList.add('gate-view');
+}
+
 function gateScrollToAbout() {
   const a = document.querySelector('#auth-gate .gate-about');
   if (a) a.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -4210,6 +4219,12 @@ function gateAboutHtml() {
             <section class="gate-grp">
               <h3 class="gate-grp-h">${ic(g.icon)} ${esc(g.head)}</h3>
               <ul class="gate-grp-l">${g.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+              ${g.shot ? `<button class="gate-shot" onclick="gateShot('${esc(g.shot.src)}','${esc(g.head)}')"
+                aria-label="${esc('Enlarge: ' + g.shot.alt)}">
+                <img src="${esc(g.shot.src)}" alt="${esc(g.shot.alt)}" loading="lazy" decoding="async"
+                  width="1600" height="1000">
+                <span class="gate-shot-hint">${ic('search')} Enlarge</span>
+              </button>` : ''}
             </section>`).join('')}
         </div>
         <p class="gate-about-end">If you still aren't sure, try using Offline Mode first. You can run the
@@ -4227,6 +4242,7 @@ const GATE_ABOUT = [
   {
     head: 'Write how you want, where you want',
     icon: 'cloud-upload',
+    shot: { src: 'img/dashboard.webp', alt: 'The LCARS dashboard, showing a mission broken into scenes and sims, with word counts and how long since the last post.' },
     items: [
       "All you need to access LCARS' full suite of features is a public Writer ID and a PIN created by you.",
       'Drafted sims are saved to a private database that you can access on any device using your ID and PIN.',
@@ -4236,6 +4252,7 @@ const GATE_ABOUT = [
   {
     head: 'Visual aids and automatic formatting',
     icon: 'pencil',
+    shot: { src: 'img/editor.webp', alt: 'A sim open in the LCARS editor. Character names are bold and colour-coded, the location header is bold, actions and comms are tinted, and a thought is in italics.' },
     items: [
       'Wish that when you wrote, names bolded automatically? Wish that locations, OOC notes, and thoughts could auto-format? In LCARS they can.',
       'Lose track of oO Thoughts Oo in dialogue? Want to easily insert =/\\= Comms Tags =/\\= without typing them? LCARS can do that.',
@@ -4245,6 +4262,7 @@ const GATE_ABOUT = [
   {
     head: 'Useful tracking and data',
     icon: 'users',
+    shot: { src: 'img/character.webp', alt: 'A character profile in LCARS, with a portrait, rank and division, sim counts, and a list of the characters this one shares scenes with most.' },
     items: [
       'LCARS identifies each character in a scene; mark one as your own to see all their scenes and who you write with most.',
       'Assign a colour to a character to distinguish their dialogue while drafting; assign narration to them to easily keep track of who wrote what.',

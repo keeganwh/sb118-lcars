@@ -1286,7 +1286,7 @@ body.academy #editor .om{font-style:normal}
    is opened FROM both and is the thing being looked at. The iframe is
    sandboxed with nothing granted -- a capture is arbitrary DOM from somebody
    else's browser. */
-#fb-view{position:fixed;inset:0;z-index:1100;display:flex;flex-direction:column;
+#fb-view{position:fixed;inset:0;z-index:9500;display:flex;flex-direction:column;
   background:var(--panel)}
 #fb-view.hidden{display:none}
 .fb-view-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;
@@ -1406,17 +1406,22 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
    inherited by everything inside it -- so redefining --amber and --on-ac on
    #auth-gate makes every .btn in the gate come out slate without touching a
    single button rule. Nothing outside #auth-gate can see them. */
-#auth-gate{
+/* .gate-view is the image viewer when it was opened FROM the gate. It is
+   appended to <body>, so without this it draws its rule and title in the duty
+   accent -- Command Red on a slate page. */
+#auth-gate,#fb-view.gate-view{
   --bg:#F2F0EC; --panel:#FFFFFF; --border:#DFDAD2; --line:#DFDAD2;
   --amber:#35689B; --amber2:#2B577F; --on-ac:#FFFFFF; --ac:#35689B; --ac-tx:#35689B;
   --text:#2B3038; --dim:#6B7480; --ink:#2B3038;
+}
+#auth-gate{
   position:fixed; inset:0; z-index:9000; overflow:auto;
   background:var(--bg); color:var(--text);
 }
 /* Slate holds in dark as well -- a bright white gate in front of a dark app is
    its own kind of jolt. data-mode is always resolved to light or dark on <html>
    by applyStyle(), so there is no system state to catch separately. */
-:root[data-mode="dark"] #auth-gate{
+:root[data-mode="dark"] #auth-gate,:root[data-mode="dark"] #fb-view.gate-view{
   --bg:#14171C; --panel:#1B1F26; --border:#2B313A; --line:#2B313A;
   --amber:#5B93C7; --amber2:#7CACD8; --on-ac:#FFFFFF; --ac:#5B93C7; --ac-tx:#5B93C7;
   --text:#C8D2DC; --dim:#8996A4; --ink:#C8D2DC;
@@ -1479,6 +1484,23 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
 .gate-grp-h .ic{color:var(--ac-tx); flex:0 0 auto}
 .gate-grp-l{margin:0; padding-left:17px; display:flex; flex-direction:column; gap:7px}
 .gate-grp-l li{font-size:0.82rem; line-height:1.65; color:var(--dim)}
+/* A thumbnail, and a button, because it opens something. The aspect ratio is
+   declared so the grid does not jump as the lazy images arrive. */
+.gate-shot{display:block; width:100%; margin-top:4px; padding:0; border:1px solid var(--border);
+  border-radius:8px; overflow:hidden; background:var(--bg); cursor:pointer; position:relative;
+  font-family:inherit; line-height:0}
+.gate-shot img{display:block; width:100%; height:auto; aspect-ratio:1600/1000; object-fit:cover;
+  object-position:top left}
+.gate-shot:hover{border-color:var(--amber)}
+.gate-shot-hint{position:absolute; right:8px; bottom:8px; display:flex; align-items:center; gap:5px;
+  font-size:0.66rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; line-height:1;
+  padding:5px 8px; border-radius:6px; background:var(--panel); color:var(--dim);
+  border:1px solid var(--border); opacity:0; transition:opacity .15s}
+.gate-shot:hover .gate-shot-hint,.gate-shot:focus-visible .gate-shot-hint{opacity:1}
+/* A finger has no hover, so the hint is simply always there on a phone. */
+@media (hover: none){ .gate-shot-hint{opacity:1} }
+@media (prefers-reduced-motion: reduce){ .gate-shot-hint{transition:none} }
+
 .gate-about-end{margin:34px 0 0; padding-top:18px; border-top:1px solid var(--border);
   font-size:0.82rem; line-height:1.65; color:var(--dim)}
 
