@@ -17,7 +17,7 @@ const VERSIONS = [
       'Changed: the first screen has been rebuilt. It now says what LCARS is, notes that it is a work in progress and not an HQ project, and splits the choices into four labelled sections \u2014 signing in, creating an account, Google and Discord, and using LCARS offline \u2014 each with a line saying what it actually means. The old \u201CNot Now\u201D button, which explained nothing, is now \u201CUse LCARS on this device only\u201D',
       'Changed: the wording on the create-account screen is clearer about what a Writer ID and a PIN are for, and about linking Google or Discord afterwards \u2014 which is optional, and is both a second way in and how you reset your own PIN',
       'Added: a What LCARS does section under the sign-in screen. Scroll down from the front page and it explains what the app is for, in plain language \u2014 what it does while you write, how it keeps track of characters and scenes, and what is coming. The sign-in card is replaced by a slim bar at the top of the screen as you go, so signing in is never more than one click away, and scrolling back up brings the card straight back',
-      'Added: three screenshots of LCARS in use sit alongside the What is LCARS text, under the headings they illustrate \u2014 the editor with its formatting and colour coding, a character profile, and the dashboard. Click one to see it full size',
+      'Added: four screenshots of LCARS in use sit alongside the What is LCARS text, under the headings they illustrate \u2014 the editor with its formatting and colour coding, a character profile, the dashboard, and the appearance settings. Click one to see it full size',
       'Changed: the sign-in screen has its own calmer colours rather than borrowing Command Red from the duty palette. The duty colour is something you pick once you have an account, so it never made sense on the screen you see before you have one. It still follows light and dark',
       'Changed: Storage and Usage now opens with two bars showing how much of the project\u2019s space is gone and what is filling it \u2014 sims, joint sims, snapshots and files, each counted separately. The account-by-account figures are still there, folded underneath and sorted heaviest first',
     ],
@@ -2170,7 +2170,22 @@ function paintFeedback() {
 // Shown in an overlay rather than by opening the signed URL, because Storage
 // serves what it likes and iOS Safari would not open a written-to window at
 // all. An <img> in a sandboxed frame renders the same everywhere.
-function fbViewImage(url, title) {
+// `trusted` says the picture is one of OURS -- a file shipped with the app --
+// rather than a capture uploaded from somebody else's browser. It is the
+// difference between an <img> and a sandboxed iframe, and it matters:
+//
+//   * A capture is arbitrary DOM from a stranger. It goes in an iframe with
+//     nothing granted, and that is not negotiable.
+//   * Our own screenshots in that same iframe BROKE. A sandbox without
+//     allow-same-origin gives the frame an opaque origin, so its request for
+//     the image is not same-site -- and on a Vercel preview, which is behind
+//     SSO, the auth cookie is SameSite=Lax and does not go with it. The image
+//     came back as a login redirect and the viewer opened empty. It worked on
+//     localhost and on production, and failed on exactly the deployment being
+//     reviewed.
+//
+// The iframe was never protecting anything in the trusted case, so it goes.
+function fbViewImage(url, title, trusted) {
   let o = document.getElementById('fb-view');
   if (!o) {
     o = document.createElement('div');
@@ -2182,11 +2197,15 @@ function fbViewImage(url, title) {
       <span class="fb-ttl">${esc(title || 'SCREENSHOT')}</span>
       <button class="fb-x" onclick="fbCloseView()" title="Close" aria-label="Close">&times;</button>
     </div>
-    <iframe id="fb-view-frame" sandbox referrerpolicy="no-referrer" title="Screenshot"></iframe>`;
-  o.querySelector('#fb-view-frame').srcdoc =
-    '<!doctype html><html><body style="margin:0;background:#111;display:flex;' +
-    'align-items:flex-start;justify-content:center">' +
-    '<img src="' + esc(url) + '" style="max-width:100%;height:auto" alt="Screenshot"></body></html>';
+    ${trusted
+      ? `<div class="fb-view-img"><img src="${esc(url)}" alt="${esc(title || 'Screenshot')}"></div>`
+      : `<iframe id="fb-view-frame" sandbox referrerpolicy="no-referrer" title="Screenshot"></iframe>`}`;
+  if (!trusted) {
+    o.querySelector('#fb-view-frame').srcdoc =
+      '<!doctype html><html><body style="margin:0;background:#111;display:flex;' +
+      'align-items:flex-start;justify-content:center">' +
+      '<img src="' + esc(url) + '" style="max-width:100%;height:auto" alt="Screenshot"></body></html>';
+  }
   o.classList.remove('hidden');
 }
 
@@ -4183,7 +4202,7 @@ function gateWatchScroll(el) {
 }
 
 function gateShot(src, title) {
-  fbViewImage(src, title);
+  fbViewImage(src, title, true);
   // The viewer lives on <body>, outside the gate, so it has to be told which
   // palette it was opened from.
   const v = document.getElementById('fb-view');
@@ -4281,6 +4300,7 @@ const GATE_ABOUT = [
   {
     head: 'Make it your own',
     icon: 'palette',
+    shot: { src: 'img/settings.webp', alt: 'LCARS appearance settings: duty-post colours, light and dark, calm or epic, line spacing, separate fonts for the editor and the app, and the colours used for action, comms and thought lines.' },
     items: [
       'LCARS features two primary styles, light and dark mode support, a full suite of colours and additional options to suit your preferences.',
       'Use your preferred font, font size, and customize the colours of visual aids to match your preferred writing environment.',

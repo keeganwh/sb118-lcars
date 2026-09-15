@@ -1292,6 +1292,11 @@ body.academy #editor .om{font-style:normal}
 .fb-view-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;
   border-bottom:3px solid var(--amber);flex-shrink:0}
 #fb-view-frame{flex:1;width:100%;border:0;background:#fff}
+/* The trusted path: our own screenshot, shown directly rather than through a
+   frame. Scrolls if the picture is taller than the screen. */
+.fb-view-img{flex:1;min-height:0;overflow:auto;background:#111;
+  display:flex;align-items:flex-start;justify-content:center}
+.fb-view-img img{max-width:100%;height:auto;display:block}
 .adm-w-role:disabled{opacity:0.5;cursor:not-allowed}
 #adm-w-filter{margin-bottom:4px}
 
@@ -1478,7 +1483,14 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   max-width:60ch}
 .gate-about-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr));
   gap:26px 34px; margin-top:30px}
+/* The cells of a grid row are the same height, so pushing the picture to the
+   bottom of its cell lines every picture in that row up with the others --
+   which is what stops them staggering when the bullet lists differ in length.
+   align-items:stretch is the default, and is what makes the cells equal in
+   the first place, so it is stated rather than relied upon. */
+.gate-about-grid{align-items:stretch}
 .gate-grp{display:flex; flex-direction:column; gap:9px}
+.gate-grp .gate-shot{margin-top:auto}
 .gate-grp-h{margin:0; font-size:0.86rem; font-weight:700; letter-spacing:0.02em;
   display:flex; align-items:center; gap:8px}
 .gate-grp-h .ic{color:var(--ac-tx); flex:0 0 auto}
