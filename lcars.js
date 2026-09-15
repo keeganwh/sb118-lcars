@@ -12,6 +12,7 @@ const VERSIONS = [
     changes: [
       'Changed: a bug report or a feature request now starts with a short headline, and reports are numbered \u2014 so you can point at one by its number in a conversation instead of describing it again. The headline is the first box on the form and is limited to 100 characters',
       'Changed: the first screen has been rebuilt. It says what LCARS is, notes that it is a work in progress and not an HQ project, and splits the choices into four labelled sections \u2014 signing in, creating an account, Google and Discord, and using LCARS offline \u2014 each with a line saying what it actually means. It has its own calmer colours now rather than borrowing Command Red from the duty palette, and scrolling down reveals a What is LCARS section, with screenshots, explaining what the app is for',
+      'Changed: the sign-in screen is shorter on a phone, so the Learn more prompt below it is on screen without scrolling. Discord and Google share a row, and the note about this being a work in progress fits on one line',
       'Changed: clearer wording on the create-account screen about what a Writer ID and a PIN are for, and about linking Google or Discord afterwards \u2014 which is optional, and is both a second way in and how you reset your own PIN',
       'Fixed: the Storage and Usage report in the Admin panel showed nothing but an error on every account. It now opens with bars showing how much of the space is gone and what is filling it',
     ],
@@ -4379,7 +4380,7 @@ function gateChoice(fromSettings) {
   document.getElementById('gate-body').innerHTML = `
     <p class="gate-intro">An online tool for SB118 writers, built to make writing and keeping track of sims
       as easy and supportive as possible.</p>
-    <p class="gate-disc">${ic('info')} A work in progress, and not affiliated with the SB118 HQ project.</p>
+    <p class="gate-disc">${ic('info')} A work in progress, not affiliated with SB118 HQ.</p>
 
     ${gateSect('Have an account?')}
     <div class="gate-stack">
@@ -4395,8 +4396,10 @@ function gateChoice(fromSettings) {
 
     ${gateSect('Other sign in options')}
     <div class="gate-stack">
-      <button class="btn btn-s gate-btn" onclick="signInWithProvider('discord')">Sign in with Discord</button>
-      <button class="btn btn-s gate-btn" onclick="signInWithProvider('google')">Sign in with Google</button>
+      <div class="gate-pair">
+        <button class="btn btn-s gate-btn" onclick="signInWithProvider('discord')">Discord</button>
+        <button class="btn btn-s gate-btn" onclick="signInWithProvider('google')">Google</button>
+      </div>
       <p class="gate-note">Optional links that offer an easier login option &amp; PIN recovery. LCARS does
         not capture info or post to these accounts.</p>
     </div>

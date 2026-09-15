@@ -1563,6 +1563,11 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
 .gate-sect-rule{flex:1; height:1px; background:var(--border)}
 
 .gate-stack{display:flex; flex-direction:column; gap:8px}
+/* Two buttons on one row. They share the width evenly and cannot be squeezed
+   below a readable label; the section heading above them carries the verb, so
+   the buttons only have to name the provider. */
+.gate-pair{display:flex; gap:8px}
+.gate-pair .gate-btn{flex:1 1 0; min-width:0}
 .gate-btn{width:100%; justify-content:center; text-align:center}
 /* The one outlined-accent button. Most people arriving here have no account,
    so creating one is given the weight, while the single FILLED element on the
@@ -1647,8 +1652,15 @@ body.jp-readonly #tb button{opacity:0.4;pointer-events:none}
   #fb-panel,#wn-panel{width:100vw;border-left:none}
   /* The gate is the whole screen on a phone, so the card gives its edges back
      to the text rather than keeping a desktop gutter. */
-  .gate-hero{padding:16px}
-  .gate-card{padding:22px 18px}
+  /* Every row tightened a little, because the card has to clear a phone's
+     screen WITH the browser chrome showing -- roughly 640-700px of svh, not
+     the 844 the spec height suggests -- or the Learn more hint below it is
+     never on screen at rest. No copy is cut; the air between rows is. */
+  .gate-hero{padding:14px; gap:10px}
+  .gate-learn{padding:4px 10px}
+  .gate-card{padding:20px 17px; gap:14px}
+  #auth-gate #gate-body{gap:11px}
+  .gate-sect-hd{margin-top:2px}
   .gate-word{font-size:1.15rem}
   /* The bar keeps the mark and the two buttons; the tool name is the part a
      phone has no room for. */
