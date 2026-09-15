@@ -14,6 +14,11 @@ const VERSIONS = [
       'Added: reports are numbered now. Your own reports show their ticket number, which means you can point at one in a conversation instead of describing it again',
       'Changed: the technical details attached to a report \u2014 which screen you were on, which browser, and anything the app logged \u2014 are still sent, but harmless browser chatter is no longer collected with them. Every report was arriving with five copies of a warning that meant nothing',
       'Fixed: the Storage and Usage report in the Admin panel showed nothing but an error. It counted sims the wrong way and fell over on every account',
+      'Changed: the first screen has been rebuilt. It now says what LCARS is, notes that it is a work in progress and not an HQ project, and splits the choices into four labelled sections \u2014 signing in, creating an account, Google and Discord, and using LCARS offline \u2014 each with a line saying what it actually means. The old \u201CNot Now\u201D button, which explained nothing, is now \u201CUse LCARS on this device only\u201D',
+      'Changed: the wording on the create-account screen is clearer about what a Writer ID and a PIN are for, and about linking Google or Discord afterwards \u2014 which is optional, and is both a second way in and how you reset your own PIN',
+      'Added: a What LCARS does section under the sign-in screen. Scroll down from the front page and it explains what the app is for, in plain language \u2014 what it does while you write, how it keeps track of characters and scenes, and what is coming. The sign-in card is replaced by a slim bar at the top of the screen as you go, so signing in is never more than one click away, and scrolling back up brings the card straight back',
+      'Added: four screenshots of LCARS in use sit alongside the What is LCARS text, under the headings they illustrate \u2014 the editor with its formatting and colour coding, a character profile, the dashboard, and the appearance settings. Click one to see it full size',
+      'Changed: the sign-in screen has its own calmer colours rather than borrowing Command Red from the duty palette. The duty colour is something you pick once you have an account, so it never made sense on the screen you see before you have one. It still follows light and dark',
       'Changed: Storage and Usage now opens with two bars showing how much of the project\u2019s space is gone and what is filling it \u2014 sims, joint sims, snapshots and files, each counted separately. The account-by-account figures are still there, folded underneath and sorted heaviest first',
     ],
   },
@@ -2165,29 +2170,57 @@ function paintFeedback() {
 // Shown in an overlay rather than by opening the signed URL, because Storage
 // serves what it likes and iOS Safari would not open a written-to window at
 // all. An <img> in a sandboxed frame renders the same everywhere.
-function fbViewImage(url, title) {
+// `trusted` says the picture is one of OURS -- a file shipped with the app --
+// rather than a capture uploaded from somebody else's browser. It is the
+// difference between an <img> and a sandboxed iframe, and it matters:
+//
+//   * A capture is arbitrary DOM from a stranger. It goes in an iframe with
+//     nothing granted, and that is not negotiable.
+//   * Our own screenshots in that same iframe BROKE. A sandbox without
+//     allow-same-origin gives the frame an opaque origin, so its request for
+//     the image is not same-site -- and on a Vercel preview, which is behind
+//     SSO, the auth cookie is SameSite=Lax and does not go with it. The image
+//     came back as a login redirect and the viewer opened empty. It worked on
+//     localhost and on production, and failed on exactly the deployment being
+//     reviewed.
+//
+// The iframe was never protecting anything in the trusted case, so it goes.
+function fbViewImage(url, title, trusted) {
   let o = document.getElementById('fb-view');
   if (!o) {
     o = document.createElement('div');
     o.id = 'fb-view';
     document.body.appendChild(o);
   }
-  o.innerHTML = `
+  const hd = `
     <div class="fb-view-hd">
       <span class="fb-ttl">${esc(title || 'SCREENSHOT')}</span>
       <button class="fb-x" onclick="fbCloseView()" title="Close" aria-label="Close">&times;</button>
-    </div>
-    <iframe id="fb-view-frame" sandbox referrerpolicy="no-referrer" title="Screenshot"></iframe>`;
-  o.querySelector('#fb-view-frame').srcdoc =
-    '<!doctype html><html><body style="margin:0;background:#111;display:flex;' +
-    'align-items:flex-start;justify-content:center">' +
-    '<img src="' + esc(url) + '" style="max-width:100%;height:auto" alt="Screenshot"></body></html>';
+    </div>`;
+  // A capture fills the screen -- it is a whole page somebody sent in, and
+  // there is nothing behind it worth seeing. One of our own pictures is a
+  // LIGHTBOX: a box over the page it was opened from, capped so it always fits
+  // the window, with the page still visible around it.
+  o.innerHTML = trusted
+    ? `<div class="fb-box" onclick="event.stopPropagation()">${hd}
+         <div class="fb-view-img"><img src="${esc(url)}" alt="${esc(title || 'Screenshot')}"></div>
+       </div>`
+    : hd + `<iframe id="fb-view-frame" sandbox referrerpolicy="no-referrer" title="Screenshot"></iframe>`;
+  // Clicking the dimmed area closes it, which is what a lightbox does. The box
+  // itself stops the click above, or every press inside would shut it.
+  o.onclick = trusted ? fbCloseView : null;
+  if (!trusted) {
+    o.querySelector('#fb-view-frame').srcdoc =
+      '<!doctype html><html><body style="margin:0;background:#111;display:flex;' +
+      'align-items:flex-start;justify-content:center">' +
+      '<img src="' + esc(url) + '" style="max-width:100%;height:auto" alt="Screenshot"></body></html>';
+  }
   o.classList.remove('hidden');
 }
 
 function fbCloseView() {
   const o = document.getElementById('fb-view');
-  if (o) { o.classList.add('hidden'); o.innerHTML = ''; }
+  if (o) { o.classList.add('hidden'); o.classList.remove('gate-view'); o.innerHTML = ''; }
 }
 
 function fbOpenCapture(path) {
@@ -4090,6 +4123,7 @@ function refreshAuthDependentViews() {
 }
 
 function gateClose() {
+  if (_gateObs) { _gateObs.disconnect(); _gateObs = null; }
   if (_gateEl) { _gateEl.remove(); _gateEl = null; }
 }
 
@@ -4099,40 +4133,286 @@ function showAuthGate(fromSettings) {
   const el = document.createElement('div');
   _gateEl = el;
   el.id = 'auth-gate';
-  el.style.cssText = 'position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--bg,#111);overflow:auto';
+  // THE GATE DOES NOT USE THE DUTY ACCENT. The accent is a personalisation that
+  // only exists once somebody HAS an account -- a signed-out visitor has no duty
+  // post, so it fell through to Command Red, the most saturated of the seven,
+  // which nobody chose and which reads as an alert on a page whose job is to be
+  // welcoming. The gate's own palette is set on #auth-gate in the stylesheet, as
+  // token overrides rather than button overrides, so every .btn inside it just
+  // works. It still follows light and dark.
+  const lockup = `
+    <span class="gate-plate"><img class="gate-mark" alt=""></span>
+    <span class="gate-word">LCARS</span>
+    <span class="gate-sub">STARBASE 118 WRITING TOOL</span>`;
+  // Reached from Settings this is a small upgrade prompt over the app, not a
+  // front page, so it gets neither the bar nor the tour of features.
+  const full = !fromSettings;
   el.innerHTML = `
-    <div style="width:100%;max-width:440px;background:var(--panel,#1b1b1b);border:1px solid var(--border,#333);border-radius:10px;padding:26px 24px">
-      <div style="font-size:1.15rem;font-weight:700;letter-spacing:0.04em;margin-bottom:6px">LCARS</div>
-      <div id="gate-body"></div>
+    ${full ? `<div class="gate-bar" id="gate-bar" aria-hidden="true">
+      <div class="gate-bar-in">
+        <span class="gate-lockup">${lockup}</span>
+        <div class="gate-bar-acts">
+          <button class="btn btn-s gate-bar-btn" tabindex="-1" onclick="gateBarGo('in')">Sign in</button>
+          <button class="btn btn-p gate-bar-btn" tabindex="-1" onclick="gateBarGo('up')">Create an account</button>
+        </div>
+      </div>
+    </div>` : ''}
+    <div class="gate-scroll">
+      <div class="gate-hero">
+        <div class="gate-card">
+          <div class="gate-lockup">${lockup}</div>
+          <div id="gate-body"></div>
+        </div>
+        ${full ? `<button class="gate-learn" onclick="gateScrollToAbout()">
+          <span>Learn more</span><span class="gate-chev">${ic('chevron-down')}</span>
+        </button>` : ''}
+      </div>
+      ${full ? gateAboutHtml() : ''}
     </div>`;
   document.body.appendChild(el);
+  // The same icon already inlined in <head>, as the header mark does -- the
+  // base64 is carried once rather than once per place it appears.
+  const icon = document.querySelector('link[rel=icon]');
+  if (icon) el.querySelectorAll('.gate-mark').forEach(m => { m.src = icon.href; });
   gateChoice(!!fromSettings);
+  if (full) gateWatchScroll(el);
+}
+
+// ── The bar that takes over when the card scrolls away ────────────────────
+// An observer rather than a scroll handler, which would fire every frame to
+// compute the same boolean. The root is #auth-gate rather than the viewport:
+// the gate is a fixed overlay with its own overflow, so the document behind it
+// never scrolls at all.
+//
+// THE CARD IS WHAT IS WATCHED, not a sentinel below the first screen. A
+// sentinel there is unreachable on a wide monitor: the feature grid runs three
+// columns and ends up shorter than the viewport, so the page's whole scroll
+// range is less than one screen and the sentinel never crosses the top. The
+// bar appeared on a phone and never on a desktop. Watching the card asks the
+// question actually being asked -- has the card gone? -- at any width.
+let _gateObs = null;
+
+function gateWatchScroll(el) {
+  const card = el.querySelector('.gate-card');
+  const bar = el.querySelector('#gate-bar');
+  if (!card || !bar || typeof IntersectionObserver !== 'function') return;
+  _gateObs = new IntersectionObserver(es => {
+    es.forEach(e => {
+      // Gone ABOVE, not merely out of view: the bar is what replaces the card,
+      // so it has no business appearing for a card that is simply off-screen.
+      const past = !e.isIntersecting && e.boundingClientRect.top < 0;
+      el.classList.toggle('gate-past', past);
+      bar.setAttribute('aria-hidden', past ? 'false' : 'true');
+      // A button nobody can see should not be reachable by tab either.
+      bar.querySelectorAll('.gate-bar-btn').forEach(b => { b.tabIndex = past ? 0 : -1; });
+    });
+  }, { root: el, threshold: 0 });
+  _gateObs.observe(card);
+}
+
+function gateShot(src, title) {
+  fbViewImage(src, title, true);
+  // The viewer lives on <body>, outside the gate, so it has to be told which
+  // palette it was opened from.
+  const v = document.getElementById('fb-view');
+  if (v) v.classList.add('gate-view');
+}
+
+function gateScrollToAbout() {
+  const a = document.querySelector('#auth-gate .gate-about');
+  if (a) a.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// A button in the bar has to bring the card back as well as open the form --
+// drawing a sign-in form a screen and a half above where somebody is looking
+// would read as the button doing nothing.
+function gateBarGo(kind) {
+  const el = document.getElementById('auth-gate');
+  if (el) el.scrollTo({ top: 0, behavior: 'smooth' });
+  gateForm(kind);
+}
+
+function gateAboutHtml() {
+  // TWO LAYOUTS, ONE DOM.
+  //   Wide:  the two headings of a pair sit side by side, and their two
+  //          pictures sit on the row beneath them.
+  //   Phone: one column, each heading followed by its own picture.
+  //
+  // The cells are emitted in the PHONE order -- heading, its picture, the next
+  // heading -- because that is reading order, and it is what a screen reader
+  // and a narrow window both get for free. The wide arrangement is then a
+  // matter of `order` on each cell, which grid auto-placement honours, rather
+  // than a second copy of the markup that could drift out of step with this one.
+  const cells = [];
+  let n = 0;
+  for (let i = 0; i < GATE_ABOUT.length; i += 2) {
+    const pair = GATE_ABOUT.slice(i, i + 2);
+    const textAt = n; n += pair.length;
+    const shots = pair.filter(g => g.shot).length;
+    const shotAt = n; n += shots;
+    // A picture row holding one picture would leave the next pair's heading in
+    // the second column and every row after it out of step, so the gap is
+    // filled. With the current six groups this never fires; it is here so that
+    // adding a seventh, or a picture to one group of a pair, cannot quietly
+    // shear the grid.
+    if (shots % 2) n += 1;
+    let k = 0;
+    pair.forEach((g, idx) => {
+      cells.push(`<section class="gate-cell gate-grp" style="--o:${textAt + idx}">
+        <h3 class="gate-grp-h">${ic(g.icon)} ${esc(g.head)}</h3>
+        <ul class="gate-grp-l">${g.items.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+      </section>`);
+      if (g.shot) {
+        cells.push(`<button class="gate-cell gate-shot" style="--o:${shotAt + (k++)}"
+          onclick="gateShot('${esc(g.shot.src)}','${esc(g.head)}')"
+          aria-label="${esc('Enlarge: ' + g.shot.alt)}">
+          <img src="${esc(g.shot.src)}" alt="${esc(g.shot.alt)}" loading="lazy" decoding="async"
+            width="1600" height="1000">
+          <span class="gate-shot-hint">${ic('search')} Enlarge</span>
+        </button>`);
+      }
+    });
+    if (shots % 2) cells.push(`<span class="gate-cell gate-gap" style="--o:${shotAt + 1}" aria-hidden="true"></span>`);
+  }
+  return `
+    <div class="gate-about">
+      <div class="gate-about-in">
+        <h2 class="gate-about-h">What is LCARS?</h2>
+        <p class="gate-about-lede">LCARS is a writing support tool for roleplayers in the StarBase 118 PBEM
+          group, structured and optimized to support how simmers actually write. The full online suite
+          includes a sim editor with specialized visual aids and auto-formatting options, pace tracking,
+          useful stats, and a lot more. No private or personal data is required to use LCARS, and you can
+          even use it offline.</p>
+        <div class="gate-about-grid">${cells.join('')}</div>
+        <p class="gate-about-end">If you still aren't sure, try using Offline Mode first. You can run the
+          Getting Started tour and try out nearly every feature &mdash; everything except data syncing and
+          Joint Post authoring &mdash; and then create an account any time you like.</p>
+      </div>
+    </div>`;
+}
+
+// ── What LCARS is, for somebody who has never seen it ─────────────────────
+// PLAIN DATA, like TOUR and HIGHLIGHTS. Edit this, not the renderer below.
+// Written for a writer deciding whether to sign up, so every line is a thing
+// they can picture themselves doing -- not a list of subsystems.
+const GATE_ABOUT = [
+  {
+    head: 'Write how you want, where you want',
+    icon: 'cloud-upload',
+    shot: { src: 'img/dashboard.webp', alt: 'The LCARS dashboard, showing a mission broken into scenes and sims, with word counts and how long since the last post.' },
+    items: [
+      "All you need to access LCARS' full suite of features is a public Writer ID and a PIN created by you.",
+      'Drafted sims are saved to a private database that you can access on any device using your ID and PIN.',
+      'While the experience is best on desktop, LCARS is fully mobile-optimized, reducing the pain of writing on mobile.',
+    ],
+  },
+  {
+    head: 'Visual aids and automatic formatting',
+    icon: 'pencil',
+    shot: { src: 'img/editor.webp', alt: 'A sim open in the LCARS editor. Character names are bold and colour-coded, the location header is bold, actions and comms are tinted, and a thought is in italics.' },
+    items: [
+      'Wish that when you wrote, names bolded automatically? Wish that locations, OOC notes, and thoughts could auto-format? In LCARS they can.',
+      'Lose track of oO Thoughts Oo in dialogue? Want to easily insert =/\\= Comms Tags =/\\= without typing them? LCARS can do that.',
+      'The text you copy out is cleaned up and formatted for Gmail / Google Groups, stripping out unwanted formatting and colours.',
+    ],
+  },
+  {
+    head: 'Useful tracking and data',
+    icon: 'users',
+    shot: { src: 'img/character.webp', alt: 'A character profile in LCARS, with a portrait, rank and division, sim counts, and a list of the characters this one shares scenes with most.' },
+    items: [
+      'LCARS identifies each character in a scene; mark one as your own to see all their scenes and who you write with most.',
+      'Assign a colour to a character to distinguish their dialogue while drafting; assign narration to them to easily keep track of who wrote what.',
+      'Easily keep tabs on how long it has been since you last posted in a scene and which scenes need your attention most urgently.',
+    ],
+  },
+  {
+    head: 'Collaborate with other writers',
+    icon: 'link',
+    shot: { src: 'img/settings.webp', alt: 'LCARS appearance settings: duty-post colours, light and dark, calm or epic, line spacing, separate fonts for the editor and the app, and the colours used for action, comms and thought lines.' },
+    items: [
+      'Share a read-only link of a snapshot to an in-progress sim draft with anyone, no logins required.',
+      'Create Joint Post sims and invite other Writers to collab live in the app.',
+      'Share your thoughts on the app, report bugs, and request new features with a built-in ticketing system.',
+    ],
+  },
+  {
+    head: 'Make it your own',
+    icon: 'palette',
+    items: [
+      'LCARS features two primary styles, light and dark mode support, a full suite of colours and additional options to suit your preferences.',
+      'Use your preferred font, font size, and customize the colours of visual aids to match your preferred writing environment.',
+      'Create templates for frequently-sent messages and sim types, ideal for Academy Trainers or Mentors.',
+    ],
+  },
+  {
+    head: 'Still in development',
+    icon: 'sparkles',
+    items: [
+      'This app is still under active development and is not associated with the SB118 HQ system.',
+      'Bugs are being actively fixed and new features are being added every week.',
+      "Give it a try, let us know what you think, and we'll work to make LCARS suit your needs as well!",
+    ],
+  },
+];
+
+// A labelled divider. It replaces the bare "OR", which said nothing about what
+// lay on either side of it -- and it is what turns four buttons in a stack into
+// four named CHOICES.
+function gateSect(label) {
+  return `<div class="gate-sect-hd"><span class="gate-sect-lbl">${esc(label)}</span>
+    <span class="gate-sect-rule"></span></div>`;
 }
 
 function gateChoice(fromSettings) {
+  // Reached from Settings, this is an upgrade rather than a front door: the
+  // writer already has sims in this browser and is deciding whether to put them
+  // somewhere safer. It stays the short version.
+  if (fromSettings) {
+    document.getElementById('gate-body').innerHTML = `
+      <p class="gate-intro">Set up an account and your sims on this device will be carried across, then
+        kept in step on every device you sign in on.</p>
+      <div class="gate-stack">
+        <button class="btn btn-p gate-btn" onclick="gateForm('up')">Create an account</button>
+        <button class="btn btn-s gate-btn" onclick="gateForm('in')">Sign in with your Writer ID</button>
+        <button class="btn btn-s gate-btn" onclick="signInWithProvider('discord')">Sign in with Discord</button>
+        <button class="btn btn-s gate-btn" onclick="signInWithProvider('google')">Sign in with Google</button>
+        <button class="btn btn-s gate-btn" onclick="gateClose()">Not now</button>
+      </div>`;
+    return;
+  }
+
   document.getElementById('gate-body').innerHTML = `
-    <div style="font-size:0.85rem;color:var(--dim);line-height:1.65;margin-bottom:18px">
-      ${fromSettings
-        ? 'Set up an account and your sims on this device will be carried across, then kept in step on every device you sign in on.'
-        : 'Sign in to keep your sims backed up and available on any device &mdash; or work offline in this browser alone.'}
+    <p class="gate-intro">An online tool for SB118 writers, built to make writing and keeping track of sims
+      as easy and supportive as possible.</p>
+    <p class="gate-disc">${ic('info')} A work in progress, and not affiliated with the SB118 HQ project.</p>
+
+    ${gateSect('Have an account?')}
+    <div class="gate-stack">
+      <button class="btn btn-p gate-btn" onclick="gateForm('in')">Sign in with your Writer ID + LCARS PIN</button>
     </div>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <button class="btn btn-p" style="width:100%;justify-content:center" onclick="gateForm('in')">Sign in with your Writer ID</button>
-      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateForm('up')">Create an account</button>
-      <div style="display:flex;align-items:center;gap:8px;margin:2px 0">
-        <span style="flex:1;height:1px;background:var(--dim);opacity:0.3"></span>
-        <span style="font-size:0.68rem;color:var(--dim);letter-spacing:0.08em">OR</span>
-        <span style="flex:1;height:1px;background:var(--dim);opacity:0.3"></span>
-      </div>
-      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="signInWithProvider('discord')">Continue with Discord</button>
-      <button class="btn btn-s" style="width:100%;justify-content:center" onclick="signInWithProvider('google')">Continue with Google</button>
-      ${fromSettings
-        ? `<button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateClose()">Not now</button>`
-        : `<button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateUseOffline()">Use offline on this device only</button>`}
+
+    ${gateSect('New here?')}
+    <div class="gate-stack">
+      <button class="btn gate-btn gate-btn-create" onclick="gateForm('up')">Create an account with your SB118 Writer ID</button>
+      <p class="gate-note">No private information is collected. LCARS only stores Writer ID and Sims, both
+        of which are public already.</p>
     </div>
-    ${fromSettings ? '' : `<div style="font-size:0.71rem;color:var(--dim);line-height:1.55;margin-top:14px">
-      Offline keeps everything in this browser and sends nothing anywhere. Clearing your browser data will erase it, so take backups. You can switch to an account later from Settings.
-    </div>`}`;
+
+    ${gateSect('Other sign in options')}
+    <div class="gate-stack">
+      <button class="btn btn-s gate-btn" onclick="signInWithProvider('discord')">Sign in with Discord</button>
+      <button class="btn btn-s gate-btn" onclick="signInWithProvider('google')">Sign in with Google</button>
+      <p class="gate-note">Optional links that offer an easier login option &amp; PIN recovery. LCARS does
+        not capture info or post to these accounts.</p>
+    </div>
+
+    ${gateSect('Use LCARS offline')}
+    <div class="gate-stack">
+      <button class="btn btn-s gate-btn" onclick="gateUseOffline()">Use LCARS on this device only</button>
+      <p class="gate-note">No sign-in at all. Some features won't work, including syncing across devices
+        &mdash; but the core writing tools are all there.</p>
+    </div>`;
 }
 
 // ── The recovery-account step of the gate ─────────────────────────────────
@@ -4203,7 +4483,7 @@ function gateForm(kind) {
   const up = kind === 'up';
   document.getElementById('gate-body').innerHTML = `
     <div style="font-size:0.85rem;color:var(--dim);line-height:1.6;margin-bottom:14px">
-      ${up ? 'Your Writer ID identifies you; the PIN keeps your work private.' : 'Welcome back.'}
+      ${up ? 'Your Writer ID serves as a User ID. Set a PIN to sign in with.' : 'Welcome back.'}
     </div>
     <div class="mf" style="margin-bottom:10px">
       <label class="ml">WRITER ID</label>
@@ -4219,8 +4499,8 @@ function gateForm(kind) {
       <button class="btn btn-s" style="width:100%;justify-content:center" onclick="gateChoice(${!!getMode()})">Back</button>
     </div>
     ${up ? `<div style="font-size:0.71rem;color:var(--dim);line-height:1.55;margin-top:14px">
-      Once you are in, link a Google or Discord account from Settings. It is the only way to reset a
-      forgotten PIN yourself &mdash; without one you would have to ask the tool's maintainer.
+      After you create your account, you can (optionally) link your Google or Discord account from
+      Settings as an alternative login option and as a self-serve PIN reset authorization.
     </div>` : `<div style="text-align:center;margin-top:14px">
       <button class="btn btn-s" style="font-size:0.74rem;padding:4px 10px" onclick="showForgotPin()">Forgotten your PIN?</button>
     </div>`}`;
