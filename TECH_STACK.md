@@ -32,7 +32,7 @@ Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same 
 | **File storage** | Supabase Storage | Two buckets. `character-pics` is **public**; `app-feedback`, which holds screenshots attached to bug reports, is **private** and read over signed URLs — a screenshot can carry unposted sim text. Postgres cannot delete a storage object, so any purge is two steps: the browser removes the object, then a function clears the row. |
 | **Snapshots** | Own Supabase table | Fetched on demand rather than carried in the synced payload, capped at ten per sim on both sides. |
 | **Offline** | First-class mode | The first-run gate offers an account or offline-only. Every network call is gated on `isCloud()`. |
-| **Hosting** | Vercel | `vercel.json` rewrites `/`, `/settings`, `/manifest` to `LCARS.html` and `/guide` to the guide, and sets no-cache headers on the three app files. |
+| **Hosting** | Vercel | `vercel.json` rewrites `/`, `/settings`, `/manifest` to `LCARS.html` and `/guide` to the guide, sets no-cache headers on the app files, and caches `/img/*` hard — those are content-stable and versioned by name. |
 | **Serverless** | `api/download.js` | Re-inlines the app files into one self-contained `LCARS.html` on demand. **Frozen at v4.24 — do not extend.** |
 | **Styling / UI** | Hand-written CSS | LCARS-inspired. **Delta Prime is the only skin** since 4.3 — seven duty accents plus a custom hue, × light/dark/system, × calm/epic, via CSS variables. Resizable sidebar panels. |
 | **Fonts** | Google Fonts | Droid Sans preloaded. UI and editor fonts user-selectable from ~56 families, loaded dynamically by injecting a `<link>`. |
@@ -49,6 +49,7 @@ Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same 
 | `share.html`, `share.js` | The standalone read-only viewer at `/s/<token>`. |
 | `api/download.js` | Serverless route rebuilding the single offline file. |
 | `supabase/schema.sql`, `supabase/README.md` | Database schema and setup steps. |
+| `img/` | The four screenshots in the sign-in screen's What is LCARS section. WebP, lazy-loaded, and **not carried by `api/download.js`** — the gate never renders in the offline copy. |
 | `vercel.json` | Route rewrites and cache headers. |
 | `LCARS-Guide-v2.html` | User guide, served at `/guide`. Predates accounts, Joint Posts and share links; ground-up rebuild is Batch 9. |
 | `CHANGELOG.md` | Human-readable version history (mirrors the `VERSIONS` array). |
