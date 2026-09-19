@@ -15,6 +15,11 @@ const VERSIONS = [
       'Changed: the sign-in screen is shorter on a phone, so the Learn more prompt below it is on screen without scrolling. Discord and Google share a row, and the note about this being a work in progress fits on one line',
       'Changed: clearer wording on the create-account screen about what a Writer ID and a PIN are for, and about linking Google or Discord afterwards \u2014 which is optional, and is both a second way in and how you reset your own PIN',
       'Fixed: the Storage and Usage report in the Admin panel showed nothing but an error on every account. It now opens with bars showing how much of the space is gone and what is filling it',
+      'Changed: anyone with an account can now start a joint sim, or turn a sim they are writing into one. Starting one was held back to admins while the feature was being tried out; joining, taking turns and writing were open all along, and now the whole of it is',
+      'Fixed: on a joint sim, restoring an old revision worked even when somebody else had the sim. It put the old version on screen and over your copy of the sim, while the save it needed could never go through \u2014 so the writing came back on the next refresh and the restore had done nothing but alarm you. Restoring now asks for the sim first, the same as writing does',
+      'Changed: the Revision Snapshots window on a joint sim now says the revisions are your own. Each writer keeps their own history of a shared sim, which is deliberate \u2014 they are the points you would want to come back to \u2014 but nothing said so',
+      'Fixed: a share link on a joint sim was signed by whoever pressed Share, as though they had written it alone. It is now signed by everyone on the sim',
+      'Fixed: on a joint sim, only the writer who shared it could see the share link. Everyone else was told the sim was not shared, and sharing it themselves failed without saying why. Anyone on a joint sim can now see the link, update the shared copy and stop sharing \u2014 and there is one link for the sim rather than one per writer',
     ],
   },
   {
@@ -388,11 +393,6 @@ const VERSIONS = [
       'Fixed: sims you had already pasted in from Google Docs are repaired on this update. They were stored with the whole pasted section bold, so they looked bold here and on a share link, and came out un-bold in the group. The stray bold is removed once, on the next time LCARS opens, and any bold you applied yourself inside it is left alone',
       'Fixed: a bulleted list copied into Gmail or Google Groups arrived with an extra gap above and below it. Mail clients put a margin around a list of their own, which LCARS turns off in its own styling but could not turn off in somebody else\u2019s. The copy now says so outright, so a list sits tight against the lines around it, the way it does while you are writing',
       'Fixed: turning a sim into a joint sim saved the wrong record of your Bold locations, Italic OOC and Italic thoughts settings alongside it \u2014 always as if all three were switched off. Nothing reads that record yet, so nothing has looked wrong, but it would have done the moment something did',
-      'Changed: anyone with an account can now start a joint sim, or turn a sim they are writing into one. Starting one was held back to admins while the feature was being tried out; joining, taking turns and writing were open all along, and now the whole of it is',
-      'Fixed: on a joint sim, restoring an old revision worked even when somebody else had the sim. It put the old version on screen and over your copy of the sim, while the save it needed could never go through \u2014 so the writing came back on the next refresh and the restore had done nothing but alarm you. Restoring now asks for the sim first, the same as writing does',
-      'Changed: the Revision Snapshots window on a joint sim now says the revisions are your own. Each writer keeps their own history of a shared sim, which is deliberate \u2014 they are the points you would want to come back to \u2014 but nothing said so',
-      'Fixed: a share link on a joint sim was signed by whoever pressed Share, as though they had written it alone. It is now signed by everyone on the sim',
-      'Fixed: on a joint sim, only the writer who shared it could see the share link. Everyone else was told the sim was not shared, and sharing it themselves failed without saying why. Anyone on a joint sim can now see the link, update the shared copy and stop sharing \u2014 and there is one link for the sim rather than one per writer',
     ],
   },
 ];
