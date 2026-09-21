@@ -15,6 +15,10 @@ const VERSIONS = [
       'Changed: the sign-in screen is shorter on a phone, so the Learn more prompt below it is on screen without scrolling. Discord and Google share a row, and the note about this being a work in progress fits on one line',
       'Changed: clearer wording on the create-account screen about what a Writer ID and a PIN are for, and about linking Google or Discord afterwards \u2014 which is optional, and is both a second way in and how you reset your own PIN',
       'Fixed: the Storage and Usage report in the Admin panel showed nothing but an error on every account. It now opens with bars showing how much of the space is gone and what is filling it',
+      'Fixed: on a joint sim, restoring an old revision worked even when somebody else had the sim. It put the old version on screen and over your copy of the sim, while the save it needed could never go through \u2014 so the writing came back on the next refresh and the restore had done nothing but alarm you. Restoring now asks for the sim first, the same as writing does',
+      'Changed: the Revision Snapshots window on a joint sim now says the revisions are your own. Each writer keeps their own history of a shared sim, which is deliberate \u2014 they are the points you would want to come back to \u2014 but nothing said so',
+      'Fixed: a share link on a joint sim was signed by whoever pressed Share, as though they had written it alone. It is now signed by everyone on the sim',
+      'Fixed: on a joint sim, only the writer who shared it could see the share link. Everyone else was told the sim was not shared, and sharing it themselves failed without saying why. Anyone on a joint sim can now see the link, update the shared copy and stop sharing \u2014 and there is one link for the sim rather than one per writer',
     ],
   },
   {
@@ -6201,13 +6205,19 @@ async function showHistory() {
       <tr><th>SAVED</th><th>WORDS</th><th></th></tr>
       ${rows}
     </table>
-    <p style="font-size:0.73rem;color:var(--dim);margin-top:10px">Up to 10 snapshots stored. Oldest removed when limit is reached.${isCloud() ? ' Saved to your account, so they follow you between devices.' : ''}</p>
+    <p style="font-size:0.73rem;color:var(--dim);margin-top:10px">Up to 10 snapshots stored. Oldest removed when limit is reached.${isCloud() ? ' Saved to your account, so they follow you between devices.' : ''}${isJointDoc(doc) ? ' On a joint sim these are your own revisions — each writer keeps their own, and restoring one needs the sim.' : ''}</p>
   `, null);
 }
 
 function restoreSnapshot(i) {
   if (!curId) return;
   const doc = S.docs[curId]; if (!doc) return;
+  // Restoring is writing, and it is the fourth editing path -- the toolbar, the
+  // commands and the keyboard were guarded, this was not. On a joint sim you do
+  // not hold, it used to replace the sim on screen AND doc.content with an old
+  // revision, while the save it depends on could never go through. Ask the same
+  // question every other editing path asks.
+  if (jpEditBlocked()) { closeModal(); return; }
   const snap = _histList[i]; if (!snap) return;   // indexes the list showHistory built
   const date = new Date(snap.savedAt).toLocaleString();
   if (!confirm(`Restore this snapshot?\n\n${date} — ${snap.wordCount} words\n\nThis will replace the current editor content.`)) return;
@@ -10118,14 +10128,13 @@ function shareWhyNot() {
 // What gets published. Everything the viewer needs to render the sim the way
 // the writer sees it, and deliberately nothing else -- no mission, no scene, no
 // word count, no snapshot history.
-function sharePayload(doc) {
+async function sharePayload(doc) {
   const p = getPrefs();
   return {
     doc_id:         doc.id,
     owner_uid:      getAuth().uid,
     title:          doc.title || 'Untitled sim',
-    authors:        [{ writer_id: getAuth().writerId || '',
-                       display_name: _writerProfile.display_name || null }],
+    authors:        await shareAuthors(doc),
     status:         doc.status || 'active',
     doc_updated_at: new Date().toISOString(),
     content:        doc.content || '',
@@ -10140,6 +10149,25 @@ function sharePayload(doc) {
                       italicOOC:     !!p.italicOOC,
                       thoughtItalic: !!p.thoughtItalic },
   };
+}
+
+// Who the share is BY. shared_docs is keyed by doc_id and carries authors as a
+// list precisely because a joint sim has more than one writer -- so the byline
+// on a shared joint sim is everyone on it, in roster order, not whoever pressed
+// Share. The viewer already joins a list of names; it was only ever being sent
+// one. If the roster cannot be fetched, publishing with a byline of one beats
+// failing to publish at all.
+async function shareAuthors(doc) {
+  const me = [{ writer_id: getAuth().writerId || '',
+                display_name: _writerProfile.display_name || null }];
+  if (!isJointDoc(doc)) return me;
+  try {
+    const roster = await supaRpc('jp_roster', { p_doc_id: doc.id });
+    if (roster && roster.length)
+      return roster.map(r => ({ writer_id: r.writer_id || '',
+                                display_name: r.display_name || null }));
+  } catch (e) { /* fall through to the one-name byline */ }
+  return me;
 }
 
 // _writerProfile is filled in when the Settings view renders, which means a
@@ -10167,7 +10195,7 @@ async function fetchShare(docId) {
 // token and any link already sent out stays valid. token is absent from the
 // payload, which is what stops the merge overwriting it.
 async function publishShare(doc, hours) {
-  const body = sharePayload(doc);
+  const body = await sharePayload(doc);
   body.expires_at = hours == null ? null : new Date(Date.now() + hours * 3600 * 1000).toISOString();
   const r = await supaFetch('/rest/v1/shared_docs?on_conflict=doc_id', {
     method: 'POST',

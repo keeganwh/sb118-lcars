@@ -90,7 +90,13 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
 
 **Top score [+5]. Category: Component Revision + Testing.**
 
-**Why these together, and in this order:** the download freeze has to land **before** Joint Posts opens to everyone, or the one-file offline build starts silently shipping a feature it structurally cannot support. Everything else here is joint-sim adjacent and small.
+**Why these together, and in this order:** the download freeze had to land **before** Joint Posts opened to everyone, or the one-file offline build would start silently shipping a feature it structurally cannot support. Everything else here is joint-sim adjacent and small.
+
+> **RESEQUENCED 2026-09-20.** Opening Joint Posts to everyone now waits on **Batch 7 (live writing)**, at the user's decision: _"I want to get live writing sorted before we go live to everyone because it's how others will want to interact with it, and if it's going to be broken I want to get it working in a smaller scale test field before going out to everyone."_ The existing rollout gate **is** that test field — `jpCanCreate()` limits only *starting* a joint sim, and anyone invited can already join and write, so a super admin can run a controlled trial today without changing a line.
+>
+> **The freeze no longer blocks anything either.** Settled the same day: the offline download is to become a deliberately stripped-down true-offline tool, and account management and joint posts are explicitly **not** in it. So real-time writing never has to reach the one-file build, which retires the bundler question rather than answering it — `api/download.js` stops constraining how Yjs arrives. What remains is a maintenance preference (a vendored pre-built file, recommended, versus a real build step), and changing the no-build-step rule in `CLAUDE.md` is the user's call.
+>
+> The joint-sim **bug fixes** from this batch are not held back by any of that and landed on `claude/jp-fixes`.
 
 - [ ] **[+5] Freeze the offline download.** _Decision, then a small change._
       **Settled 2026-08-24, do not re-litigate.** The one-file download stops here. Declare the current version the last one `api/download.js` carries, and stop updating it rather than shoehorning online-only features into it.
@@ -99,24 +105,29 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
       _This is also what unblocks the build-step question that has been gating real-time writing — a bundler no longer costs the one-file copy, because the one-file copy is frozen._
       _Done when: the download is documented as frozen at a stated version, and the app says so where a writer downloads it._
 
-- [ ] **[+4] Open Joint Posts to everyone.**
-      `jpCanCreate()` at `lcars.js:9486` is `return isCloud() && isSuperAdmin();` — only a super admin can **start** a joint sim or convert a solo one. Anyone invited can already join, take turns and write. Change it to `return isCloud();` and verify all three call sites: the convert path (~4183), button visibility (~9334) and the create guard (~9465, which currently toasts "Joint sims are still being tested.").
-      _Done when: any signed-in writer can start a joint sim._
+- [ ] **[+4] Open Joint Posts to everyone.** _Built and tested; **deliberately held** until Batch 7 lands._
+      The work is done and parked on **`claude/jp-open-everyone-ylzf4u`**, a single commit on top of the fixes: `jpCanCreate()` becomes `return isCloud();`, the guard's "Joint sims are still being tested." toast becomes a sign-in prompt (an account, not a role, is the one real requirement — a joint sim lives on a shared row), and `test/jp_browser.js` gains three checks run as an ordinary writer.
+      All three call sites were verified: the convert path in `onPostTypeChange()`, the button in `jpPaint()`, and the guard in `jpConfirmMakeJoint()`.
+      **The server never keyed off role** — `jp_docs_insert` asks only that you own what you create and `jp_invite()` only that you own the sim (re-verified against `main` 2026-09-19), so this is a client change with no migration behind it.
+      **Do not merge it before live writing works.** Until then the closed gate is the small-scale test field, which is the whole point of holding it.
+      _Done when: live writing is proven with a small group, and then any signed-in writer can start a joint sim._
 
-- [ ] **[+4] Joint Posts follow-ups — review, don't assume.**
-      Some of these may already work. Verify each, then fix or delete:
-      - **Per-member mission/scene filing.** Likely already done — there is a long comment at `lcars.js:9488` explaining that filing lives in each writer's own payload precisely because missions are private per writer. Confirm and close.
-      - **A joint sim cannot be turned back into a solo one.** The dialog says so rather than pretending otherwise. Decide whether that stands.
-      - **Snapshots on a joint sim are per writer**, since `snapshots` is keyed by `writer_uid`. Defensible as "my revisions", but it should be a deliberate choice rather than a leftover.
+- [ ] **[+4] Joint Posts follow-ups — review, don't assume.** _Two of three closed 2026-08-26._
+      - [x] **Per-member mission/scene filing** — already correct, and covered. `jpFiling()` keeps it in each writer's own blob because missions are private per writer, and `test/jp_browser.js` proves it three ways: filing survives a refresh from the server, the sim appears in the mission tree rather than only on the dashboard, and two writers can file the same joint sim in different places. Closed, no change.
+      - [x] **Snapshots on a joint sim are per writer** — kept, deliberately. `snapshots` is keyed by `writer_uid` and its RLS policy enforces that; "the points I would want to come back to" is the right reading of a revision history on a shared sim. The history window now says so, which it did not.
+            Exercising it found a real fault next door: **`restoreSnapshot()` was the fourth editing path and the only one with no guard.** On a joint sim held by somebody else it put an old revision over the editor and `doc.content` while the save it depended on could never go through. It asks `jpEditBlocked()` now, like every other editing path. Same shape as `delDoc` and the reconcile count — outside the three places a joint sim was supposed to differ.
+      - [ ] **A joint sim cannot be turned back into a solo one.** The dialog says so rather than pretending otherwise. Still open — a decision, not a bug.
+            _Recommendation on the table: don't build a separate command. From every other writer's side "revert to solo" and "the owner deleted it" are the same event — their copy vanishes — so the honest shape is "keep my own copy" added to the owner's existing delete-for-everyone dialog. Same outcome, one fewer concept._
       _Done when: each has been exercised and is either fixed or recorded as intended behaviour._
 
-- [ ] **[0] Test: publishing a share link on a joint sim.** _Testing._
-      `shared_docs` is keyed by `doc_id` and stores `authors` as a list precisely so this works, but it has never been exercised.
-      _Done when: a joint sim publishes, renders and expires correctly at `/s/<token>`._
+- [x] **[0] Test: publishing a share link on a joint sim.** _Done 2026-08-26 — it did not work, and now does._
+      Two real faults, neither visible until it was exercised:
+      - The byline was whoever pressed Share, alone. `sharePayload()` built `authors` from `getAuth()` and never asked who else was on the sim. It now reads `jp_roster()`; `share.js` already joined a list of names, it was only ever sent one.
+      - **Only the writer who published could see the share.** `shared_docs_own` asked `auth.uid() = owner_uid`, so every other member's dialog said the sim was not shared — and publishing it upserted onto a row they were not allowed to update, failing with nothing they could act on. The policy now also accepts `is_jp_member(doc_id)`, redefined below the JP section because that is where `is_jp_member()` exists. Solo sims are unaffected.
+      **The schema change is not applied yet — deploy the app first, then run `schema.sql`.** Four checks in `supabase/test/run.sh`, four in `test/jp_browser.js`.
 
-- [ ] **[0] Test: deleting an account while the server is unreachable.** _Testing._
-      Covered by `account-check.js offline`, never done by hand. Folded in here because it is the same offline-path headspace as the freeze.
-      _Done when: the flow has been walked through by hand with the network off._
+- [x] **[0] Test: deleting an account while the server is unreachable.** _Done 2026-08-26 — no fault found._
+      Walked through in a browser with the Supabase route aborted, as `test/account_offline_browser.js`, which is now the repeatable version of "by hand". `deleteAccount()` refuses outright rather than half-deleting: the writer is told nothing was deleted, their sims stay, they stay signed in, and no deletion notice is left to greet them on the next load. Reconnected, the same action stamps `deleted_at` as it should. Eight checks.
 
 ---
 
