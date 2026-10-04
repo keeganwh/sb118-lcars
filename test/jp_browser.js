@@ -24,6 +24,8 @@ const DB = {
   docs: {},           // doc_id -> row
   members: {},        // doc_id -> [uid]
   invites: [],
+  updates: [],       // the live-writing log
+  seq: 0,
   shares: {},        // doc_id -> shared_docs row
   LOCK_MS: 5 * 60 * 1000,   // must match jp_lock_minutes() in schema.sql
 };
@@ -45,12 +47,13 @@ function rpc(fn, args, me) {
           lock_name: x.locked_by ? nameOf(x.locked_by) : null,
           owner_wid: widOf(x.owner_uid), owner_name: nameOf(x.owner_uid),
           mission_name: x.mission_name, scene_name: x.scene_name,
-          lock_active: lockActive(x),
+          lock_active: lockActive(x), live: !!x.live,
           member_count: DB.members[x.doc_id].length, updated_at: new Date(x.updated_at).toISOString() }));
     case 'jp_doc':
       if (!isMember) return [];
       return [{ ...d, lock_wid: d.locked_by ? widOf(d.locked_by) : null,
                 lock_name: d.locked_by ? nameOf(d.locked_by) : null, lock_active: lockActive(d),
+                live: !!d.live,
                 updated_at: new Date(d.updated_at).toISOString() }];
     case 'jp_roster':
       if (!isMember) return [];
@@ -93,6 +96,35 @@ function rpc(fn, args, me) {
       d.meta = args.p_meta; d.version += 1; d.locked_by = me; d.locked_at = Date.now();
       d.updated_at = Date.now();
       return d.version;
+    // --- live co-authoring -------------------------------------------------
+    // Mirrors the real functions' RULES, not just their shape: owner-only to
+    // switch on, member-only to push or pull, refused on a sim that is not live,
+    // and flush refused outside live mode -- which is the one that matters,
+    // because flush writes content without the lock.
+    case 'jp_set_live':
+      if (d.owner_uid !== me) throw new Error('Only the owner of a joint sim can turn live writing on or off.');
+      d.live = !!args.p_live;
+      if (!d.live) DB.updates = DB.updates.filter(u => u.doc_id !== d.doc_id);
+      return null;
+    case 'jp_live_push': {
+      if (!isMember) throw new Error('You are not on that joint sim.');
+      if (!d.live) throw new Error('Live writing is not switched on for that sim.');
+      if (!args.p_payload) return null;
+      const seq = ++DB.seq;
+      DB.updates.push({ seq, doc_id: d.doc_id, author_uid: me, payload: args.p_payload });
+      return seq;
+    }
+    case 'jp_live_pull':
+      if (!isMember) return [];
+      return DB.updates.filter(u => u.doc_id === d.doc_id && u.seq > (args.p_since || 0))
+                       .map(u => ({ seq: u.seq, author_uid: u.author_uid, payload: u.payload }));
+    case 'jp_live_flush':
+      if (!isMember) throw new Error('You are not on that joint sim.');
+      if (!d.live) throw new Error('That sim is not in live writing mode.');
+      d.content = args.p_content; d.version += 1; d.updated_at = Date.now();
+      return d.version;
+    case 'jp_live_trim':
+      return 0;
     case 'my_role': return 'writer';
     default: return null;
   }
@@ -523,6 +555,131 @@ async function ctxFor(browser, who, errors) {
   await b.p.waitForTimeout(500);
   ok(DB.shares[docId] && DB.shares[docId].token === share.token,
      'and republishing keeps the same link rather than failing on the other writer\'s row');
+
+  // --- live co-authoring ---------------------------------------------------
+  // The feature's whole claim is that two people type at once and nobody loses
+  // words, so it is tested with two real browser contexts -- a single one proves
+  // nothing about that, which is the same reason this file exists at all.
+  const liveId = 'doc-live';
+  await a.p.evaluate(id => {
+    S.docs[id] = { id, title:'Hopper & Rivera - Live', content:'<div>Hopper: The bridge was quiet.</div>',
+                   chars:[], myChars:[], charColors:{}, status:'active',
+                   createdAt:Date.now(), updatedAt:Date.now() };
+    persist(); jpMakeJoint(id);
+  }, liveId);
+  await a.p.waitForTimeout(700);
+  await a.p.evaluate(id => jpInvite(id, 'B222'), liveId);
+  await a.p.waitForTimeout(300);
+  await b.p.evaluate(() => jpLoadInvites());
+  await b.p.waitForTimeout(300);
+  await b.p.evaluate(() => jpAccept(_jpInvites[0].id));
+  await b.p.waitForTimeout(900);
+  await b.p.evaluate(() => { const m = document.getElementById('mo'); if (m) m.classList.add('hidden'); });
+
+  ok(await a.p.evaluate(() => typeof jpLiveAvailable === 'function'), 'the live-writing code is wired into the app');
+  ok(await a.p.evaluate(() => jpLiveAvailable()), 'and the bundle is actually loaded by LCARS.html');
+  ok(await a.p.evaluate(id => !S.docs[id].jpLive, liveId), 'a joint sim is on turns until somebody switches it');
+
+  // A member cannot switch it on -- the client refuses before the server does.
+  const memberTried = await b.p.evaluate(id => { jpConfirmLive(id);
+    return document.getElementById('mo').classList.contains('hidden'); }, liveId);
+  ok(memberTried, 'a member is refused the live-writing switch');
+
+  // The owner switches it on. That seeds the shared document.
+  await a.p.evaluate(id => openDoc(id), liveId);
+  await a.p.waitForTimeout(800);
+  await a.p.evaluate(id => jpSetLive(id, true), liveId);
+  await a.p.waitForTimeout(1500);
+  ok(!!DB.docs[liveId].live, 'the owner can switch live writing on');
+  ok(DB.updates.filter(u => u.doc_id === liveId).length >= 1,
+     'and the sim is seeded into the shared document');
+  ok(await a.p.evaluate(() => jpLiveActive()), 'the owner is now writing live');
+  ok(await a.p.evaluate(() => !!document.querySelector('#editor.live > .ProseMirror')),
+     'the live editor is mounted INSIDE #editor, so the copy handler still has its node');
+  ok(await a.p.evaluate(() => /live/.test(document.getElementById('jp-bar').className)),
+     'and the bar says so rather than offering a turn');
+  ok(await a.p.evaluate(() => !/Take the sim|Hand back/.test(document.getElementById('jp-bar').textContent)),
+     'with no Take the sim or Hand back, because there is no turn to take');
+
+  // The seeded sim must actually be the sim.
+  ok(await a.p.evaluate(() => { const n = document.querySelector('#editor .ProseMirror');
+       return !!n && /The bridge was quiet/.test(n.innerText); }),
+     'the sim that was already written is there, not an empty editor');
+
+  // B joins the live sim and builds it from the log -- NOT from its own copy,
+  // which would duplicate every word.
+  await b.p.evaluate(id => openDoc(id), liveId);
+  await b.p.waitForTimeout(2000);
+  ok(await b.p.evaluate(() => jpLiveActive()), 'the second writer joins the live sim');
+  const pmText = () => { const n = document.querySelector('#editor .ProseMirror'); return n ? n.innerText : null; };
+  const bText = await b.p.evaluate(pmText) || '';
+  ok(/The bridge was quiet/.test(bText), 'and sees the sim');
+  ok((bText.match(/The bridge was quiet/g) || []).length === 1,
+     'exactly once -- it was built from the shared log, not seeded a second time');
+
+  // THE CLAIM. Both type, neither loses the other's words.
+  await a.p.evaluate(() => {
+    if (!_jpLive) return;
+    const v = _jpLive.view;
+    v.dispatch(v.state.tr.insertText(' Hopper leans in.', v.state.doc.content.size - 1));
+  });
+  await b.p.evaluate(() => {
+    if (!_jpLive) return;
+    const v = _jpLive.view;
+    v.dispatch(v.state.tr.insertText('Rivera: Not for long. ', 1));
+  });
+  await a.p.waitForTimeout(3500);
+  await b.p.waitForTimeout(2500);
+  const aFinal = await a.p.evaluate(pmText) || '';
+  const bFinal = await b.p.evaluate(pmText) || '';
+  ok(/Hopper leans in/.test(aFinal) && /Rivera: Not for long/.test(aFinal),
+     'the first writer ends up with BOTH writers\' words');
+  ok(/Hopper leans in/.test(bFinal) && /Rivera: Not for long/.test(bFinal),
+     'and so does the second');
+  ok(aFinal.replace(/\s+/g, ' ') === bFinal.replace(/\s+/g, ' '),
+     'and the two browsers agree on the result');
+
+  // The rendered sim has to reach jp_docs.content, or share links, copy-out and
+  // the dashboard would all show a stale sim.
+  await a.p.waitForTimeout(5500);
+  ok(/Hopper leans in/.test(DB.docs[liveId].content || ''),
+     'the merged sim is written back where share links and copy-out read it');
+
+  // The passes that rewrite the whole editor are held off, and say so.
+  const blocked = await a.p.evaluate(() => {
+    const n0 = document.querySelector('#editor .ProseMirror');
+    const before = n0 ? n0.innerText : null;
+    toggleSourceView();
+    const n1 = document.querySelector('#editor .ProseMirror');
+    return { still: !!n1, same: !!n1 && n1.innerText === before };
+  });
+  ok(blocked.still && blocked.same, 'the source view is refused rather than tearing the live editor out');
+
+  // Markers are drawn as decorations, so they must appear WITHOUT entering the
+  // shared document -- that is the whole design.
+  await a.p.evaluate(() => {
+    if (!_jpLive) return;
+    const v = _jpLive.view;
+    v.dispatch(v.state.tr.insertText(' ::he checks the console:: ', v.state.doc.content.size - 1));
+  });
+  await a.p.waitForTimeout(600);
+  ok(await a.p.evaluate(() => !!document.querySelector('#editor .ProseMirror .am')),
+     'a marker typed into a live sim is highlighted');
+  ok(await a.p.evaluate(() => {
+    const L = window.LCARSLive, E = window.LCARSLiveEditor, live = _jpLive;
+    return !!live && !/class="am"/.test(E.docToHtml(L, live.schema, live.view.state.doc));
+  }), 'and the highlight is NOT in the shared document, so it costs nobody an edit');
+
+  // Back to turns, and the sim survives it.
+  await a.p.evaluate(id => jpSetLive(id, false), liveId);
+  await a.p.waitForTimeout(1200);
+  ok(await a.p.evaluate(() => !jpLiveActive()), 'the owner can go back to taking turns');
+  ok(await a.p.evaluate(() => !document.querySelector('#editor > .ProseMirror'),),
+     'and the ordinary editor comes back');
+  ok(DB.updates.filter(u => u.doc_id === liveId).length === 0,
+     'switching off clears the log, so turning it back on cannot replay a stale history');
+  ok(/Hopper leans in/.test(DB.docs[liveId].content || ''),
+     'while everything written live is kept');
 
   console.log('\n--- browser checks ---');
   pass.forEach(l => console.log('PASS: ' + l));

@@ -19,6 +19,10 @@ const VERSIONS = [
       'Changed: the Revision Snapshots window on a joint sim now says the revisions are your own. Each writer keeps their own history of a shared sim, which is deliberate \u2014 they are the points you would want to come back to \u2014 but nothing said so',
       'Fixed: a share link on a joint sim was signed by whoever pressed Share, as though they had written it alone. It is now signed by everyone on the sim',
       'Fixed: on a joint sim, only the writer who shared it could see the share link. Everyone else was told the sim was not shared, and sharing it themselves failed without saying why. Anyone on a joint sim can now see the link, update the shared copy and stop sharing \u2014 and there is one link for the sim rather than one per writer',
+      'Added: live writing on a joint sim. Everyone on the sim can type at the same time and you see each other\u2019s words as they arrive, instead of taking turns and handing the sim back. The writer who started the sim switches it on from Writers on this sim, and can switch back to turns whenever they like \u2014 nothing written is lost either way',
+      'Changed: on a sim set to live writing there is no turn to take. The bar at the top says everyone can type rather than offering you the sim, and the Take the sim and Hand back buttons are gone while it is on. Offline it is still read-only, the same as before',
+      'Note: while live writing is on, a few things that rewrite the whole sim at once are unavailable \u2014 the source view, inserting a template, restoring an old revision, renaming a speaker throughout the sim, and undoing a cleaned-up paste. LCARS says so if you try one. Switch back to turns to use them; they will come to live sims later',
+      'Note: live writing is new and is limited to joint sims, which only admins can start. It needs an account and a connection \u2014 the downloaded offline copy does not have it',
     ],
   },
   {
@@ -4598,6 +4602,10 @@ async function gateSubmit(kind) {
 // DASHBOARD
 // ================================================================
 function showDashboard() {
+  // Closing a sim takes the live view with it. Left mounted, its push and pull
+  // timers would keep running against a sim that is no longer open -- and the
+  // next sim opened would find ProseMirror still holding #editor.
+  jpLiveStop(true);
   exitTemplateMode();
   document.body.classList.remove('academy');
   document.getElementById('dashboard').classList.remove('hidden');
@@ -4812,6 +4820,7 @@ function formatHTMLSource(html) {
 
 function toggleSourceView() {
   if (!curId) return;
+  if (jpLiveNotHere('The source view')) return;
   const ed = document.getElementById('editor');
   const ec = document.getElementById('ec');
   const btn = document.getElementById('tbb-src');
@@ -5142,6 +5151,7 @@ function showPasteCleanBanner(snapshot) {
 }
 function undoPasteClean() {
   if (!_pasteCleanSnap) return;
+  if (jpLiveNotHere('Undoing a paste')) return;
   document.getElementById('editor').innerHTML = _pasteCleanSnap;
   const b = document.getElementById('paste-clean-banner');
   if (b) b.remove();
@@ -5843,6 +5853,7 @@ function addConfirmedPair(a, b) {
 function replaceCharName(from, to) {
   if (!curId) return;
   const ed = document.getElementById('editor');
+  if (jpLiveNotHere('Renaming a speaker through the sim')) return;
   const pos = saveCaret(ed);
   // Replace "From:" prefix in innerHTML (careful with HTML — match only text nodes)
   ed.innerHTML = ed.innerHTML.replace(new RegExp(escRe(from)+'(?=:)', 'g'), to);
@@ -5956,8 +5967,13 @@ function openDoc(id) {
     if (stripped !== doc.content) { doc.content = stripped; persist(); }
   }
   const ed = document.getElementById('editor');
-  ed.innerHTML = applyCharColors(applyMarkers(doc.content||''));
-  normalizeEditorContent(ed);
+  // A live sim is mounted below, after jpReload has brought the current version
+  // in -- painting the cached copy here first would only be thrown away, and on
+  // a slow connection the writer would watch it flash.
+  if (!jpLiveOn(doc)) {
+    ed.innerHTML = applyCharColors(applyMarkers(doc.content||''));
+    normalizeEditorContent(ed);
+  }
   applyZoom();
   // Sync doc.myChars from alias chain on open (fixes legacy docs and new sims)
   if (syncDocMyChars(doc)) persist();
@@ -5970,8 +5986,21 @@ function openDoc(id) {
   // A joint sim paints its own bar, starts polling for presence, and pulls the
   // current version -- what is cached may be several turns behind.
   jpPaint();
-  if (isJointDoc(doc)) { jpNormaliseAutoFormat(doc); jpStartPoll(false); jpReload(id); }
-  else jpStopPoll();
+  if (isJointDoc(doc)) {
+    jpNormaliseAutoFormat(doc);
+    // WHICH MODE THIS SIM IS IN IS NOT KNOWN YET, so the decision waits for the
+    // reload. The cached copy is whatever this browser last saw, and a sim
+    // switched to live since then still reads as turn-based here -- deciding now
+    // would open it on turns and leave it there until the writer closed and
+    // reopened it, which is exactly the bug the two-browser test caught.
+    jpReload(id).then(() => {
+      if (curId !== id) return;
+      const fresh = S.docs[id];
+      if (!fresh) return;
+      if (jpLiveOn(fresh)) jpLiveStart(fresh);   // the live loop replaces the poll
+      else { jpStartPoll(false); jpLoadIntoEditor(fresh); }
+    }).catch(() => { if (curId === id) jpStartPoll(false); });
+  } else { jpStopPoll(); jpLiveStop(true); }
   // For a brand-new (empty) sim, drop the caret into the editor so it's obvious
   // where to start writing (the :empty placeholder hint shows until first keystroke).
   if (!doc.content) {
@@ -6089,6 +6118,7 @@ function openTemplateInEditor(id) {
   title.placeholder = 'Template name…';
   document.getElementById('title-warn').classList.add('hidden');
 
+  if (jpLiveNotHere('Inserting a template')) return;
   const ed = document.getElementById('editor');
   ed.innerHTML = applyMarkers(t.content || '');
   normalizeEditorContent(ed);
@@ -6222,6 +6252,7 @@ function restoreSnapshot(i) {
   const date = new Date(snap.savedAt).toLocaleString();
   if (!confirm(`Restore this snapshot?\n\n${date} — ${snap.wordCount} words\n\nThis will replace the current editor content.`)) return;
   closeModal();
+  if (jpLiveNotHere('Restoring a revision')) return;
   const ed = document.getElementById('editor');
   ed.innerHTML = applyMarkers(snap.content);
   doc.content = snap.content;
@@ -7126,6 +7157,11 @@ function stripZWSFromEditor(ed) {
 }
 
 function transformNow() {
+  // Live writing owns the editor's DOM. This pass replaces #editor.innerHTML
+  // wholesale, which would tear the ProseMirror view out from under itself --
+  // and to a CRDT reads as deleting the sim and reinserting it. The markers and
+  // colours are drawn as decorations there instead; see jpLiveStart().
+  if (jpLiveActive()) return;
   const ed = document.getElementById('editor');
   stripZWSFromEditor(ed);
   const pos = saveCaret(ed);
@@ -7320,7 +7356,7 @@ function setSimType(missionId, simType) {
     if (curId && S.docs[curId] && S.docs[curId].missionId === missionId) {
       document.body.classList.add('academy');
       const ed = document.getElementById('editor');
-      ed.innerHTML = applyMarkers(S.docs[curId].content||'');
+      if (!jpLiveActive()) ed.innerHTML = applyMarkers(S.docs[curId].content||'');
     }
   }
   persist(); renderNav();
@@ -10492,6 +10528,14 @@ document.addEventListener('DOMContentLoaded',()=>{
 const JP_POLL_MS      = 3000;
 const JP_POLL_FAST_MS = 1200;
 const JP_FAST_FOR_MS  = 20000;   // how long to stay eager after a hand-off
+// Live co-authoring. Sending is debounced rather than per-keystroke, and reading
+// is a poll -- Yjs updates commute, so a duplicate or an out-of-order delivery
+// is harmless, which is what makes polling sufficient and a WebSocket
+// unnecessary. test/live_bundle_browser.js proves that rather than assuming it.
+const JP_LIVE_PUSH_MS  = 400;    // batch a burst of typing into one request
+const JP_LIVE_PULL_MS  = 1500;   // how soon you see the other writer
+const JP_LIVE_FLUSH_MS = 5000;   // idle before the sim is written back to jp_docs
+const JP_LIVE_KEEP     = 400;    // updates retained after a flush
 let _jpFastUntil = 0;
 let _jpPollTimer = null;
 let _jpInvites   = [];
@@ -10507,6 +10551,10 @@ function curJointDoc()   { const d = curId ? S.docs[curId] : null; return isJoin
 function jpCanEdit(doc) {
   if (!isJointDoc(doc)) return true;
   if (!isCloud() || !navigator.onLine) return false;   // no server, no lock, no editing
+  // Live writing has no holder by design: everyone types at once and the CRDT
+  // resolves it. Asking "do I hold the lock?" would refuse every writer on a
+  // live sim, including the one who turned it on.
+  if (jpLiveOn(doc)) return true;
   const me = getAuth().uid;
   return !!(doc.jpLock && doc.jpLock === me);
 }
@@ -10542,6 +10590,10 @@ function jpApplyRow(row, keepContent) {
     jpLockName: row.lock_name || null,
     jpLockActive: !!row.lock_active,
     jpMembers: row.member_count != null ? row.member_count : prev.jpMembers,
+    // An older database has no `live` column, so jp_doc returns undefined and
+    // this reads false -- the app simply never offers live writing. That is what
+    // makes deploy-before-migrate safe in this direction.
+    jpLive: row.live === undefined ? (prev.jpLive || false) : !!row.live,
     updatedAt: row.updated_at ? Date.parse(row.updated_at) : Date.now(),
   });
   if (!keepContent && row.content != null) { doc.content = row.content; doc.jpSavedContent = row.content; }
@@ -10745,6 +10797,12 @@ function jpLostLockWarning(doc) {
   setTimeout(() => { doc._jpWarned = false; }, 30000);
 }
 
+// Leaving a sim, or closing it, must take the live view with it. Anything that
+// changes which sim is open goes through here so there is one place to get right.
+function jpLiveLeaveIfMoved() {
+  if (_jpLive && _jpLive.id !== curId) jpLiveStop(true);
+}
+
 async function jpReload(id) {
   try {
     const fresh = await jpFetchDoc(id);
@@ -10760,6 +10818,7 @@ async function jpReload(id) {
 function jpLoadIntoEditor(doc) {
   const ed = document.getElementById('editor');
   if (!ed || curId !== doc.id) return;
+  if (jpLiveActive()) return;        // the live view is the editor; do not paint over it
   ed.innerHTML = applyCharColors(applyMarkers(doc.content || ''));
   normalizeEditorContent(ed);
   jpNormaliseAutoFormat(doc);
@@ -10791,6 +10850,13 @@ function jpStopPoll() { if (_jpPollTimer) { clearInterval(_jpPollTimer); _jpPoll
 async function jpPollOnce() {
   const doc = curJointDoc();
   if (!doc) { jpStopPoll(); return; }
+  // On a live sim the CRDT is the channel. This poll exists to notice a lock
+  // change and to reload content somebody else saved -- both of which would
+  // stamp on the live view.
+  if (jpLiveActive()) { jpStopPoll(); return; }
+  // The owner can switch live writing on while somebody else has the sim open on
+  // turns. They should join it, not sit on a turn nobody is going to hand over.
+  if (jpLiveOn(doc)) { jpStopPoll(); jpLiveStart(doc); return; }
   if (_jpBusy) return;
   let row;
   try { row = await jpFetchDoc(doc.id); } catch(e) { return; }
@@ -11000,8 +11066,24 @@ async function jpOpenRoster(id) {
     ? '<div style="margin-top:14px"><button class="btn btn-s btn-sm" onclick="jpLeave(\'' + id + '\')">Leave this sim</button></div>'
     : '';
 
+  // The owner's switch between taking turns and writing together. Offered only
+  // to the owner, and only where the live-writing code is actually present --
+  // the downloaded offline copy has no account and no server, so it never is.
+  const liveBox = (mine && jpLiveAvailable())
+    ? '<div class="chars-divider">How you write it</div>' +
+      '<div style="line-height:1.5">' +
+        '<p style="margin:0 0 8px">' + (doc.jpLive
+          ? 'Everyone can type at once, and you see each other\u2019s words as they arrive.'
+          : 'One writer holds the sim at a time and hands it back.') + '</p>' +
+        '<button class="btn ' + (doc.jpLive ? 'btn-s' : 'btn-p') + ' btn-sm" ' +
+          'onclick="jpConfirmLive(\'' + id + '\')">' +
+          (doc.jpLive ? 'Go back to taking turns' : 'Write together, live') +
+        '</button>' +
+      '</div>'
+    : '';
+
   openModal('Writers on this sim',
-    '<div style="font-size:0.9rem;line-height:1.6">' + memberRows + inviteRows + addBox + leave + '</div>');
+    '<div style="font-size:0.9rem;line-height:1.6">' + memberRows + inviteRows + addBox + liveBox + leave + '</div>');
 }
 
 async function jpRemove(id, uid) {
@@ -11075,6 +11157,20 @@ function jpPaint() {
     // the lock exists to prevent.
     msg = 'Offline — you can read and copy this sim, but writing needs a connection.';
     cls = 'jp-off';
+  } else if (jpLiveOn(doc)) {
+    // Live: there is no holder, so none of the lock wording below applies. Say
+    // whether it is actually running, because "live writing is on" and "this
+    // browser is connected to it" are not the same thing -- a member who opens a
+    // live sim before the owner has seeded it is waiting, and should be told so
+    // rather than left wondering why nothing arrives.
+    const running = jpLiveActive();
+    msg = running
+      ? 'Writing together, live. Everyone on the sim can type at once.'
+      : 'Live writing is on, but this browser is not connected to it yet.';
+    cls = running ? 'jp-live' : 'jp-free';
+    action = mine
+      ? '<button class="btn btn-s btn-sm" onclick="jpConfirmLive(curId)">Back to turns</button>'
+      : '';
   } else if (canEdit) {
     msg = 'You have the sim. Hand it back when you are done.';
     cls = 'jp-mine';
@@ -11098,7 +11194,10 @@ function jpPaint() {
                   (doc.jpMembers || 1) + ')</button></span>';
 
   document.body.classList.toggle('jp-readonly', !canEdit);
-  setEditorEditable(canEdit);
+  // ProseMirror owns contenteditable on its own node while live, and #editor is
+  // only the container. Setting it here would put the attribute on the wrapper
+  // and leave two editable elements nested in each other.
+  if (!jpLiveActive()) setEditorEditable(canEdit);
 }
 
 async function jpForceRelease(id) {
@@ -11204,6 +11303,327 @@ function jpConfirmMakeJoint(id) {
 // To open it to everyone: make this return true, and drop the paragraph in the
 // roadmap that describes the gate. Nothing else keys off it.
 function jpCanCreate() { return isCloud() && isSuperAdmin(); }
+
+// ── Live co-authoring ─────────────────────────────────────────────────────
+// Two writers in the same joint sim at once, merged by a CRDT instead of by
+// taking turns. ROADMAP Batch 7.
+//
+// OPT-IN PER SIM, and it stays that way. `doc.jpLive` mirrors jp_docs.live,
+// which only the sim's owner can set. A sim that is not live behaves exactly as
+// it always has -- the lock, the version check and jp_save() -- and that path is
+// also the offline and fallback one, because a CRDT cannot merge safely with no
+// server.
+//
+// THE SHARED DOCUMENT HOLDS ONLY WHAT A WRITER AUTHORED. Marker spans,
+// `strong.cn` and the character colours are derived -- lrApplyMarkers() strips
+// and re-derives them from the text on every pass -- so they are drawn as
+// ProseMirror decorations, outside the document. That generates no transaction
+// and therefore no edit for anyone else to merge. Putting any of them INTO the
+// document would make every redraw an edit; see live-editor.js.
+//
+// The ProseMirror view is mounted INSIDE #editor rather than beside it, so the
+// copy handler, the context menu and everything else bound to that node or to
+// the selection keeps working. What has to be held off while live are the
+// passes that WRITE #editor.innerHTML -- they would tear the view out from
+// under itself. jpLiveActive() is the single question each of them asks.
+let _jpLive = null;          // { id, ydoc, frag, view, lastSeq, savedHtml, ... }
+
+function jpLiveAvailable() {
+  return !!(window.LCARSLive && window.LCARSLiveEditor);
+}
+
+// Is the sim in front of us being co-authored right now?
+function jpLiveActive() {
+  return !!(_jpLive && _jpLive.id && _jpLive.id === curId);
+}
+
+// Is live writing switched on for this sim, and can we actually use it?
+function jpLiveOn(doc) {
+  return !!(doc && isJointDoc(doc) && doc.jpLive && isCloud() && navigator.onLine && jpLiveAvailable());
+}
+
+// A Yjs update is binary and PostgREST carries text, so base64 both ways.
+// Chunked because String.fromCharCode.apply over a long array overflows the
+// stack, which only shows up once a sim is big -- the worst time to find it.
+function jpB64(bytes) {
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    out += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(out);
+}
+function jpUnB64(str) {
+  const bin = atob(str);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+// ── Starting ──────────────────────────────────────────────────────────────
+// SEEDING IS THE DANGEROUS PART and it is worth being explicit about why.
+// If two browsers each built a document from doc.content and then merged, the
+// CRDT would have no way to know those were the same words -- it would keep
+// both, and the sim would appear twice. So exactly one seed may ever exist, and
+// it is the OWNER's: they are the one who switches live writing on, so they are
+// the one who writes the first update.
+//
+// Anyone else starts from an EMPTY document and builds it from the log. A member
+// who arrives before the owner has seeded is told so and waits, rather than
+// seeding a second copy.
+async function jpLiveStart(doc) {
+  if (!jpLiveOn(doc)) return false;
+  if (_jpLive && _jpLive.id === doc.id) return true;
+  jpLiveStop(false);
+
+  const L = window.LCARSLive, E = window.LCARSLiveEditor;
+  const ed = document.getElementById('editor');
+  if (!ed) return false;
+
+  let rows;
+  try { rows = (await supaRpc('jp_live_pull', { p_doc_id: doc.id, p_since: 0 })) || []; }
+  catch (e) { showToast('Could not reach the sim. Still on turns for now.'); return false; }
+
+  const schema = E.buildSchema(L);
+  const ydoc = new L.Y.Doc();
+  const frag = ydoc.getXmlFragment('sim');
+  let lastSeq = 0;
+
+  if (rows.length) {
+    // Build from the log. Applying in order is not required -- the updates
+    // commute -- but it is the cheapest order.
+    for (const r of rows) {
+      try { L.Y.applyUpdate(ydoc, jpUnB64(r.payload), 'remote'); } catch (e) {}
+      if (r.seq > lastSeq) lastSeq = r.seq;
+    }
+  } else if (doc.jpOwner === getAuth().uid) {
+    // The owner seeds, once. Everything after this is a delta.
+    L.prosemirrorToYXmlFragment(E.htmlToDoc(L, schema, doc.content || ''), frag);
+    try {
+      // Taking the sequence number IS safe here, and only here: the log was
+      // empty a moment ago, so there is nothing before ours that could be
+      // skipped. Everywhere else, see the note in jpLivePushNow().
+      const seq = await supaRpc('jp_live_push',
+        { p_doc_id: doc.id, p_payload: jpB64(L.Y.encodeStateAsUpdate(ydoc)) });
+      lastSeq = seq || 0;
+    } catch (e) {
+      showToast('Could not start live writing. The sim is still on turns.');
+      return false;
+    }
+  } else {
+    showToast('Waiting for the owner to open this sim once so live writing can start.');
+    return false;
+  }
+
+  // #editor becomes the container; ProseMirror puts its own editable div inside.
+  // Keeping that node means the copy handler and the selection still work.
+  const stash = { html: ed.innerHTML, editable: ed.getAttribute('contenteditable') };
+  ed.innerHTML = '';
+  ed.removeAttribute('contenteditable');
+  ed.classList.add('live');
+
+  const view = new L.EditorView(ed, {
+    state: L.EditorState.create({
+      schema,
+      plugins: [
+        L.ySyncPlugin(frag),
+        L.yUndoPlugin(),
+        L.keymap({ 'Mod-z': L.undo, 'Mod-y': L.redo, 'Mod-Shift-z': L.redo }),
+        L.keymap(L.baseKeymap),
+        E.markerPlugin(L, () => ({ fmts, thoughtItalic: getPrefs().thoughtItalic,
+                                   academy: isAcademyActive() })),
+        E.charColorPlugin(L, () => (S.docs[doc.id] || {}).charColors || {}),
+      ],
+    }),
+  });
+
+  _jpLive = { id: doc.id, ydoc, frag, view, schema, lastSeq, stash,
+              pending: [], pushTimer: null, pullTimer: null, flushTimer: null,
+              lastFlushed: null };
+
+  // Our own edits go out; anything applied FROM the log must not be echoed back.
+  ydoc.on('update', (update, origin) => {
+    if (origin === 'remote') return;
+    _jpLive.pending.push(update);
+    clearTimeout(_jpLive.pushTimer);
+    _jpLive.pushTimer = setTimeout(jpLivePushNow, JP_LIVE_PUSH_MS);
+    jpLiveSchedFlush();
+  });
+
+  _jpLive.pullTimer = setInterval(jpLivePullOnce, JP_LIVE_PULL_MS);
+  jpStopPoll();                 // the live loop replaces the presence poll
+  jpPaint();
+  updateWC(); updateSB();
+  return true;
+}
+
+// Leaving live mode. `flushFirst` is false on a teardown that is about to be
+// followed by something else writing the editor anyway.
+function jpLiveStop(flushFirst) {
+  if (!_jpLive) return;
+  const live = _jpLive;
+  _jpLive = null;                       // before the awaits, so nothing re-enters
+  clearTimeout(live.pushTimer); clearTimeout(live.flushTimer);
+  if (live.pullTimer) clearInterval(live.pullTimer);
+  if (flushFirst) { try { jpLiveFlushNow(live); } catch (e) {} }
+  try { live.view.destroy(); } catch (e) {}
+  const ed = document.getElementById('editor');
+  if (ed) {
+    ed.classList.remove('live');
+    ed.setAttribute('contenteditable', live.stash.editable || 'true');
+    ed.innerHTML = '';
+  }
+  try { live.ydoc.destroy(); } catch (e) {}
+}
+
+// ── Sending and receiving ─────────────────────────────────────────────────
+async function jpLivePushNow() {
+  const live = _jpLive;
+  if (!live || !live.pending.length) return;
+  const batch = live.pending.splice(0);
+  const L = window.LCARSLive;
+  // One request per burst rather than one per keystroke. mergeUpdates is exact,
+  // not lossy -- the merged update applies identically to the sequence.
+  const merged = batch.length === 1 ? batch[0] : L.Y.mergeUpdates(batch);
+  try {
+    // NOTE WHAT IS NOT DONE HERE: the sequence number this returns is NOT used to
+    // advance live.lastSeq, and must never be. It is the number OUR update got,
+    // which says nothing about what else arrived before it -- so taking it would
+    // skip straight past any update that landed in between, and those words would
+    // never be fetched. Two browsers caught exactly that: one writer pushed, took
+    // the new sequence number, and silently lost the other writer's sentence,
+    // then flushed the incomplete sim over the top of it.
+    //
+    // Only jpLivePullOnce() advances lastSeq, and only to a sequence it has
+    // actually applied. Our own update comes back on the next pull and applying
+    // it again is a no-op -- which is the whole point of a CRDT, and far cheaper
+    // than the bug.
+    await supaRpc('jp_live_push', { p_doc_id: live.id, p_payload: jpB64(merged) });
+  } catch (e) {
+    // The owner has switched live writing off underneath us. Do not retry into a
+    // sim that will never accept it -- fall back to turns, which is where
+    // everyone else already is, and keep what was typed by flushing on the way.
+    if (/not switched on|not in live writing mode/i.test(e && e.message || '')) {
+      showToast('This sim is back on taking turns.');
+      jpLiveStop(false);
+      const doc = S.docs[live.id];
+      if (doc && curId === doc.id) { doc.jpLive = false; jpLoadIntoEditor(doc); jpStartPoll(true); jpPaint(); }
+      return;
+    }
+    // Any other failure is transient. Put them back and let the next burst carry
+    // them: losing an update loses words, so this never silently drops one.
+    live.pending.unshift(...batch);
+    jpLiveNote('Could not send your last few words — retrying.');
+  }
+}
+
+async function jpLivePullOnce() {
+  const live = _jpLive;
+  if (!live || live.id !== curId) return;
+  let rows;
+  try { rows = (await supaRpc('jp_live_pull', { p_doc_id: live.id, p_since: live.lastSeq })) || []; }
+  catch (e) { return; }                 // a missed poll is caught by the next
+  if (!rows.length) return;
+  const L = window.LCARSLive;
+  const me = getAuth().uid;
+  for (const r of rows) {
+    if (r.seq > live.lastSeq) live.lastSeq = r.seq;
+    if (r.author_uid === me) continue;  // ours already; applying it is a no-op
+    try { L.Y.applyUpdate(live.ydoc, jpUnB64(r.payload), 'remote'); } catch (e) {}
+  }
+  updateWC(); updateSB();
+}
+
+// ── Writing it back where everything else can see it ──────────────────────
+// jp_docs.content is what the sim list, the dashboard, search, a share link,
+// copy-out and the turn-based fallback all read. The CRDT is the working copy;
+// this is what keeps every one of those working without teaching them about it.
+function jpLiveSchedFlush() {
+  const live = _jpLive;
+  if (!live) return;
+  clearTimeout(live.flushTimer);
+  live.flushTimer = setTimeout(() => jpLiveFlushNow(_jpLive), JP_LIVE_FLUSH_MS);
+}
+
+async function jpLiveFlushNow(live) {
+  if (!live || !live.view) return;
+  const L = window.LCARSLive, E = window.LCARSLiveEditor;
+  const html = E.docToHtml(L, live.schema, live.view.state.doc);
+  if (html === live.lastFlushed) return;
+  const doc = S.docs[live.id];
+  if (doc) { doc.content = html; doc.updatedAt = Date.now(); persist(); }
+  try {
+    const v = await supaRpc('jp_live_flush',
+      { p_doc_id: live.id, p_content: html, p_meta: null });
+    live.lastFlushed = html;
+    if (doc && v) { doc.jpVersion = v; doc.jpSavedContent = html; }
+    // Bound the log once the sim itself is written out. Not compaction -- see
+    // jp_live_trim's own comment -- but it stops it growing without limit.
+    try { await supaRpc('jp_live_trim', { p_doc_id: live.id, p_keep: JP_LIVE_KEEP }); } catch (e) {}
+  } catch (e) {
+    jpLiveNote('Could not save the sim just now — your writing is still shared.');
+  }
+}
+
+// The features that are held off while live writing is on, and the one place
+// that says so. Each of them replaces #editor.innerHTML wholesale, which would
+// tear the live view out and -- worse -- read to every other writer as the sim
+// being deleted and retyped. They are not broken, they are deferred: the fix for
+// each is to express it as a CRDT edit instead, which is follow-up work and
+// should not be guessed at under a deadline.
+function jpLiveNotHere(what) {
+  if (!jpLiveActive()) return false;
+  showToast(what + ' is not available while live writing is on. Turn it off from the sim\u2019s roster to use it.');
+  return true;
+}
+
+let _jpLiveNoteAt = 0;
+function jpLiveNote(msg) {
+  if (Date.now() - _jpLiveNoteAt < 8000) return;
+  _jpLiveNoteAt = Date.now();
+  showToast(msg);
+}
+
+// ── The owner's switch ────────────────────────────────────────────────────
+function jpConfirmLive(id) {
+  const doc = S.docs[id];
+  if (!doc || !isJointDoc(doc)) return;
+  if (doc.jpOwner !== getAuth().uid) { showToast('Only the writer who started this sim can change that.'); return; }
+  if (!jpLiveAvailable()) { showToast('Live writing is not available in this copy of LCARS.'); return; }
+  if (doc.jpLive) {
+    openModal('Turn live writing off?',
+      '<div style="font-size:0.9rem;line-height:1.6">' +
+      '<p><strong>' + esc(doc.title || 'This sim') + '</strong> goes back to taking turns — one writer ' +
+      'holds the sim at a time, the way it was before.</p>' +
+      '<p>Everything written so far is kept. What is lost is the shared editing history, ' +
+      'so undo starts fresh.</p></div>',
+      () => jpSetLive(id, false), { ok: 'Back to turns' });
+    return;
+  }
+  openModal('Write this one together, live?',
+    '<div style="font-size:0.9rem;line-height:1.6">' +
+    '<p>Everyone on <strong>' + esc(doc.title || 'this sim') + '</strong> can type at the same time, and ' +
+    'you see each other’s words as they arrive — no taking turns.</p>' +
+    '<p>Offline it still falls back to reading only, and you can switch back to turns whenever you like.</p>' +
+    '<p style="color:var(--dim)">This is new. Try it with one other writer before a sim that matters.</p></div>',
+    () => jpSetLive(id, true), { ok: 'Turn on live writing' });
+}
+
+async function jpSetLive(id, on) {
+  const doc = S.docs[id];
+  if (!doc) return;
+  try { await supaRpc('jp_set_live', { p_doc_id: id, p_live: !!on }); }
+  catch (e) { showToast(supaErr(e, 'Could not change that.')); return; }
+  doc.jpLive = !!on;
+  persist();
+  if (!on) {
+    jpLiveStop(true);
+    if (curId === id) { jpLoadIntoEditor(doc); jpStartPoll(true); }
+    showToast('Back to taking turns.');
+  } else if (curId === id) {
+    const started = await jpLiveStart(doc);
+    if (started) showToast('Live writing is on. Everyone on the sim can type at once.');
+  }
+  jpPaint(); renderNav();
+}
 
 // ── Where a joint sim is filed ────────────────────────────────────────────
 // A joint sim is filed PER WRITER, and the filing lives in that writer's own

@@ -50,13 +50,15 @@ const BUNDLE = path.join(__dirname, '..', 'live-bundle.js');
      'and leaks no global beyond LCARSLive and Yjs\'s own load guard' +
      (unexpected.length ? ' — unexpected: ' + unexpected.join(', ') : ''));
 
-  // The check that actually protects the app: work out which globals are the
-  // APP's own -- by diffing a blank page against LCARS.html -- then load the
-  // bundle on top and confirm it changed none of them.
+  // The check that actually protects the app. LCARS.html now loads the bundle
+  // itself, so this no longer injects it -- it opens the real app and asks what
+  // the bundle did on the way in.
   //
-  // Snapshotting all of `window` does not work: properties like `window.event`
-  // are live browser getters that differ on every read, which reads as a
-  // collision and is not one.
+  // IT MUST NOT BE LOADED TWICE. Yjs keeps a global guard and warns that
+  // "Yjs was already imported", and it means it: two copies break its
+  // constructor checks, so a document built by one is not recognised by the
+  // other. A second script tag, or the frozen inliner ever picking the file up,
+  // would do it. That warning appearing at all is a failure here.
   const blank = await browser.newPage();
   await blank.setContent('<!doctype html><html><body></body></html>');
   const baseline = await blank.evaluate(() => Object.keys(window));
@@ -72,28 +74,24 @@ const BUNDLE = path.join(__dirname, '..', 'live-bundle.js');
     if (/Failed to load resource|ERR_CERT|ERR_CONNECTION|net::/.test(m.text())) return;
     appErrs.push('console: ' + m.text());
   });
+  const warnings = [];
+  app.on('console', m => { if (/already imported/i.test(m.text())) warnings.push(m.text()); });
   await app.goto('http://127.0.0.1:8141/LCARS.html');
-  await app.waitForTimeout(800);
+  await app.waitForTimeout(900);
 
   const appOwn = await app.evaluate(b => Object.keys(window).filter(k => !b.includes(k)), baseline);
   ok(appOwn.length > 50, 'the app really did load, so this check means something (' + appOwn.length + ' app globals)');
+  ok(await app.evaluate(() => !!window.LCARSLive), 'the app loads the bundle itself, so live writing is available in it');
+  ok(await app.evaluate(() => !!window.LCARSLiveEditor), 'and the schema and decoration plugins with it');
+  ok(await app.evaluate(() => typeof jpLiveAvailable === 'function' && jpLiveAvailable()),
+     'and the app agrees that it is available');
 
-  const clobbered = await app.evaluate(async (names) => {
-    const snap = {};
-    for (const k of names) { try { snap[k] = window[k]; } catch (e) {} }
-    const s = document.createElement('script');
-    s.src = 'live-bundle.js';
-    await new Promise((res, rej) => { s.onload = res; s.onerror = rej; document.head.appendChild(s); });
-    const hits = [];
-    for (const k of names) { try { if (window[k] !== snap[k]) hits.push(k); } catch (e) {} }
-    return hits;
-  }, appOwn);
-
-  ok(clobbered.length === 0,
-     'the bundle overwrites none of the app\'s own globals' +
-     (clobbered.length ? ' — clobbered: ' + clobbered.join(', ') : ''));
-  ok(await app.evaluate(() => !!window.LCARSLive), 'and LCARSLive is available inside the real app');
-  ok(appErrs.length === 0, 'and the real app raises no error with the bundle loaded' +
+  const extra = appOwn.filter(k => /^(Y|yjs|ProseMirror|prosemirror|__webpack|_yjs)/.test(k) && k !== 'LCARSLive');
+  ok(extra.length === 0, 'and the bundle still adds no stray globals of its own' +
+     (extra.length ? ' — ' + extra.join(', ') : ''));
+  ok(warnings.length === 0, 'the bundle is loaded exactly ONCE — two copies of Yjs break its constructor checks' +
+     (warnings.length ? ' — ' + warnings[0] : ''));
+  ok(appErrs.length === 0, 'and the app raises no error with it loaded' +
      (appErrs.length ? ' — ' + appErrs[0] : ''));
   await app.close();
 
