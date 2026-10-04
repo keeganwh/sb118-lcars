@@ -101,7 +101,8 @@ const BUNDLE = path.join(__dirname, '..', 'live-bundle.js');
     const need = ['Y','ySyncPlugin','yCursorPlugin','yUndoPlugin','undo','redo',
                   'prosemirrorToYXmlFragment','yXmlFragmentToProsemirrorJSON',
                   'Schema','PMDOMParser','DOMSerializer','EditorState','TextSelection',
-                  'EditorView','keymap','baseKeymap','toggleMark','chainCommands','history'];
+                  'EditorView','keymap','baseKeymap','toggleMark','chainCommands','history',
+                  'Plugin','PluginKey','Decoration','DecorationSet'];
     return need.filter(k => !window.LCARSLive[k]);
   });
   ok(missing.length === 0, 'every name the app needs is present' +

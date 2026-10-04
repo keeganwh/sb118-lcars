@@ -13,8 +13,8 @@ import {
   prosemirrorToYXmlFragment, yXmlFragmentToProsemirrorJSON,
 } from 'y-prosemirror';
 import { Schema, DOMParser as PMDOMParser, DOMSerializer } from 'prosemirror-model';
-import { EditorState, TextSelection } from 'prosemirror-state';
-import { EditorView } from 'prosemirror-view';
+import { EditorState, TextSelection, Plugin, PluginKey } from 'prosemirror-state';
+import { EditorView, Decoration, DecorationSet } from 'prosemirror-view';
 import { keymap } from 'prosemirror-keymap';
 import { baseKeymap, toggleMark, chainCommands } from 'prosemirror-commands';
 import { history, undo as pmUndo, redo as pmRedo } from 'prosemirror-history';
@@ -27,5 +27,6 @@ window.LCARSLive = {
   prosemirrorToYXmlFragment, yXmlFragmentToProsemirrorJSON,
   // The editor.
   Schema, PMDOMParser, DOMSerializer, EditorState, TextSelection, EditorView,
+  Plugin, PluginKey, Decoration, DecorationSet,
   keymap, baseKeymap, toggleMark, chainCommands, history, pmUndo, pmRedo,
 };
