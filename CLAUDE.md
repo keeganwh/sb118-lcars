@@ -70,6 +70,11 @@ Entries are read by writers, not developers. Write them in plain language, sayin
   grep -oE "^(async )?function [a-zA-Z_$][a-zA-Z0-9_$]*" lcars.js | sort > /tmp/new
   comm -23 /tmp/old /tmp/new   # anything listed was removed
   ```
+- **A rebase or cherry-pick places a changelog entry by context, not by intent.** Git drops a new `VERSIONS` entry next to whatever text surrounded it when it was written — which, if a release happened in between, is a version block that has already shipped. So the changelog claims a feature the build does not contain, it conflicts with nothing, and it parses cleanly. This has happened three times on the Joint Posts work alone. **After any rebase or cherry-pick that touches `lcars.js`, check which version block the entry actually landed in**, not just that the file parses:
+  ```
+  grep -n "version: " lcars.js | head -3     # pending must be first
+  # then confirm your entry sits ABOVE the first released version, not inside one
+  ```
 - **A test fixture in the wrong shape hides the bug it was written to catch.** `admin_usage_overview()` counted sims with `jsonb_array_length(payload -> 'docs')` — but `S.docs` is an OBJECT keyed by sim id. Every real account raised `cannot get array length of a non-array`, and the whole report died rather than one column. Sixty-eight schema checks passed because the fixture used an array. **Build fixtures from the shape the app actually writes.**
 - **Test the signed-in path, not just offline.** The account-controls deletion above was invisible in an offline browser pass. Intercept Supabase so the real fetch code runs.
 - **Responsive rules go in the one `RESPONSIVE` section at the foot of `lcars.css`,** after the skin overrides. Anything earlier is silently outranked by the `:root[data-skin="prime"]` blocks. Breakpoint is 820px.
@@ -137,7 +142,7 @@ Entries are read by writers, not developers. Write them in plain language, sayin
 ## What not to touch
 
 - Don't edit `CHANGELOG.md` or `APP_VERSION` except on an explicit version bump.
-- Don't add a build step, a bundler or npm dependencies — the zero-dependency, plain-`fetch` design is deliberate, and it is what keeps the offline download working.
+- **Don't add a build step, a bundler or npm dependencies to the repo.** The app must always run by opening the files — no command to run first, no tooling to install. A **pre-built library file committed as a plain `.js`** is the one permitted exception (see `live-bundle.js`, loaded by a normal `<script>` tag like `lcars-render.js`): it is produced outside the project, once, and arrives as an ordinary file. Updating it is a manual errand by design. No `package.json`, no `node_modules`, no build command in this repository. **The short version for anyone picking this up: if the app ever needs a command run before it works, something has gone wrong.**
 - Don't put the Supabase `service_role` key anywhere in this repo or the app. The anon key is fine; RLS is what protects the data, and privileged work goes through `security definer` functions instead.
 - Don't reintroduce a recovery email or an Edge Function for account recovery. Both were considered at length and rejected — the reasoning is in `memory/session_lcars_2026-08-recovery-deletion.md`.
 - Don't extend `api/download.js`. The offline download is frozen — see the hard rules.
