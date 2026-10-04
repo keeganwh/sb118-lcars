@@ -145,7 +145,12 @@ async function ctxFor(browser, who, errors) {
         out = route.request().method() === 'GET' ? [] : {};
       } else if (url.includes('/rest/v1/jp_docs') && route.request().method() === 'POST') {
         const p = JSON.parse(body);
-        DB.docs[p.doc_id] = { ...p, version: 1, locked_by: null, locked_at: null, updated_at: Date.now() };
+        // `live: false` because PostgREST returns EVERY column on an insert with
+        // return=representation, including ones the client did not send. A mock
+        // that omits it reports a migrated server as un-migrated -- the fixture
+        // has to be the shape the server actually answers with.
+        DB.docs[p.doc_id] = { ...p, version: 1, live: false,
+                              locked_by: null, locked_at: null, updated_at: Date.now() };
         DB.members[p.doc_id] = [p.owner_uid];
         out = [DB.docs[p.doc_id]];
       } else if (url.includes('/rest/v1/jp_docs') && route.request().method() === 'DELETE') {
@@ -579,6 +584,8 @@ async function ctxFor(browser, who, errors) {
   ok(await a.p.evaluate(() => typeof jpLiveAvailable === 'function'), 'the live-writing code is wired into the app');
   ok(await a.p.evaluate(() => jpLiveAvailable()), 'and the bundle is actually loaded by LCARS.html');
   ok(await a.p.evaluate(id => !S.docs[id].jpLive, liveId), 'a joint sim is on turns until somebody switches it');
+  ok(await a.p.evaluate(id => S.docs[id].jpLiveSupported === true, liveId),
+     'and the app can tell a server that supports live writing from one that is not migrated yet');
 
   // A member cannot switch it on -- the client refuses before the server does.
   const memberTried = await b.p.evaluate(id => { jpConfirmLive(id);

@@ -10590,10 +10590,16 @@ function jpApplyRow(row, keepContent) {
     jpLockName: row.lock_name || null,
     jpLockActive: !!row.lock_active,
     jpMembers: row.member_count != null ? row.member_count : prev.jpMembers,
-    // An older database has no `live` column, so jp_doc returns undefined and
-    // this reads false -- the app simply never offers live writing. That is what
-    // makes deploy-before-migrate safe in this direction.
+    // An older database has no `live` column, so jp_doc returns undefined. Both
+    // that and an explicit false mean "not live", but they are not the same
+    // thing: one is a choice and the other is a database that has not been
+    // migrated yet. Keeping them apart is what lets the owner's switch stay
+    // hidden until the server can actually honour it -- deploy comes before the
+    // migration, and in that window a switch that errored would be the only
+    // visible sign of it.
     jpLive: row.live === undefined ? (prev.jpLive || false) : !!row.live,
+    jpLiveSupported: row.live === undefined
+      ? (prev.jpLiveSupported || false) : true,
     updatedAt: row.updated_at ? Date.parse(row.updated_at) : Date.now(),
   });
   if (!keepContent && row.content != null) { doc.content = row.content; doc.jpSavedContent = row.content; }
@@ -10992,6 +10998,12 @@ async function jpMakeJoint(id) {
   doc.jpVersion = row ? row.version : 1;
   doc.jpMembers = 1;
   doc.jpLock = null; doc.jpLockActive = false;
+  // This path builds the doc by hand rather than through jpApplyRow, so it has
+  // to answer the same question: the inserted row carries every column, so a
+  // `live` in it means the server has been migrated for live writing. Without
+  // this the owner's switch stayed hidden until some later refresh.
+  doc.jpLive = !!(row && row.live);
+  doc.jpLiveSupported = !!(row && row.live !== undefined);
   persist();
   // It has left the blob. Push the blob too, so the server copy stops carrying
   // a solo sim with the same id -- otherwise a fresh device would rebuild it.
@@ -11069,7 +11081,7 @@ async function jpOpenRoster(id) {
   // The owner's switch between taking turns and writing together. Offered only
   // to the owner, and only where the live-writing code is actually present --
   // the downloaded offline copy has no account and no server, so it never is.
-  const liveBox = (mine && jpLiveAvailable())
+  const liveBox = (mine && jpLiveAvailable() && doc.jpLiveSupported)
     ? '<div class="chars-divider">How you write it</div>' +
       '<div style="line-height:1.5">' +
         '<p style="margin:0 0 8px">' + (doc.jpLive
@@ -11588,6 +11600,7 @@ function jpConfirmLive(id) {
   if (!doc || !isJointDoc(doc)) return;
   if (doc.jpOwner !== getAuth().uid) { showToast('Only the writer who started this sim can change that.'); return; }
   if (!jpLiveAvailable()) { showToast('Live writing is not available in this copy of LCARS.'); return; }
+  if (!doc.jpLiveSupported) { showToast('Live writing is not set up on the server yet.'); return; }
   if (doc.jpLive) {
     openModal('Turn live writing off?',
       '<div style="font-size:0.9rem;line-height:1.6">' +
