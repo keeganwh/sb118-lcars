@@ -466,6 +466,30 @@ _Done when: the guide matches the shipped app, a writer can find any feature by 
 
 Not development, not batched, and **user-triggered** — they run when the user says so.
 
+> ## TWO SESSIONS ARE RUNNING AT ONCE (from 2026-10-04)
+>
+> The user is running **live co-authoring for Joint Posts, and then opening Joint
+> Posts to everyone, as its own session** — Batch 7 followed by the held item in
+> Batch 3. Alongside it, a **separate session handles user-reported feedback and
+> bug fixes**. They overlap in TIME and must not overlap in SCOPE.
+>
+> **The live-writing session owns:** the editor's rewrite passes (`transformNow()`,
+> `applyMarkers()`, `boldNames()`, `applyCharColors()`, `normalizeEditorContent()`,
+> `stripFormattingHtml()`), everything `jp*` in `lcars.js`, the `jp_*` tables and
+> functions in `supabase/schema.sql`, `test/jp_browser.js`, and any vendored
+> live-writing bundle.
+>
+> **The fixes session owns** everything else, and should treat the above as
+> off-limits: if a reported bug lands in the editor passes or in joint-sim code,
+> write it down and hand it over rather than fixing it in passing. A one-line fix
+> in `transformNow()` is exactly the kind of change that collides invisibly with
+> a CRDT binding being built on top of it.
+>
+> **Both sessions:** branch from the latest `main`, keep commits small, and pull
+> before starting. `jpCanCreate()` stays `isCloud() && isSuperAdmin()` on `main`
+> until live writing is proven — **neither session opens that gate.** The work to
+> open it is already built and waiting on `claude/jp-open-everyone`.
+
 - [ ] **Positioning & pitch document.**
       Documenting the features and benefits of LCARS **in comparison to what people currently use to write sims** — Google Docs, plain Gmail, Word — so it can be sold properly, with anticipated pushback identified and answered in advance.
       This is parallel to development and important, but it is **not part of the development queue**. The user will trigger it when the time is right.
