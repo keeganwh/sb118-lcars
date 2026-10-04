@@ -1,10 +1,14 @@
 // ================================================================
 // LCARS LIVE EDITOR — the spike
 // ================================================================
-// Not loaded by the app. This is ROADMAP Batch 7's spike: the question is
-// whether a Yjs-backed ProseMirror editor can hold a real LCARS sim without
-// losing anything, and this is the answer in code. `test/live_spike_browser.js`
-// is the verdict.
+// Loaded by LCARS.html, after live-bundle.js and before lcars.js. It holds the
+// schema a joint sim is co-authored through, and the markers and character
+// colours as decorations. Optional at runtime: jpLiveAvailable() checks for it,
+// so the app works exactly as before if it is missing.
+//
+// It began as ROADMAP Batch 7's spike -- can a Yjs-backed ProseMirror editor
+// hold a real LCARS sim without losing anything -- and `test/live_spike_browser.js`
+// is still that verdict, kept as a standing check on the round trip.
 //
 // THE FINDING THIS IS BUILT ON, which the planning brief did not know:
 //
