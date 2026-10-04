@@ -285,11 +285,19 @@ version bump along with Batch 5's. See `memory/session_lcars_2026-09-onboarding.
 >
 > A real sim round-trips keeping every word, the block count, the indent, the list, the blank lines and the bold. Copy-out is unchanged except that bold pasted from Google Docs now *survives* it.
 >
-> **Still to do, in order:** wire the editor into the app behind a flag (nothing in `lcars.js` is touched yet); then transport. **Transport recommendation: append-only Yjs update rows polled over PostgREST**, reusing the pattern `jp_list()` already uses — the spike proves updates commute under duplicate and out-of-order delivery, so polling is sufficient and no WebSocket or `supabase-js` is needed. Keep the turn-based system as the offline and fallback path.
+> **INTEGRATED AND DEPLOYED 2026-10-04.** Live co-authoring is in the app, opt-in per sim, off by default, switched on by the sim's **owner** alone. `jpCanCreate()` is untouched, so only a super admin can start a joint sim at all — a live sim can only exist where an admin made the sim and its owner chose it.
+>
+> **Transport is the poll, as recommended:** `jp_updates` is an append-only log of Yjs updates, pushed and pulled over PostgREST through `security definer` functions. No WebSocket and no `supabase-js`. `jp_live_flush()` writes the rendered sim back to `jp_docs.content` so the sim list, dashboard, search, share links, copy-out and the turn-based fallback all keep working unchanged. **It takes no lock, and is refused on a sim that is not live** — which keeps `jp_save()` the only content path on a turn-based sim, with a test for exactly that.
+>
+> **Deferred, not broken — five editor features are held off while live and say so when tried:** the source view, inserting a template, restoring a revision, renaming a speaker throughout the sim, and undoing a cleaned-up paste. Each rewrites the whole sim at once. Expressing them as CRDT edits is the next piece of work.
+>
+> **Also still owed:** real compaction. `jp_live_trim()` bounds the log but does not compact it — the proper answer is a stored compacted state replayed from, rather than keeping the newest N updates.
+>
+> **The three bugs two browsers found, worth not re-introducing:** advancing the pull cursor from your own push (it skips whatever landed in between, and loses words); deciding which mode to open a sim in before the reload has said which mode it is in; and switching live on or off underneath somebody else's open editor.
 >
 > **Follow-up owed:** the decoration patterns in `live-editor.js` mirror `lrApplyMarkers()`, and two copies of a marker pattern is the duplication `lcars-render.js` exists to prevent. The test checks they agree; the fix is to export the patterns from `lcars-render.js` and delete the copies.
 
-- [ ] **[+5] Yjs-backed simultaneous editing.** _Spike done — see above._
+- [x] **[+5] Yjs-backed simultaneous editing.** _Shipped 2026-10-04 — see above. Awaiting small-scale real use._
       This reverses the earlier "explicitly NOT building simultaneous typing" line, deliberately and at the user's request, after turn-based Joint Posts was built, shipped in 4.24 and used by two writers. The reason is competitive, in their words: _"otherwise people will just choose Google Docs over LCARS."_
       The CRDT is the easy half — **Yjs is solved and must not be hand-rolled.** The project is that this editor is a hand-rolled `contenteditable` whose marker, name-bolding and character-colour passes rewrite its HTML in bulk, which a character-level CRDT binding cannot survive.
       **The build-step question is now settled by Batch 3.** The offline download is frozen, so a bundler no longer costs the one-file copy. Vendoring a pre-built bundle remains an option; it is no longer forced.
