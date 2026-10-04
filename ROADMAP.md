@@ -277,7 +277,19 @@ version bump along with Batch 5's. See `memory/session_lcars_2026-09-onboarding.
 
 **Read `memory/session_lcars_2026-08-realtime-brief.md` first.**
 
-- [ ] **[+5] Yjs-backed simultaneous editing.**
+> **SPIKE DONE 2026-10-04 — it works, and the feared part turned out not to be the problem.** On `claude/jp-live-writing`, 19 checks in `test/live_spike_browser.js`.
+>
+> **The brief was wrong about where the difficulty was**, and in a useful direction. It called the marker, name-bolding and colour passes "the project" — bulk `innerHTML` rewrites a character-level CRDT cannot survive. True of `transformNow()` as written, but those passes are **pure functions of the text**: `lrApplyMarkers()` strips every span it has written and re-derives them from the characters, and `lrApplyCharColors()` does the same. They are a *view* of the content, not content.
+>
+> So they do not need reconciling with the CRDT — they need **demoting out of the document**, as ProseMirror decorations. Proven the only way that counts: the Yjs state vector is byte-identical before and after a full redraw with every pass on, zero update events fire, every marker type is still drawn, the document holds no marker markup, and a real keystroke still reaches the shared document.
+>
+> A real sim round-trips keeping every word, the block count, the indent, the list, the blank lines and the bold. Copy-out is unchanged except that bold pasted from Google Docs now *survives* it.
+>
+> **Still to do, in order:** wire the editor into the app behind a flag (nothing in `lcars.js` is touched yet); then transport. **Transport recommendation: append-only Yjs update rows polled over PostgREST**, reusing the pattern `jp_list()` already uses — the spike proves updates commute under duplicate and out-of-order delivery, so polling is sufficient and no WebSocket or `supabase-js` is needed. Keep the turn-based system as the offline and fallback path.
+>
+> **Follow-up owed:** the decoration patterns in `live-editor.js` mirror `lrApplyMarkers()`, and two copies of a marker pattern is the duplication `lcars-render.js` exists to prevent. The test checks they agree; the fix is to export the patterns from `lcars-render.js` and delete the copies.
+
+- [ ] **[+5] Yjs-backed simultaneous editing.** _Spike done — see above._
       This reverses the earlier "explicitly NOT building simultaneous typing" line, deliberately and at the user's request, after turn-based Joint Posts was built, shipped in 4.24 and used by two writers. The reason is competitive, in their words: _"otherwise people will just choose Google Docs over LCARS."_
       The CRDT is the easy half — **Yjs is solved and must not be hand-rolled.** The project is that this editor is a hand-rolled `contenteditable` whose marker, name-bolding and character-colour passes rewrite its HTML in bulk, which a character-level CRDT binding cannot survive.
       **The build-step question is now settled by Batch 3.** The offline download is frozen, so a bundler no longer costs the one-file copy. Vendoring a pre-built bundle remains an option; it is no longer forced.
