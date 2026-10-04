@@ -1349,6 +1349,24 @@ body.academy #editor .om{font-style:normal}
 .jp-bar.jp-busy{border-color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--panel))}
 .jp-bar.jp-free{border-color:var(--border)}
 .jp-bar.jp-off {border-color:var(--dim);color:var(--dim)}
+/* Live co-authoring. Its own colour so "everyone is typing" never reads as
+   "you hold the sim" -- those are opposite situations and the gold bar means
+   the second one. */
+.jp-bar.jp-live{border-color:var(--green);background:color-mix(in srgb,var(--green) 12%,var(--panel))}
+.jp-bar.jp-live{-webkit-backdrop-filter:none;backdrop-filter:none}
+
+/* While live, #editor is a CONTAINER and ProseMirror's own div inside it is the
+   editable surface. So the padding, scrolling and typography stay on #editor and
+   the inner node just fills it -- otherwise the writing area would be inset
+   twice and the caret would stop at the wrong edge. */
+#editor.live{cursor:text}
+#editor.live>.ProseMirror{outline:none;min-height:100%;white-space:pre-wrap;word-wrap:break-word}
+#editor.live>.ProseMirror:focus{outline:none}
+/* The marker decorations are drawn by the plugin as classes, exactly the ones
+   the stored-HTML pass writes -- so every marker rule already in this file
+   applies unchanged. This is the one extra: a thought rendered as italic when
+   the thought marker itself is switched off. */
+#editor.live>.ProseMirror .tm-em{font-style:italic}
 
 /* Read-only: grey the writing controls out. This is one of THREE places the
    restriction lives -- the guards in the commands and the keyboard handler are

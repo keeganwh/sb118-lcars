@@ -13,3 +13,11 @@ LCARS-v3-OG.html
 LCARS-v39-backup.html
 .claude/
 Wardrobe/
+
+# The no-build-step rule, enforced rather than trusted. live-bundle.js is built
+# OUTSIDE the repo (vendor/build.sh installs into a temp dir), so neither of
+# these should ever appear here -- and if someone runs npm in the repo by
+# mistake, git will not offer to commit the result.
+node_modules/
+package.json
+package-lock.json

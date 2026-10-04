@@ -365,5 +365,178 @@ select pg_temp.be('c');
 select pg_temp.ok((select count(*) from public.shared_docs where doc_id = 'rls2') = 0,
                   'RLS: somebody not on the joint sim sees no share row');
 
+-- ---------------------------------------------------------------------------
+-- Live writing
+-- ---------------------------------------------------------------------------
+reset role;
+insert into public.jp_docs (doc_id, owner_uid, title, content)
+  values ('live1', '00000000-0000-0000-0000-00000000000a', 'Live JP', 'start');
+select pg_temp.be('a');
+select public.jp_invite('live1', 'B222');
+select pg_temp.be('b');
+select public.jp_accept_invite((select id from public.jp_my_invites() where doc_id = 'live1' limit 1));
+
+-- Off by default. A sim does not become live by existing.
+reset role;
+select pg_temp.ok((select live from public.jp_docs where doc_id = 'live1') = false,
+                  'LIVE: a joint sim is turn-based until somebody says otherwise');
+
+-- Pushing to a sim that is not live is refused, so a client running ahead of
+-- the owner's choice cannot start filling the log.
+set role authenticated;
+select pg_temp.be('b');
+do $$ begin
+  perform public.jp_live_push('live1', 'AAEC');
+  raise exception 'FAIL: pushed an update to a sim that is not live';
+exception when others then
+  if sqlerrm like 'FAIL:%' then raise; end if;
+  if sqlerrm not like '%not switched on%' then raise exception 'FAIL: wrong error: %', sqlerrm; end if;
+end $$;
+select pg_temp.ok(true, 'LIVE: pushing to a sim that is not live is refused');
+
+-- THE IMPORTANT ONE. jp_live_flush() writes content without the lock, which is
+-- correct in live mode and must be impossible outside it -- otherwise it is a
+-- way around the turn-based safety model entirely.
+do $$ begin
+  perform public.jp_live_flush('live1', 'written past the lock', null);
+  raise exception 'FAIL: jp_live_flush wrote to a sim that is not live';
+exception when others then
+  if sqlerrm like 'FAIL:%' then raise; end if;
+  if sqlerrm not like '%not in live writing mode%' then raise exception 'FAIL: wrong error: %', sqlerrm; end if;
+end $$;
+reset role;
+select pg_temp.ok((select content from public.jp_docs where doc_id = 'live1') = 'start',
+                  'LIVE: jp_live_flush cannot bypass the lock on a sim that is not live');
+
+-- Only the owner may switch it on.
+set role authenticated;
+select pg_temp.be('b');
+do $$ begin
+  perform public.jp_set_live('live1', true);
+  raise exception 'FAIL: a member switched live writing on';
+exception when others then
+  if sqlerrm like 'FAIL:%' then raise; end if;
+  if sqlerrm not like '%Only the owner%' then raise exception 'FAIL: wrong error: %', sqlerrm; end if;
+end $$;
+select pg_temp.ok(true, 'LIVE: a member cannot switch live writing on -- the owner alone can');
+
+reset role;
+select pg_temp.be('a');
+select public.jp_set_live('live1', true);
+select pg_temp.ok((select live from public.jp_docs where doc_id = 'live1'),
+                  'LIVE: the owner can switch it on');
+
+-- Now both members can push, and both can read everything.
+set role authenticated;
+select pg_temp.be('a');
+select public.jp_live_push('live1', 'from-a-1');
+select pg_temp.be('b');
+select public.jp_live_push('live1', 'from-b-1');
+select pg_temp.be('a');
+select public.jp_live_push('live1', 'from-a-2');
+
+select pg_temp.ok((select count(*) from public.jp_live_pull('live1', 0)) = 3,
+                  'LIVE: every member sees every update, whoever wrote it');
+-- Asking for "everything after the first" has to get the first seq from
+-- jp_live_pull as well: authenticated has no privilege on the table at all, by
+-- design, so a test that reads it directly is testing the wrong thing.
+select pg_temp.ok((select count(*) from public.jp_live_pull('live1',
+                    (select min(seq) from public.jp_live_pull('live1', 0)))) = 2,
+                  'LIVE: and can ask for only what it has not seen');
+select pg_temp.ok((select array_agg(payload order by seq) from public.jp_live_pull('live1', 0))
+                  = array['from-a-1','from-b-1','from-a-2'],
+                  'LIVE: in the order they were written');
+
+-- A non-member gets nothing, and cannot push.
+select pg_temp.be('c');
+select pg_temp.ok((select count(*) from public.jp_live_pull('live1', 0)) = 0,
+                  'LIVE: somebody not on the sim sees no updates');
+do $$ begin
+  perform public.jp_live_push('live1', 'intruder');
+  raise exception 'FAIL: a non-member pushed an update';
+exception when others then
+  if sqlerrm like 'FAIL:%' then raise; end if;
+  if sqlerrm not like '%not on that joint sim%' then raise exception 'FAIL: wrong error: %', sqlerrm; end if;
+end $$;
+select pg_temp.ok(true, 'LIVE: and cannot push one');
+
+-- No direct table write, for anybody. The functions are the only way in.
+select pg_temp.be('b');
+do $$ begin
+  insert into public.jp_updates (doc_id, author_uid, payload)
+       values ('live1', '00000000-0000-0000-0000-00000000000b', 'forged');
+  raise exception 'FAIL: an update was written directly';
+exception when insufficient_privilege then null;
+  when others then if sqlerrm like 'FAIL:%' then raise; end if;
+end $$;
+select pg_temp.ok(true, 'LIVE: nobody can write the update log directly');
+
+-- Nor read it directly. The functions are the only way in OR out.
+do $$ begin
+  perform count(*) from public.jp_updates where doc_id = 'live1';
+  raise exception 'FAIL: the update log was read directly';
+exception when insufficient_privilege then null;
+  when others then if sqlerrm like 'FAIL:%' then raise; end if;
+end $$;
+select pg_temp.ok(true, 'LIVE: nor read it directly, grant or no grant');
+
+-- Flushing is allowed now, by any member, without the lock -- and advances the
+-- version so a turn-based client notices the sim has moved.
+-- Two statements, not one expression: Postgres does not promise to evaluate a
+-- mutating function before a sibling subquery, so comparing the flush's return
+-- to a fresh read of the row in the same expression can read the OLD version.
+select pg_temp.be('b');
+create temporary table _flush as
+  select public.jp_live_flush('live1', '<div>merged by the CRDT</div>', null) as v;
+reset role;
+select pg_temp.ok((select v from _flush) = (select version from public.jp_docs where doc_id = 'live1'),
+                  'LIVE: a member can flush the rendered sim and gets the new version back');
+set role authenticated;
+select pg_temp.be('b');
+reset role;
+select pg_temp.ok((select content from public.jp_docs where doc_id = 'live1') = '<div>merged by the CRDT</div>',
+                  'LIVE: and jp_docs.content carries it, so share links and copy-out still work');
+select pg_temp.ok((select locked_by from public.jp_docs where doc_id = 'live1') is null,
+                  'LIVE: with no lock involved at any point');
+
+-- jp_doc and jp_list report the flag, so the client can tell which mode to open in.
+set role authenticated;
+select pg_temp.be('a');
+select pg_temp.ok((select live from public.jp_doc('live1')),
+                  'LIVE: jp_doc reports the flag');
+select pg_temp.ok((select live from public.jp_list() where doc_id = 'live1'),
+                  'LIVE: and so does jp_list');
+
+-- Trimming bounds the log. Not compaction -- it keeps the newest and drops the
+-- tail, which is only safe because a flush has written the sim out first.
+select pg_temp.be('a');
+select public.jp_live_push('live1', 'x1');
+select public.jp_live_push('live1', 'x2');
+select public.jp_live_push('live1', 'x3');
+select pg_temp.ok(public.jp_live_trim('live1', 2) >= 1, 'LIVE: trimming removes the old tail');
+select pg_temp.ok((select count(*) from public.jp_live_pull('live1', 0)) = 2,
+                  'LIVE: and keeps exactly what it was asked to keep');
+
+-- Switching live OFF clears the log, so turning it back on later cannot replay
+-- a stale history over jp_docs.content.
+reset role;
+select pg_temp.be('a');
+select public.jp_set_live('live1', false);
+select pg_temp.ok((select count(*) from public.jp_updates where doc_id = 'live1') = 0,
+                  'LIVE: switching it off clears the update log');
+select pg_temp.ok((select content from public.jp_docs where doc_id = 'live1') = '<div>merged by the CRDT</div>',
+                  'LIVE: and leaves the written sim alone');
+
+-- And deleting the sim takes its updates with it.
+select pg_temp.be('a');
+select public.jp_set_live('live1', true);
+set role authenticated;
+select pg_temp.be('a');
+select public.jp_live_push('live1', 'doomed');
+reset role;
+delete from public.jp_docs where doc_id = 'live1';
+select pg_temp.ok((select count(*) from public.jp_updates where doc_id = 'live1') = 0,
+                  'LIVE: deleting a joint sim takes its update log with it');
+
 reset role;
 \echo '--- all joint-post database checks passed ---'

@@ -124,7 +124,7 @@ Each item keeps a **Done when…**. Check items off (`- [x]`) as they ship, and 
       Two real faults, neither visible until it was exercised:
       - The byline was whoever pressed Share, alone. `sharePayload()` built `authors` from `getAuth()` and never asked who else was on the sim. It now reads `jp_roster()`; `share.js` already joined a list of names, it was only ever sent one.
       - **Only the writer who published could see the share.** `shared_docs_own` asked `auth.uid() = owner_uid`, so every other member's dialog said the sim was not shared — and publishing it upserted onto a row they were not allowed to update, failing with nothing they could act on. The policy now also accepts `is_jp_member(doc_id)`, redefined below the JP section because that is where `is_jp_member()` exists. Solo sims are unaffected.
-      **The schema change is not applied yet — deploy the app first, then run `schema.sql`.** Four checks in `supabase/test/run.sh`, four in `test/jp_browser.js`.
+      **Applied 2026-10-04**, after the app went out in `826850a`. `supabase/migrations/2026-09-21-joint-share-links.sql` is the standalone copy. Four checks in `supabase/test/run.sh`, four in `test/jp_browser.js`.
 
 - [x] **[0] Test: deleting an account while the server is unreachable.** _Done 2026-08-26 — no fault found._
       Walked through in a browser with the Supabase route aborted, as `test/account_offline_browser.js`, which is now the repeatable version of "by hand". `deleteAccount()` refuses outright rather than half-deleting: the writer is told nothing was deleted, their sims stay, they stay signed in, and no deletion notice is left to greet them on the next load. Reconnected, the same action stamps `deleted_at` as it should. Eight checks.
@@ -277,7 +277,27 @@ version bump along with Batch 5's. See `memory/session_lcars_2026-09-onboarding.
 
 **Read `memory/session_lcars_2026-08-realtime-brief.md` first.**
 
-- [ ] **[+5] Yjs-backed simultaneous editing.**
+> **SPIKE DONE 2026-10-04 — it works, and the feared part turned out not to be the problem.** On `claude/jp-live-writing`, 19 checks in `test/live_spike_browser.js`.
+>
+> **The brief was wrong about where the difficulty was**, and in a useful direction. It called the marker, name-bolding and colour passes "the project" — bulk `innerHTML` rewrites a character-level CRDT cannot survive. True of `transformNow()` as written, but those passes are **pure functions of the text**: `lrApplyMarkers()` strips every span it has written and re-derives them from the characters, and `lrApplyCharColors()` does the same. They are a *view* of the content, not content.
+>
+> So they do not need reconciling with the CRDT — they need **demoting out of the document**, as ProseMirror decorations. Proven the only way that counts: the Yjs state vector is byte-identical before and after a full redraw with every pass on, zero update events fire, every marker type is still drawn, the document holds no marker markup, and a real keystroke still reaches the shared document.
+>
+> A real sim round-trips keeping every word, the block count, the indent, the list, the blank lines and the bold. Copy-out is unchanged except that bold pasted from Google Docs now *survives* it.
+>
+> **INTEGRATED AND DEPLOYED 2026-10-04.** Live co-authoring is in the app, opt-in per sim, off by default, switched on by the sim's **owner** alone. `jpCanCreate()` is untouched, so only a super admin can start a joint sim at all — a live sim can only exist where an admin made the sim and its owner chose it.
+>
+> **Transport is the poll, as recommended:** `jp_updates` is an append-only log of Yjs updates, pushed and pulled over PostgREST through `security definer` functions. No WebSocket and no `supabase-js`. `jp_live_flush()` writes the rendered sim back to `jp_docs.content` so the sim list, dashboard, search, share links, copy-out and the turn-based fallback all keep working unchanged. **It takes no lock, and is refused on a sim that is not live** — which keeps `jp_save()` the only content path on a turn-based sim, with a test for exactly that.
+>
+> **Deferred, not broken — five editor features are held off while live and say so when tried:** the source view, inserting a template, restoring a revision, renaming a speaker throughout the sim, and undoing a cleaned-up paste. Each rewrites the whole sim at once. Expressing them as CRDT edits is the next piece of work.
+>
+> **Also still owed:** real compaction. `jp_live_trim()` bounds the log but does not compact it — the proper answer is a stored compacted state replayed from, rather than keeping the newest N updates.
+>
+> **The three bugs two browsers found, worth not re-introducing:** advancing the pull cursor from your own push (it skips whatever landed in between, and loses words); deciding which mode to open a sim in before the reload has said which mode it is in; and switching live on or off underneath somebody else's open editor.
+>
+> **Follow-up owed:** the decoration patterns in `live-editor.js` mirror `lrApplyMarkers()`, and two copies of a marker pattern is the duplication `lcars-render.js` exists to prevent. The test checks they agree; the fix is to export the patterns from `lcars-render.js` and delete the copies.
+
+- [x] **[+5] Yjs-backed simultaneous editing.** _Shipped 2026-10-04 — see above. Awaiting small-scale real use._
       This reverses the earlier "explicitly NOT building simultaneous typing" line, deliberately and at the user's request, after turn-based Joint Posts was built, shipped in 4.24 and used by two writers. The reason is competitive, in their words: _"otherwise people will just choose Google Docs over LCARS."_
       The CRDT is the easy half — **Yjs is solved and must not be hand-rolled.** The project is that this editor is a hand-rolled `contenteditable` whose marker, name-bolding and character-colour passes rewrite its HTML in bulk, which a character-level CRDT binding cannot survive.
       **The build-step question is now settled by Batch 3.** The offline download is frozen, so a bundler no longer costs the one-file copy. Vendoring a pre-built bundle remains an option; it is no longer forced.
@@ -500,6 +520,7 @@ Not development, not batched, and **user-triggered** — they run when the user 
 
 Settled, with reasons. Do not re-open without a new one.
 
+- **A pre-built library file may be committed as a plain `.js`.** _2026-10-04._ The one exception to the no-build-step rule, taken so live writing can use Yjs. The bundle is produced outside the project, once, and committed as an ordinary file loaded by a normal `<script>` tag — so the app still runs by opening the files, with no npm, no `node_modules` and no build command in the repo. **What made it affordable:** the offline download is frozen and is to become a deliberately stripped-down true-offline tool with no account management and no joint posts, so live writing never has to reach the one-file build. That retired the bundler question rather than answering it. The cost accepted knowingly: updating the library is a manual rebuild, not a version bump. See `CLAUDE.md` → What not to touch.
 - **The one-file offline download is frozen.** _2026-08-24._ Stops at a stated version rather than absorbing online-only features. A purpose-built "LCARS Lite" is the preferred future answer over shoehorning. See Batch 3.
 - **Character wiki import — scrapped.** _2026-08-24._ `parseServiceRecordWikitext()` / `parseRibbonsWikitext()` and the whole import idea are dropped, along with the service record and ribbon data they would have filled. SB118 HQ already tracks character data; building it here creates redundancy that makes integration harder.
 - **Whole-sim wikitext export — dropped.** _2026-08-24._ Replaced by the quote-with-citation idea. People should link to the archive.

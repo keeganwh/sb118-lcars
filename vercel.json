@@ -11,7 +11,7 @@
   ],
   "headers": [
     {
-      "source": "/(LCARS.html|share.html|lcars.css|lcars-render.js|lcars.js|share.js)",
+      "source": "/(LCARS.html|share.html|lcars.css|lcars-render.js|lcars.js|share.js|live-bundle.js)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]
