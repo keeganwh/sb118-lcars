@@ -10,8 +10,8 @@
 -- WHAT IT DOES.
 --   * feedback_reports gains `parent_id`: a split-off ticket points at the
 --     report it came from.
---   * admin_list_feedback() also returns parent_id and the parent's ticket
---     number, so the queue can say which ticket a piece came from.
+--   * admin_list_feedback() also returns parent_id and the ticket number of
+--     the parent, so the queue can say which ticket a piece came from.
 --   * admin_feedback_split() is new: it files the pieces under the original
 --     writer, moves any screenshot to the first piece, and archives the
 --     original with an unread note naming the new numbers.
@@ -135,7 +135,7 @@ begin
     values
       (nid, par.writer_uid, knd, ttl, bod, nno, par.app_version, par.context,
        case when n = 1 then par.capture_shot end, par.id, par.created_at);
-    -- chr(35) is a hash sign. Spelled out because the Supabase SQL editor's
+    -- chr(35) is a hash sign. Spelled out because the Supabase SQL editor
     -- statement splitter reads a hash inside a string as a comment, and the
     -- function body then appears never to close.
     nums := nums || case when nums = '' then '' else ', ' end || chr(35) || nno;

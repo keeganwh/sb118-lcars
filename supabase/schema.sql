@@ -2463,13 +2463,13 @@ comment on column public.feedback_reports.capture_page is
 -- own number, status and reply, so it can be finished without waiting on the
 -- slowest of the others.
 --
--- THE PIECES ARE THE WRITER'S REPORTS, not the admin's. They are filed under
--- the original writer, so they appear in that writer's My reports and the reply
+-- THE PIECES ARE THE WRITERS REPORTS, not the admin s. They are filed under
+-- the original writer, so they appear in that writer s My reports and the reply
 -- to each lands where the reply to the original would have. That is why this is
 -- a security definer function: nobody else can file a report as somebody else.
 --
 -- THE ORIGINAL IS ARCHIVED WITH A NOTE naming the new numbers, and the note is
--- unread, so the writer's badge tells them what happened. Its words are kept
+-- unread, so the writer s badge tells them what happened. Its words are kept
 -- verbatim -- the pieces are excerpts, and the original is the record of what
 -- was actually said.
 --
@@ -2541,7 +2541,7 @@ begin
     values
       (nid, par.writer_uid, knd, ttl, bod, nno, par.app_version, par.context,
        case when n = 1 then par.capture_shot end, par.id, par.created_at);
-    -- chr(35) is a hash sign. Spelled out because the Supabase SQL editor's
+    -- chr(35) is a hash sign. Spelled out because the Supabase SQL editor
     -- statement splitter reads a hash inside a string as a comment, and the
     -- function body then appears never to close.
     nums := nums || case when nums = '' then '' else ', ' end || chr(35) || nno;
