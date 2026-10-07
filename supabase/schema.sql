@@ -2529,7 +2529,7 @@ begin
     bod := nullif(btrim(coalesce(part ->> 'body',  '')), '');
     knd := coalesce(part ->> 'kind', par.kind);
     if ttl is null then raise exception 'Piece % needs a headline.', n; end if;
-    if length(ttl) > 100 then raise exception 'Piece %''s headline is over 100 characters.', n; end if;
+    if length(ttl) > 100 then raise exception 'The headline of piece % is over 100 characters.', n; end if;
     if bod is null then raise exception 'Piece % has no text.', n; end if;
     if knd not in ('bug', 'feature') then raise exception 'Piece % has an unknown kind: %', n, knd; end if;
 
