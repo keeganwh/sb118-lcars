@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-15',
     changes: [
+      'Changed: pasting no longer removes blank lines by itself. It used to tidy the whole sim on every paste, so pasting a single line wiped out every double blank line you had typed on purpose anywhere in it. Now, if what you paste has extra blank lines, LCARS offers to tidy them, in the pasted part only. A new Tidy button in the toolbar (under Format on a phone) does the whole sim when you ask, and either one can be undone.',
       'Added: a Space between paragraphs setting under Settings, Text size, for writers who press Enter once between paragraphs rather than twice. Choose half a line or a full line and the editor spaces your paragraphs for you; when you copy the sim out, each gap becomes a real blank line, so it arrives in Gmail and Google Groups looking the same. If you also type blank lines yourself, you will not get two. The default is unchanged.',
       'Changed: links in a sim work like they do in Google Docs. Click a link, or move the cursor into one, and a small bubble shows where it goes: click the address to open it in a new tab, or copy, edit or remove it. Ctrl+K and the Link button open the same bubble beside your text rather than a box over the sim, and Ctrl+click opens a link straight away. Typing a bare address such as starbase118.net now makes a working link.',
       'Fixed: in the App Feedback panel, switching from My reports to a new report straight away could wipe the new report form a moment later, as the list finished loading over it.',
@@ -5496,24 +5497,72 @@ function stripInlineStyles(html) {
 }
 
 let _pasteCleanSnap = null;
-function collapsePasteBlankLines(ed) {
+// Runs of two or more blank lines, collapsed to one. `scope`, when given, is
+// the set of blocks allowed to be removed -- the blocks a paste just added --
+// so tidying a paste never touches a blank line the writer typed elsewhere.
+// That was the old behaviour's real fault: it ran over the WHOLE sim on every
+// paste, so pasting one line removed every deliberate double blank line in it.
+// `dry` reports what would go without removing it.
+function collapsePasteBlankLines(ed, scope, dry) {
   const kids = Array.from(ed.children);
   const toRemove = [];
   let runStart = -1;
+  const take = (from, to) => {
+    for (let k = from; k < to; k++) if (!scope || scope.has(kids[k])) toRemove.push(kids[k]);
+  };
   for (let i = 0; i < kids.length; i++) {
     const empty = kids[i].textContent.trim() === '';
     if (empty) {
       if (runStart === -1) runStart = i;
     } else {
-      if (runStart !== -1 && i - runStart >= 2)
-        for (let k = runStart + 1; k < i; k++) toRemove.push(kids[k]);
+      if (runStart !== -1 && i - runStart >= 2) take(runStart + 1, i);
       runStart = -1;
     }
   }
-  if (runStart !== -1 && kids.length - runStart >= 2)
-    for (let k = runStart + 1; k < kids.length; k++) toRemove.push(kids[k]);
-  toRemove.forEach(el => el.remove());
+  if (runStart !== -1 && kids.length - runStart >= 2) take(runStart + 1, kids.length);
+  if (!dry) toRemove.forEach(el => el.remove());
   return toRemove.length > 0;
+}
+
+// A paste no longer tidies itself. If what was pasted holds runs of blank
+// lines, this OFFERS to collapse them -- in the pasted part only.
+let _pasteAdded = null;
+function showPasteTidyOffer(added) {
+  _pasteAdded = added;
+  let b = document.getElementById('paste-clean-banner');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'paste-clean-banner';
+    b.className = 'paste-clean-banner';
+    const ec = document.getElementById('ec');
+    ec.insertBefore(b, ec.firstChild);
+  }
+  b.innerHTML = '<span class="pcb-msg">What you pasted has extra blank lines in it.</span>' +
+    '<button class="tbb pcb-undo" onclick="tidyPastedBlankLines()">Tidy them</button>' +
+    '<button class="tbb pcb-close" onclick="document.getElementById(\'paste-clean-banner\').remove()" aria-label="Leave them">' + ic('x','ic-sm') + '</button>';
+  clearTimeout(b._t);
+  b._t = setTimeout(() => { if (b.parentElement) b.remove(); }, 12000);
+}
+
+function tidyPastedBlankLines() {
+  if (jpLiveNotHere('Tidying blank lines')) return;
+  const ed = document.getElementById('editor');
+  const added = new Set([...(_pasteAdded || [])].filter(n => n.isConnected));
+  _pasteAdded = null;
+  const snap = ed.innerHTML;
+  if (collapsePasteBlankLines(ed, added)) { showPasteCleanBanner(snap); schedSave(); }
+  else { const b = document.getElementById('paste-clean-banner'); if (b) b.remove(); }
+}
+
+// The whole sim, on request -- the Tidy button in the toolbar.
+function tidyBlankLines() {
+  if (jpEditBlocked && jpEditBlocked()) return;
+  if (jpLiveNotHere('Tidying blank lines')) return;
+  const ed = document.getElementById('editor');
+  if (!ed || (!curId && !curTmplId)) return;
+  const snap = ed.innerHTML;
+  if (collapsePasteBlankLines(ed)) { showPasteCleanBanner(snap); schedSave(); }
+  else showToast('No extra blank lines to tidy — every gap is a single blank line.');
 }
 function showPasteCleanBanner(snapshot) {
   _pasteCleanSnap = snapshot;
@@ -5525,7 +5574,7 @@ function showPasteCleanBanner(snapshot) {
     const ec = document.getElementById('ec');
     ec.insertBefore(b, ec.firstChild);
   }
-  b.innerHTML = '<span class="pcb-msg">Extra blank lines removed</span><button class="tbb pcb-undo" onclick="undoPasteClean()">Undo</button><button class="tbb pcb-close" onclick="document.getElementById(\'paste-clean-banner\').remove()">' + ic('x','ic-sm') + '</button>';
+  b.innerHTML = '<span class="pcb-msg">Extra blank lines tidied</span><button class="tbb pcb-undo" onclick="undoPasteClean()">Undo</button><button class="tbb pcb-close" onclick="document.getElementById(\'paste-clean-banner\').remove()">' + ic('x','ic-sm') + '</button>';
   clearTimeout(b._t);
   b._t = setTimeout(() => { if (b.parentElement) b.remove(); }, 8000);
 }
@@ -5549,11 +5598,12 @@ function installPasteHandler() {
     // rather than leaving it to survive until the doc is next reopened
     if (isAcademyActive()) cleaned = stripFormattingHtml(cleaned);
     const ed = document.getElementById('editor');
+    const before = new Set(ed.children);
     document.execCommand('insertHTML', false, cleaned);
     normalizeEditorContent(ed);
     setTimeout(() => {
-      const snap = ed.innerHTML;
-      if (collapsePasteBlankLines(ed)) { showPasteCleanBanner(snap); schedSave(); }
+      const added = new Set([...ed.children].filter(n => !before.has(n)));
+      if (added.size && collapsePasteBlankLines(ed, added, true)) showPasteTidyOffer(added);
     }, 0);
   });
 }
@@ -12610,14 +12660,14 @@ let _mobApplied = null;   // last layout applied, so the moves run once per chan
 // together: the two inline marks, then indent and outdent as the pair they
 // are, then the two that change a whole line. In the old order the grid split
 // Indent and Outdent across two rows.
-const MOB_FMT_IDS = ['tbb-s','tbb-link','tbb-ind','tbb-outd','tbb-ul','tbb-cf'];
+const MOB_FMT_IDS = ['tbb-s','tbb-link','tbb-ind','tbb-outd','tbb-ul','tbb-cf','tbb-tidy'];
 // Several of these are icon-only in the desktop toolbar and lean on their
 // tooltip, which a touchscreen never shows. In the panel there is room for the
 // word, so one is added on the way in and taken off on the way back.
 const MOB_BTN_LABELS = {
   'tbb-cf':'Clear formatting', 'tbb-s':'Strikethrough', 'tbb-link':'Link',
   'tbb-ind':'Indent', 'tbb-outd':'Outdent', 'tbb-ul':'Bullet list',
-  'tbb-src':'HTML source', 'tbb-pil':'Paragraph marks',
+  'tbb-src':'HTML source', 'tbb-pil':'Paragraph marks', 'tbb-tidy':'Tidy blank lines',
 };
 function _mobLabel(el) {
   const text = MOB_BTN_LABELS[el.id];
