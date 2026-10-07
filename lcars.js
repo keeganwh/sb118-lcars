@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-15',
     changes: [
+      'Admin: the App Feedback queue can now be exported as one Markdown document, by Copy for Claude or Download .md. It exports exactly what is in view, so the tabs and the search filter it, and it opens with a short note asking for the reports to be reviewed and discussed before any work starts.',
       'Changed: a bug report or a feature request now starts with a short headline, and reports are numbered \u2014 so you can point at one by its number in a conversation instead of describing it again. The headline is the first box on the form and is limited to 100 characters',
       'Changed: the first screen has been rebuilt. It says what LCARS is, notes that it is a work in progress and not an HQ project, and splits the choices into four labelled sections \u2014 signing in, creating an account, Google and Discord, and using LCARS offline \u2014 each with a line saying what it actually means. It has its own calmer colours now rather than borrowing Command Red from the duty palette, and scrolling down reveals a What is LCARS section, with screenshots, explaining what the app is for',
       'Changed: the sign-in screen is shorter on a phone, so the Learn more prompt below it is on screen without scrolling. Discord and Google share a row, and the note about this being a work in progress fits on one line',
@@ -2027,6 +2028,11 @@ function fbAdminCard() {
             oninput="fbSearch(this.value)" value="${esc(_fbQuery)}">
           <span class="set-note adm-fb-count" id="fb-count"></span>
         </div>
+        <div class="adm-fb-exp">
+          <button class="btn btn-s" onclick="fbExportCopy()" title="Copy the tickets in view as one Markdown document, ready to paste into Claude">${ic('copy')} Copy for Claude</button>
+          <button class="btn btn-s" onclick="fbExportDownload()" title="Save the tickets in view as a .md file">${ic('download')} Download .md</button>
+          <span class="set-note" style="margin:0">Exports what is in view — the tab and the search above decide which tickets.</span>
+        </div>
         <div id="adm-fb"><span class="set-note">Loading…</span></div>
       </div>
     </div>`;
@@ -2087,6 +2093,117 @@ function fbSearch(q) {
   paintFeedback();
 }
 
+// What the list is showing right now: the tab decides whether archived rows
+// were fetched at all, and the search narrows what came back. The export uses
+// this too, so it hands over exactly the tickets on screen.
+function fbVisibleRows() {
+  const q = _fbQuery.trim().toLowerCase();
+  return q ? _fbReports.filter(f => fbHaystack(f).indexOf(q) >= 0) : _fbReports;
+}
+
+// ── Exporting the queue for Claude ───────────────────────────────────────
+// One Markdown document of the tickets in view, written to be pasted into (or
+// attached to) a conversation with Claude. It opens with a short brief so the
+// reader reviews before building, and names the filter that produced it so a
+// stale or narrowed export is never mistaken for the whole queue.
+const FB_EXPORT_BRIEF = [
+  '> **For Claude, and anyone else reading:** these are LCARS bug reports and feature requests exported from the Admin panel.',
+  '> **Review them and discuss them with me before implementing anything.** Some tickets hold several separate pieces of work and will need splitting;',
+  '> some may be unclear, duplicated or already fixed. Do not start writing code off the back of this document.',
+];
+
+function fbExportUtc(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d) ? String(iso) : d.toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+}
+
+// A writer's text is quoted rather than pasted bare, so a line of theirs that
+// happens to start with # or - cannot turn into a heading or a list in ours.
+function fbExportQuote(t) {
+  return String(t || '').replace(/\r\n?/g, '\n').trim().split('\n').map(l => '> ' + l).join('\n');
+}
+
+function fbExportFilter() {
+  const q = _fbQuery.trim();
+  return (_fbArchived ? 'Open and archived tickets' : 'Open tickets only (archived left out)') +
+         (q ? ', searched for "' + q + '"' : ', no search');
+}
+
+function fbExportFilename() {
+  const slug = _fbQuery.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+  return 'lcars-feedback-' + new Date().toISOString().slice(0, 10) + '-' +
+         (_fbArchived ? 'all' : 'open') + (slug ? '-' + slug : '') + '.md';
+}
+
+function fbExportMarkdown() {
+  const rows = fbVisibleRows();
+  const bugs = rows.filter(f => f.kind === 'bug').length;
+  const out = [
+    '# LCARS feedback export', '',
+    ...FB_EXPORT_BRIEF, '',
+    '- **Exported:** ' + fbExportUtc(new Date().toISOString()) + ' by ' + ((getAuth() || {}).writerId || 'an admin') + ', app version ' + APP_VERSION,
+    '- **Filter:** ' + fbExportFilter(),
+    '- **Tickets:** ' + rows.length + ' of the ' + _fbReports.length + ' loaded (' +
+      bugs + ' bug' + (bugs === 1 ? '' : 's') + ', ' + (rows.length - bugs) + ' feature request' + (rows.length - bugs === 1 ? '' : 's') + ')',
+    '',
+  ];
+  if (!rows.length) out.push('_No tickets match this filter._', '');
+  rows.forEach(f => {
+    const c = (f.context && typeof f.context === 'object') ? f.context : {};
+    const ctx = fbContextLine(c);
+    const errs = fbCleanErrors(c.errors);
+    out.push('---', '',
+      '## ' + fbTicket(f) + ' · ' + (f.kind === 'bug' ? 'Bug' : 'Feature request') + ' · ' + fbHeadline(f).replace(/\s+/g, ' '), '',
+      '- **Status:** ' + fbStatusLabel(f.status) + (f.archived_at ? ' (archived ' + fbExportUtc(f.archived_at) + ')' : ''),
+      '- **Filed by:** ' + (f.writer_id || 'unknown') + (f.display_name ? ' (' + f.display_name + ')' : '') + ' on ' + fbExportUtc(f.created_at),
+      '- **App version:** ' + (f.app_version || 'not recorded'),
+      '- **Context:** ' + (ctx || 'none recorded') + (c.platform ? ' · ' + c.platform : ''),
+      '- **Screenshot:** ' + (f.capture_shot ? 'yes — attached in the Admin panel (not included in this file)'
+                              : f.capture_purged_at ? 'there was one, since destroyed' : 'none'),
+      '');
+    out.push(fbExportQuote(f.body) || '> (no text)', '');
+    if (errs.length) out.push('Console errors at the time:', '', ...errs.map(e => '    ' + String(e).replace(/\n/g, ' ')), '');
+    if (f.admin_note) {
+      out.push('**Admin note** (' + (f.status_by || 'an admin') + (f.status_at ? ', ' + fbExportUtc(f.status_at) : '') + '):', '',
+               fbExportQuote(f.admin_note), '');
+    } else if (f.status_at) {
+      out.push('_Last actioned by ' + (f.status_by || 'an admin') + ', ' + fbExportUtc(f.status_at) + '. No note._', '');
+    }
+  });
+  return out.join('\n');
+}
+
+// Copy is the main route: the point is handing this to Claude, and pasting
+// works the same on a phone and a computer. execCommand is the fallback for a
+// browser that refuses the async clipboard.
+function fbExportCopy() {
+  const n = fbVisibleRows().length;
+  const md = fbExportMarkdown();
+  const done = () => showToast('Copied ' + n + ' ticket' + (n === 1 ? ' — paste it' : 's — paste them') + ' into Claude.', 3600);
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = md; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    let okc = false; try { okc = document.execCommand('copy'); } catch(e) {}
+    ta.remove();
+    if (okc) done(); else showToast('This browser would not copy it — use Download instead.', 4600);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(md).then(done, fallback);
+  else fallback();
+}
+
+// A file is for attaching. A Blob and an <a download> stay inside the page,
+// unlike window.open() + document.write(), which is blank on iOS Safari.
+function fbExportDownload() {
+  const blob = new Blob([fbExportMarkdown()], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = fbExportFilename();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 // Expanding a ticket is done on the row itself rather than by repainting the
 // list: a repaint would throw away a reply half-typed in another ticket.
 function fbToggle(id) {
@@ -2108,7 +2225,7 @@ function paintFeedback() {
     return;
   }
   const q = _fbQuery.trim().toLowerCase();
-  const rows = q ? _fbReports.filter(f => fbHaystack(f).indexOf(q) >= 0) : _fbReports;
+  const rows = fbVisibleRows();
   if (cnt) {
     cnt.textContent = q ? rows.length + ' of ' + _fbReports.length + ' tickets'
                         : _fbReports.length + ' ticket' + (_fbReports.length === 1 ? '' : 's');

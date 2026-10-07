@@ -1132,6 +1132,7 @@ body.academy #editor .om{font-style:normal}
 .adm-fb-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 10px}
 .adm-fb-q{flex:1 1 240px;font-size:0.8rem}
 .adm-fb-count{margin:0;white-space:nowrap}
+.adm-fb-exp{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px}
 .adm-fb-list{max-height:62vh;overflow:auto;padding-right:4px}
 /* The summary is a button so it takes a keyboard as well as a finger, which
    means undoing every default a button carries. */

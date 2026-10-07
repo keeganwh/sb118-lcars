@@ -26,10 +26,12 @@ function rpc(fn, a, me) {
     case 'my_role': return who.role;
     case 'feedback_submit': {
       if (!String(a.p_body || '').trim()) throw new Error('Tell us what happened.');
+      DB.ticket = (DB.ticket || 0) + 1;
       DB.order.push('row:' + a.p_id);
       DB.reports.push({
         id: a.p_id, writer_uid: me, writer_id: who.wid, display_name: null,
-        kind: a.p_kind, body: a.p_body.trim(), app_version: a.p_app_version,
+        kind: a.p_kind, title: a.p_title || null, ticket_no: DB.ticket,
+        body: a.p_body.trim(), app_version: a.p_app_version,
         context: a.p_context, capture_page: a.p_capture_page, capture_shot: a.p_capture_shot,
         status: 'new', admin_note: null, status_at: null, status_by: null,
         archived_at: null, capture_purged_at: null, writer_seen_at: null,
@@ -154,6 +156,9 @@ async function ctxFor(browser, who, errors) {
   const s = await ctxFor(browser, S, errors);
   const pass = [], fail = [];
   const ok = (c, l) => (c ? pass : fail).push(l);
+  // A crash used to end the run with a stack trace and no tally, hiding every
+  // check after it. Now it is recorded as one more FAIL and the tally prints.
+  try {
 
   // --- the button ----------------------------------------------------------
   ok(await w.p.evaluate(() => !document.getElementById('btn-feedback').classList.contains('hidden')),
@@ -203,13 +208,24 @@ async function ctxFor(browser, who, errors) {
   await w.p.evaluate(() => fbCaptureShot());
   await w.p.waitForTimeout(1500);
 
-  await w.p.evaluate(() => { document.getElementById('fb-text').value = 'The toolbar vanished on a phone.'; });
+  // The headline became required after this suite was written, and the suite
+  // never filled it in -- so the send was correctly refused and every check
+  // below it crashed on a report that did not exist. Prove the refusal, then
+  // file it properly.
+  await w.p.evaluate(() => { document.getElementById('fb-text').value = 'The toolbar vanished on a phone.'; fbSend(); });
+  await w.p.waitForTimeout(400);
+  ok(DB.reports.length === 0
+     && /headline/.test(await w.p.evaluate(() => document.getElementById('fb-msg').textContent)),
+     'a report with no headline is refused, and the writer is told why');
+  await w.p.evaluate(() => { document.getElementById('fb-title').value = 'Toolbar vanished'; });
   await w.p.evaluate(() => fbSend());
   await w.p.waitForTimeout(500);
 
   ok(DB.reports.length === 1 && DB.reports[0].body === 'The toolbar vanished on a phone.',
      'the report reaches the database');
   const rep = DB.reports[0];
+  if (!rep) throw new Error('the first report never reached the database');
+  ok(rep.title === 'Toolbar vanished', 'and its headline goes with it');
   ok(!rep.capture_page, 'no page copy is sent — the screenshot is the attachment');
   ok(!!rep.capture_shot && Object.keys(DB.objects).includes(rep.capture_shot),
      'the screenshot is uploaded and the row points at it');
@@ -235,10 +251,12 @@ async function ctxFor(browser, who, errors) {
   DB.storageDown = true;
   await w.p.evaluate(() => { fbTab('new'); });
   await w.p.waitForTimeout(250);
-  await w.p.evaluate(() => { document.getElementById('fb-text').value = 'Second report, storage broken.'; fbSend(); });
+  await w.p.evaluate(() => { document.getElementById('fb-title').value = 'Storage down';
+                             document.getElementById('fb-text').value = 'Second report, storage broken.'; fbSend(); });
   await w.p.waitForTimeout(700);
   const second = DB.reports.find(r => r.body === 'Second report, storage broken.');
   ok(!!second, 'a report still sends when the capture cannot be uploaded');
+  if (!second) throw new Error('the second report never arrived, so the admin half cannot run');
   ok(!!second && !second.capture_shot,
      'and arrives with no screenshot rather than not arriving at all');
   DB.storageDown = false;
@@ -263,6 +281,40 @@ async function ctxFor(browser, who, errors) {
   await s.p.evaluate(() => fbCloseView());
   ok(await s.p.evaluate(() => /21|KB/.test(document.getElementById('adm-usage').textContent)),
      'and the usage overview alongside it');
+
+  // --- exporting for Claude ------------------------------------------------
+  const md = await s.p.evaluate(() => fbExportMarkdown());
+  ok(/^# LCARS feedback export/.test(md) && /discuss them with me before implementing anything/.test(md)
+     && /Do not start writing code/.test(md), 'the export opens with the brief to review before building');
+  ok(/Filter:\*\* Open tickets only.*no search/.test(md), 'and says which filter produced it');
+  ok(/## #1 · Bug · Toolbar vanished/.test(md) && /## #2 · Bug · Storage down/.test(md),
+     'every ticket in view is in it, by number, kind and headline');
+  ok(/> The toolbar vanished on a phone\./.test(md) && /Filed by:\*\* W111/.test(md)
+     && /App version:\*\* \d/.test(md), 'with the body as written, who filed it and the version');
+  ok(/Context:\*\* .*\/.*\/.*·/.test(md), 'and the skin/mode/vibe context');
+  ok(/Screenshot:\*\* yes — attached in the Admin panel/.test(md) && /Screenshot:\*\* none/.test(md)
+     && !md.includes(rep.capture_shot), 'a screenshot is noted, never given as a path');
+  await s.p.evaluate(() => { const q = document.getElementById('fb-q'); q.value = 'storage'; fbSearch('storage'); });
+  const md2 = await s.p.evaluate(() => fbExportMarkdown());
+  const fn2 = await s.p.evaluate(() => fbExportFilename());
+  ok(/Storage down/.test(md2) && !/Toolbar vanished/.test(md2) && /searched for "storage"/.test(md2)
+     && /1 of the 2 loaded/.test(md2), 'a search narrows the export to the tickets in view, and says so');
+  ok(/^lcars-feedback-\d{4}-\d{2}-\d{2}-open-storage\.md$/.test(fn2), 'the filename sorts by date and names the filter: ' + fn2);
+  // The real buttons, end to end: the clipboard gets the document, the
+  // download hands over a .md with the same contents.
+  // A fresh account is offered the Getting Started tour, whose overlay takes
+  // clicks. A real click is the point here, so put the tour away first.
+  await s.p.evaluate(() => { if (document.getElementById('tour') && typeof tourEnd === 'function') tourEnd(true); });
+  await s.c.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:8131' });
+  await s.p.evaluate(() => navigator.clipboard.writeText('stale'));
+  await s.p.click('button[onclick="fbExportCopy()"]');
+  await s.p.waitForTimeout(300);
+  ok((await s.p.evaluate(() => navigator.clipboard.readText())) === md2, 'Copy for Claude puts the document on the clipboard');
+  const [dl] = await Promise.all([s.p.waitForEvent('download', { timeout: 3000 }),
+                                  s.p.click('button[onclick="fbExportDownload()"]')]);
+  const dlText = require('fs').readFileSync(await dl.path(), 'utf8');
+  ok(dl.suggestedFilename() === fn2 && dlText === md2, 'Download .md saves the same document under that name');
+  await s.p.evaluate(() => { document.getElementById('fb-q').value = ''; fbSearch(''); });
 
   // An ordinary writer's admin view offers neither.
   await w.p.evaluate(() => openAdmin());
@@ -345,6 +397,9 @@ async function ctxFor(browser, who, errors) {
   await s.p.evaluate(() => doModal());
   await s.p.waitForTimeout(600);
   ok(!DB.reports.some(r => r.id === rep.id), 'and a super admin can delete it outright');
+  } catch (e) {
+    fail.push('the run stopped early: ' + e.message);
+  }
 
   await browser.close();
   pass.forEach(l => console.log('PASS: ' + l));
