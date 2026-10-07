@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-15',
     changes: [
+      'Fixed: Tidy them on the paste banner did nothing if you took more than a moment to press it. The banner is also now a bar of its own near the bottom of the editor, in your accent colour, so it is hard to miss. Pop-up messages use the right text colour for your accent too, so they are easier to read, and longer messages wrap instead of running off the screen.',
       'Fixed: the blank-line banner sat inside the scrolling sim, so in a long sim it appeared out of sight above where you were working, and the offer to tidy a paste, or to undo a tidy, went unseen. It now sits at the top of the editor, always visible, and stays for 20 seconds. Ctrl+Z undoes a tidy while the banner is showing, and the undo is dropped once you type again or open another sim, so it can never bring back old text. The message after linking a character picture also stays up longer.',
       'Changed: pasting no longer removes blank lines by itself. It used to tidy the whole sim on every paste, so pasting a single line wiped out every double blank line you had typed on purpose anywhere in it. Now, if what you paste has extra blank lines, LCARS offers to tidy them, in the pasted part only. A new Tidy button in the toolbar (under Format on a phone) does the whole sim when you ask, and either one can be undone.',
       'Added: a Space between paragraphs setting under Settings, Text size, for writers who press Enter once between paragraphs rather than twice. Choose half a line or a full line and the editor spaces your paragraphs for you; when you copy the sim out, each gap becomes a real blank line, so it arrives in Gmail and Google Groups looking the same. If you also type blank lines yourself, you will not get two. The default is unchanged.',
@@ -5525,21 +5526,39 @@ function collapsePasteBlankLines(ed, scope, dry) {
   return toRemove.length > 0;
 }
 
-// The banner sits ABOVE the editor's scrolling area, beside the Academy and
-// template banners, not inside it. Inside #ec it scrolled with the sim, so in
-// any sim long enough to scroll it appeared above the visible part and was
-// never seen -- the offer to tidy and the Undo both went unnoticed.
+// The banner is a standalone bar floating near the bottom of the editor, in
+// the accent colour -- where the writer's eyes already are after a paste, and
+// impossible to scroll away. Inside #ec it scrolled off with the sim; as a
+// thin strip above the editor it was visible but easy to miss.
 function pasteBannerPlace(b) {
-  const ec = document.getElementById('ec');
-  ec.parentNode.insertBefore(b, ec);
+  document.body.appendChild(b);
+  pasteBannerAlign(b);
 }
+function pasteBannerAlign(b) {
+  const ec = document.getElementById('ec');
+  if (!b || !ec) return;
+  const r = ec.getBoundingClientRect();
+  b.style.left = (r.width ? r.left + r.width / 2 : window.innerWidth / 2) + 'px';
+}
+window.addEventListener('resize', () => pasteBannerAlign(document.getElementById('paste-clean-banner')));
 
 // A paste no longer tidies itself. If what was pasted holds runs of blank
 // lines, this OFFERS to collapse them -- in the pasted part only.
 let _pasteAdded = null;
+// What was pasted is remembered by POSITION -- the first and last block it
+// added, and how many blocks the sim had -- not by the elements themselves.
+// The formatting pass rebuilds the editor's elements about half a second after
+// a paste, so remembered elements were gone by the time anyone clicked, and
+// Tidy them did nothing. Positions survive that rebuild; the block count
+// confirms nothing has been added or removed since, and typing cancels the
+// offer outright (pasteCleanForget).
 function showPasteTidyOffer(added) {
   pasteCleanForget();
-  _pasteAdded = added;
+  const ed = document.getElementById('editor');
+  const kids = [...ed.children];
+  const idx = kids.map((k, i) => added.has(k) ? i : -1).filter(i => i >= 0);
+  _pasteAdded = { from: Math.min(...idx), to: Math.max(...idx), count: kids.length,
+                  doc: curId || ('t:' + curTmplId) };
   let b = document.getElementById('paste-clean-banner');
   if (!b) {
     b = document.createElement('div');
@@ -5548,20 +5567,26 @@ function showPasteTidyOffer(added) {
     pasteBannerPlace(b);
   }
   b.innerHTML = '<span class="pcb-msg">What you pasted has extra blank lines in it.</span>' +
-    '<button class="tbb pcb-undo" onclick="tidyPastedBlankLines()">Tidy them</button>' +
-    '<button class="tbb pcb-close" onclick="document.getElementById(\'paste-clean-banner\').remove()" aria-label="Leave them">' + ic('x','ic-sm') + '</button>';
+    '<button class="pcb-undo" onclick="tidyPastedBlankLines()">Tidy them</button>' +
+    '<button class="pcb-close" onclick="pasteCleanForget()" title="Leave them" aria-label="Leave them">' + ic('x','ic-sm') + '</button>';
   clearTimeout(b._t);
-  b._t = setTimeout(() => { if (b.parentElement) b.remove(); }, 12000);
+  b._t = setTimeout(pasteCleanForget, 20000);
 }
 
 function tidyPastedBlankLines() {
   if (jpLiveNotHere('Tidying blank lines')) return;
   const ed = document.getElementById('editor');
-  const added = new Set([...(_pasteAdded || [])].filter(n => n.isConnected));
-  _pasteAdded = null;
+  const a = _pasteAdded;
+  const kids = [...ed.children];
+  if (!a || a.doc !== (curId || ('t:' + curTmplId)) || kids.length !== a.count) {
+    pasteCleanForget();
+    showToast('The sim has changed since that paste — use Tidy in the toolbar instead.', 4600);
+    return;
+  }
+  const added = new Set(kids.slice(a.from, a.to + 1));
   const snap = ed.innerHTML;
   if (collapsePasteBlankLines(ed, added)) { showPasteCleanBanner(snap); schedSave(); }
-  else { const b = document.getElementById('paste-clean-banner'); if (b) b.remove(); }
+  else { pasteCleanForget(); showToast('Nothing left to tidy in what you pasted.'); }
 }
 
 // The whole sim, on request -- the Tidy button in the toolbar.
@@ -5579,7 +5604,7 @@ function tidyBlankLines() {
 // throw away what they typed, or write one sim's text over another's.
 let _pasteCleanFor = null;
 function pasteCleanForget() {
-  _pasteCleanSnap = null; _pasteCleanFor = null;
+  _pasteCleanSnap = null; _pasteCleanFor = null; _pasteAdded = null;
   const b = document.getElementById('paste-clean-banner');
   if (b) b.remove();
 }
@@ -5593,7 +5618,7 @@ function showPasteCleanBanner(snapshot) {
     b.className = 'paste-clean-banner';
     pasteBannerPlace(b);
   }
-  b.innerHTML = '<span class="pcb-msg">Extra blank lines tidied</span><button class="tbb pcb-undo" onclick="undoPasteClean()">Undo</button><button class="tbb pcb-close" onclick="document.getElementById(\'paste-clean-banner\').remove()">' + ic('x','ic-sm') + '</button>';
+  b.innerHTML = '<span class="pcb-msg">Extra blank lines tidied.</span><button class="pcb-undo" onclick="undoPasteClean()">Undo</button><button class="pcb-close" onclick="pasteCleanForget()" title="Keep it" aria-label="Keep it">' + ic('x','ic-sm') + '</button>';
   clearTimeout(b._t);
   b._t = setTimeout(pasteCleanForget, 20000);
 }
@@ -5610,7 +5635,7 @@ function undoPasteClean() {
 
 function installPasteHandler() {
   // Typing after a tidy makes its snapshot stale (see pasteCleanForget).
-  document.getElementById('editor').addEventListener('input', () => { if (_pasteCleanSnap) pasteCleanForget(); });
+  document.getElementById('editor').addEventListener('input', () => { if (_pasteCleanSnap || _pasteAdded) pasteCleanForget(); });
   document.getElementById('editor').addEventListener('paste', e => {
     e.preventDefault();
     const html = e.clipboardData.getData('text/html');

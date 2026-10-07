@@ -54,16 +54,34 @@ const { chromium } = require('playwright');
     ok(!(await banner()), 'and a paste with no extra blank lines offers nothing');
 
     // --- a paste WITH runs: offered, not done --------------------------------
-    await paste('<p>Delta.</p><p></p><p></p><p></p><p>Echo.</p>');
+    await paste('<p>((Ten Forward)) Delta.</p><p></p><p></p><p></p><p>::Echo nods:: Echo.</p>');
     await p.waitForTimeout(200);
     const afterPaste = await lines();
-    ok(/Delta\.\|_\|_\|_\|Echo\./.test(afterPaste), 'pasted blank lines arrive as they were, not silently removed: ' + afterPaste);
+    ok(/Delta\.\|_\|_\|_\|::Echo nods:: Echo\./.test(afterPaste), 'pasted blank lines arrive as they were, not silently removed: ' + afterPaste);
     ok(/extra blank lines/.test(await banner()) && /Tidy them/.test(await banner()), 'and LCARS offers to tidy them');
 
+    // Wait as a person would. The formatting pass rebuilds the editor's
+    // elements about half a second after a paste; clicking straight away, as
+    // this test first did, never saw the bug where Tidy them then did nothing.
+    // The formatting pass waits until the caret leaves the editor, which is
+    // exactly what reaching for the banner does.
+    await p.evaluate(() => { getSelection().removeAllRanges(); document.getElementById('editor').blur(); });
+    await p.waitForTimeout(1500);
+    const look = await p.evaluate(() => {
+      const b = document.getElementById('paste-clean-banner'), ec = document.getElementById('ec');
+      const r = b.getBoundingClientRect(), e = ec.getBoundingClientRect();
+      const cs = getComputedStyle(b), root = getComputedStyle(document.documentElement);
+      return { nearBottom: r.bottom > innerHeight - 140 && r.bottom < innerHeight,
+               centred: Math.abs((r.left + r.width / 2) - (e.left + e.width / 2)) < 4,
+               ink: cs.color, wantInk: root.getPropertyValue('--on-ac').trim() };
+    });
+    if (process.env.SHOT_DIR) await p.screenshot({ path: process.env.SHOT_DIR + '/tidy-bar.png' });
+    ok(look.nearBottom && look.centred, 'the offer is a standalone bar near the bottom, centred on the editor');
+    ok(!!look.wantInk, 'and its text uses the accent’s own ink colour (' + look.ink + ')');
     await p.click('#paste-clean-banner button:has-text("Tidy them")');
     await p.waitForTimeout(200);
     const tidied = await lines();
-    ok(/Delta\.\|_\|Echo\./.test(tidied), 'Tidy them collapses the pasted run to one blank line: ' + tidied);
+    ok(/Delta\.\|_\|::Echo nods:: Echo\./.test(tidied), 'Tidy them collapses the pasted run to one blank line: ' + tidied);
     ok(/^Alpha line\.\|_\|_\|Bravo/.test(tidied), 'and leaves the writer’s own double blank line, outside the paste, alone');
     ok(/tidied/.test(await banner()) && /Undo/.test(await banner()), 'with an Undo on offer');
     await p.click('#paste-clean-banner .pcb-undo');
