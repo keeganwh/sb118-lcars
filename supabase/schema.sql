@@ -2497,7 +2497,7 @@ declare
   n     int := 0;
   nid   uuid;
   nno   bigint;
-  nums  text[] := '{}';
+  nums  text := '';
   ttl   text;
   bod   text;
   knd   text;
@@ -2541,7 +2541,10 @@ begin
     values
       (nid, par.writer_uid, knd, ttl, bod, nno, par.app_version, par.context,
        case when n = 1 then par.capture_shot end, par.id, par.created_at);
-    nums := nums || ('#' || nno);
+    -- chr(35) is a hash sign. Spelled out because the Supabase SQL editor's
+    -- statement splitter reads a hash inside a string as a comment, and the
+    -- function body then appears never to close.
+    nums := nums || case when nums = '' then '' else ', ' end || chr(35) || nno;
     id := nid; ticket_no := nno;
     return next;
   end loop;
@@ -2557,7 +2560,7 @@ begin
          admin_note     = coalesce(nullif(btrim(coalesce(p_note, '')), ''),
                             'Thank you. This held several separate things, so it has been split into '
                             || 'tickets that can each be tracked and finished on their own:')
-                          || ' ' || array_to_string(nums, ', ') || '.',
+                          || ' ' || nums || '.',
          status_at      = now(),
          status_by      = me,
          writer_seen_at = null
