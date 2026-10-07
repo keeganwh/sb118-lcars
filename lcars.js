@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-15',
     changes: [
+      'Fixed: after tidying blank lines, the Undo could vanish almost at once, because spellcheck and writing extensions were mistaken for your own typing. Only your own edits cancel it now. Ctrl+Z also undoes a tidy now even when you have just clicked the banner and the cursor is not in the editor.',
       'Fixed: Tidy them on the paste banner did nothing if you took more than a moment to press it. The banner is also now a bar of its own near the bottom of the editor, in your accent colour, so it is hard to miss. Pop-up messages use the right text colour for your accent too, so they are easier to read, and longer messages wrap instead of running off the screen.',
       'Fixed: the blank-line banner sat inside the scrolling sim, so in a long sim it appeared out of sight above where you were working, and the offer to tidy a paste, or to undo a tidy, went unseen. It now sits at the top of the editor, always visible, and stays for 20 seconds. Ctrl+Z undoes a tidy while the banner is showing, and the undo is dropped once you type again or open another sim, so it can never bring back old text. The message after linking a character picture also stays up longer.',
       'Changed: pasting no longer removes blank lines by itself. It used to tidy the whole sim on every paste, so pasting a single line wiped out every double blank line you had typed on purpose anywhere in it. Now, if what you paste has extra blank lines, LCARS offers to tidy them, in the pasted part only. A new Tidy button in the toolbar (under Format on a phone) does the whole sim when you ask, and either one can be undone.',
@@ -5634,8 +5635,26 @@ function undoPasteClean() {
 }
 
 function installPasteHandler() {
-  // Typing after a tidy makes its snapshot stale (see pasteCleanForget).
-  document.getElementById('editor').addEventListener('input', () => { if (_pasteCleanSnap || _pasteAdded) pasteCleanForget(); });
+  // Typing after a tidy makes its snapshot stale (see pasteCleanForget). Only
+  // the writer's own edits count: 'beforeinput' from a real key, a paste or a
+  // cut. The plain 'input' event used to be the trigger, and spellcheck and
+  // writing extensions such as Grammarly fire that too -- which threw the
+  // undo away a moment after a tidy, before anyone could reach it.
+  document.getElementById('editor').addEventListener('beforeinput', e => {
+    if (!e.isTrusted || e.inputType === 'historyUndo' || e.inputType === 'historyRedo') return;
+    if (_pasteCleanSnap || _pasteAdded) pasteCleanForget();
+  });
+  // Ctrl+Z undoes a tidy WHEREVER the focus is while the banner is up. After
+  // pressing the banner's own button the focus is on the banner, not the
+  // editor, so the editor's key handler never heard it.
+  document.addEventListener('keydown', e => {
+    if (!(e.ctrlKey || e.metaKey) || e.shiftKey || (e.key !== 'z' && e.key !== 'Z')) return;
+    if (!_pasteCleanSnap || !document.getElementById('paste-clean-banner')) return;
+    const t = e.target;
+    if (t && t.closest && !t.closest('#editor') && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    e.preventDefault(); e.stopPropagation();
+    undoPasteClean();
+  }, true);
   document.getElementById('editor').addEventListener('paste', e => {
     e.preventDefault();
     const html = e.clipboardData.getData('text/html');
@@ -9938,12 +9957,6 @@ document.addEventListener('keydown',e=>{
     if(e.key==='b'){e.preventDefault();if(!acad)ec('bold');}
     if(e.key==='i'){e.preventDefault();if(!acad)ec('italic');}
     if(e.key==='k'){e.preventDefault();doLink();}
-    // A tidy removes blocks directly, which the browser's own undo history
-    // never sees -- so Ctrl+Z would undo the typing BEFORE it instead. While
-    // the tidy can still be undone, Ctrl+Z means that.
-    if(e.key==='z'&&_pasteCleanSnap&&document.getElementById('paste-clean-banner')){
-      e.preventDefault(); undoPasteClean(); return;
-    }
     // Intercept Ctrl+Z when there are pending indent undo entries
     if(e.key==='z'&&_indentUndo.length){
       const entry = _indentUndo.pop();

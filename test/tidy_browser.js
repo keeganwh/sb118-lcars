@@ -84,6 +84,10 @@ const { chromium } = require('playwright');
     ok(/Delta\.\|_\|::Echo nods:: Echo\./.test(tidied), 'Tidy them collapses the pasted run to one blank line: ' + tidied);
     ok(/^Alpha line\.\|_\|_\|Bravo/.test(tidied), 'and leaves the writer’s own double blank line, outside the paste, alone');
     ok(/tidied/.test(await banner()) && /Undo/.test(await banner()), 'with an Undo on offer');
+    // What a spellchecker or a writing extension does: an untrusted input event.
+    await p.evaluate(() => document.getElementById('editor').dispatchEvent(new InputEvent('input', { bubbles: true })));
+    await p.waitForTimeout(150);
+    ok(/Undo/.test(await banner()), 'an input event the writer did not make (spellcheck, extensions) leaves the Undo alone');
     await p.click('#paste-clean-banner .pcb-undo');
     await p.waitForTimeout(200);
     ok((await lines()) === afterPaste, 'and Undo puts it back exactly');
@@ -125,10 +129,11 @@ const { chromium } = require('playwright');
     await p.waitForTimeout(200);
     const tidiedLong = await lines();
     ok(!/Foxtrot\.\|_\|_/.test(tidiedLong), 'Tidy collapses the pasted run');
-    await p.evaluate(() => document.getElementById('editor').focus());
+    // Focus where pressing the banner leaves it: NOT in the editor.
+    await p.evaluate(() => { document.getElementById('editor').blur(); document.querySelector('#paste-clean-banner .pcb-undo').focus(); });
     await p.keyboard.press('Control+z');
     await p.waitForTimeout(200);
-    ok(/Foxtrot\.\|_\|_\|_\|Golf\./.test(await lines()), 'and Ctrl+Z brings the blank lines back');
+    ok(/Foxtrot\.\|_\|_\|_\|Golf\./.test(await lines()), 'and Ctrl+Z brings the blank lines back, even with the focus on the banner');
 
     // --- a stale undo can never restore old text ------------------------------
     await p.click('#tbb-tidy');
