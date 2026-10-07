@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-15',
     changes: [
+      'Added: a Space between paragraphs setting under Settings, Text size, for writers who press Enter once between paragraphs rather than twice. Choose half a line or a full line and the editor spaces your paragraphs for you; when you copy the sim out, each gap becomes a real blank line, so it arrives in Gmail and Google Groups looking the same. If you also type blank lines yourself, you will not get two. The default is unchanged.',
       'Changed: links in a sim work like they do in Google Docs. Click a link, or move the cursor into one, and a small bubble shows where it goes: click the address to open it in a new tab, or copy, edit or remove it. Ctrl+K and the Link button open the same bubble beside your text rather than a box over the sim, and Ctrl+click opens a link straight away. Typing a bare address such as starbase118.net now makes a working link.',
       'Fixed: in the App Feedback panel, switching from My reports to a new report straight away could wipe the new report form a moment later, as the list finished loading over it.',
       'Admin: a feedback report that holds several separate ideas can now be split into tickets of their own. Select passages of the report, give each a headline, and each becomes a new numbered ticket under the same writer, so it can be answered and finished on its own. The original is archived with a note telling the writer the new numbers, and their reports list shows where each piece came from.',
@@ -890,6 +891,10 @@ function stripFormattingHtml(html) {
 // ================================================================
 const PREF_DEFAULTS = {
   lineSpacing: 1.15,
+  // The gap between paragraphs, for writers who press Enter once between them
+  // rather than twice. 'none' is the long-standing behaviour: a blank line is
+  // something you type. See PARA_GAPS and the copy handler.
+  paraSpacing: 'none',
   editorFontSize: 12,
   uiFontSize: 15,
   uiFont: '',
@@ -908,6 +913,13 @@ const PREF_DEFAULTS = {
   navSceneSort: 'recent-first',
   markerLayout: 'dropdown',
 };
+
+const PARA_GAPS = { none: 0, half: 0.5, full: 1 };
+// A block with words in it, as far as CSS can tell: not empty, and not a lone
+// <br> holding a blank line open. The gap goes only BETWEEN two of these, so a
+// blank line the writer typed is never padded on top -- the same rule the copy
+// handler uses, so the editor and the email agree.
+const PARA_WORDS = ':not(:empty):not(:has(> br:only-child))';
 
 const GOOGLE_FONTS = [
   'Abril Fatface','Arvo','Barlow','Bebas Neue','Bitter','Cabin','Cantarell',
@@ -951,6 +963,7 @@ function applyPrefs() {
     html { font-size: ${u}px; }
     ${bodyFontRule}
     #editor { line-height: ${p.lineSpacing}; font-size: ${p.editorFontSize}pt; ${editorFontDecl} }
+    ${PARA_GAPS[p.paraSpacing] ? `#editor > ${PARA_WORDS} + ${PARA_WORDS} { margin-top: ${PARA_GAPS[p.paraSpacing] * p.lineSpacing}em !important; }` : ''}
     .am { background:${hexToRgba(p.actionAccent,.30)}; }
     .cm { background:${hexToRgba(p.commsAccent,.30)}; }
     .tm { background:${hexToRgba(p.thoughtAccent,.30)}; font-style:${p.thoughtItalic?'italic':'normal'}; }
@@ -984,6 +997,7 @@ function applyPrefs() {
 function resetPrefsForm() {
   const d = PREF_DEFAULTS;
   document.getElementById('pf-ls').value = d.lineSpacing;
+  if (document.getElementById('pf-ps')) document.getElementById('pf-ps').value = d.paraSpacing;
   document.getElementById('pf-efs').value = d.editorFontSize;
   document.getElementById('pf-ufs').value = d.uiFontSize;
   document.getElementById('pf-ac').value = d.actionAccent;
@@ -5676,6 +5690,24 @@ function installCopyHandler() {
       _lineWrap.appendChild(node);
     });
 
+    // Paragraph spacing. A gap shown by a margin in the editor goes out as a
+    // real blank line, because a mail client honours a blank line and may not
+    // honour a margin -- Gmail and Groups both rewrite spacing on paste. Half a
+    // line and a full line both become one blank line: there is no half blank
+    // line in an email. A blank is only added between two lines that both have
+    // words in them, so a writer who also types blank lines does not get two.
+    // Academy sims are plain text and copy out exactly as written.
+    if (!isAcademyActive() && PARA_GAPS[getPrefs().paraSpacing]) {
+      const hasWords = n => n && n.nodeType === 1 && (n.textContent || '').replace(/\u00a0/g, ' ').trim() !== '';
+      [...tmp.children].forEach(n => {
+        if (hasWords(n) && hasWords(n.nextElementSibling)) {
+          const gap = document.createElement('div');
+          gap.appendChild(document.createElement('br'));
+          n.after(gap);
+        }
+      });
+    }
+
     // Capture plain text before modifying tmp for HTML-clipboard compatibility.
     // Walk top-level children manually — innerText on a detached node has no layout
     // context and silently falls back to textContent (no block-level newlines).
@@ -9349,6 +9381,14 @@ function settingsAppearanceCard() {
             <input class="mi" id="pf-ls" type="number" min="1" max="3" step="0.05" value="${p.lineSpacing}">
           </div>
           <div class="mf" style="margin:0">
+            <label class="ml" for="pf-ps">SPACE BETWEEN PARAGRAPHS</label>
+            <select class="ms" id="pf-ps">
+              <option value="none" ${p.paraSpacing === 'none' || !PARA_GAPS[p.paraSpacing] ? 'selected' : ''}>None — I type a blank line</option>
+              <option value="half" ${p.paraSpacing === 'half' ? 'selected' : ''}>Half a line</option>
+              <option value="full" ${p.paraSpacing === 'full' ? 'selected' : ''}>A full line</option>
+            </select>
+          </div>
+          <div class="mf" style="margin:0">
             <label class="ml" for="pf-efs">EDITOR FONT (pt)</label>
             <input class="mi" id="pf-efs" type="number" min="8" max="24" step="1" value="${p.editorFontSize}">
           </div>
@@ -9736,6 +9776,7 @@ function saveSettingsPrefs() {
   // Merge, so toggles set outside this page (boldLocations, italicOOC, etc.) survive
   S.settings.prefs = Object.assign({}, S.settings.prefs, {
     lineSpacing: ls, editorFontSize: efs, uiFontSize: ufs,
+    paraSpacing: (g('pf-ps') && PARA_GAPS[g('pf-ps').value] !== undefined) ? g('pf-ps').value : 'none',
     uiFont: g('pf-uifont').value.trim(),
     editorFont: efSame ? '' : g('pf-editorfont').value.trim(),
     editorFontSameAsUI: efSame,
