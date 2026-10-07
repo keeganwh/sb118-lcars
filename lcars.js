@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-15',
     changes: [
+      'Fixed: the blank-line banner sat inside the scrolling sim, so in a long sim it appeared out of sight above where you were working, and the offer to tidy a paste, or to undo a tidy, went unseen. It now sits at the top of the editor, always visible, and stays for 20 seconds. Ctrl+Z undoes a tidy while the banner is showing, and the undo is dropped once you type again or open another sim, so it can never bring back old text. The message after linking a character picture also stays up longer.',
       'Changed: pasting no longer removes blank lines by itself. It used to tidy the whole sim on every paste, so pasting a single line wiped out every double blank line you had typed on purpose anywhere in it. Now, if what you paste has extra blank lines, LCARS offers to tidy them, in the pasted part only. A new Tidy button in the toolbar (under Format on a phone) does the whole sim when you ask, and either one can be undone.',
       'Added: a Space between paragraphs setting under Settings, Text size, for writers who press Enter once between paragraphs rather than twice. Choose half a line or a full line and the editor spaces your paragraphs for you; when you copy the sim out, each gap becomes a real blank line, so it arrives in Gmail and Google Groups looking the same. If you also type blank lines yourself, you will not get two. The default is unchanged.',
       'Changed: links in a sim work like they do in Google Docs. Click a link, or move the cursor into one, and a small bubble shows where it goes: click the address to open it in a new tab, or copy, edit or remove it. Ctrl+K and the Link button open the same bubble beside your text rather than a box over the sim, and Ctrl+click opens a link straight away. Typing a bare address such as starbase118.net now makes a working link.',
@@ -5524,18 +5525,27 @@ function collapsePasteBlankLines(ed, scope, dry) {
   return toRemove.length > 0;
 }
 
+// The banner sits ABOVE the editor's scrolling area, beside the Academy and
+// template banners, not inside it. Inside #ec it scrolled with the sim, so in
+// any sim long enough to scroll it appeared above the visible part and was
+// never seen -- the offer to tidy and the Undo both went unnoticed.
+function pasteBannerPlace(b) {
+  const ec = document.getElementById('ec');
+  ec.parentNode.insertBefore(b, ec);
+}
+
 // A paste no longer tidies itself. If what was pasted holds runs of blank
 // lines, this OFFERS to collapse them -- in the pasted part only.
 let _pasteAdded = null;
 function showPasteTidyOffer(added) {
+  pasteCleanForget();
   _pasteAdded = added;
   let b = document.getElementById('paste-clean-banner');
   if (!b) {
     b = document.createElement('div');
     b.id = 'paste-clean-banner';
     b.className = 'paste-clean-banner';
-    const ec = document.getElementById('ec');
-    ec.insertBefore(b, ec.firstChild);
+    pasteBannerPlace(b);
   }
   b.innerHTML = '<span class="pcb-msg">What you pasted has extra blank lines in it.</span>' +
     '<button class="tbb pcb-undo" onclick="tidyPastedBlankLines()">Tidy them</button>' +
@@ -5564,22 +5574,32 @@ function tidyBlankLines() {
   if (collapsePasteBlankLines(ed)) { showPasteCleanBanner(snap); schedSave(); }
   else showToast('No extra blank lines to tidy — every gap is a single blank line.');
 }
+// The snapshot belongs to ONE sim at ONE moment. It is dropped as soon as the
+// writer types again or opens something else -- restoring it after that would
+// throw away what they typed, or write one sim's text over another's.
+let _pasteCleanFor = null;
+function pasteCleanForget() {
+  _pasteCleanSnap = null; _pasteCleanFor = null;
+  const b = document.getElementById('paste-clean-banner');
+  if (b) b.remove();
+}
 function showPasteCleanBanner(snapshot) {
   _pasteCleanSnap = snapshot;
+  _pasteCleanFor = curId || ('t:' + curTmplId);
   let b = document.getElementById('paste-clean-banner');
   if (!b) {
     b = document.createElement('div');
     b.id = 'paste-clean-banner';
     b.className = 'paste-clean-banner';
-    const ec = document.getElementById('ec');
-    ec.insertBefore(b, ec.firstChild);
+    pasteBannerPlace(b);
   }
   b.innerHTML = '<span class="pcb-msg">Extra blank lines tidied</span><button class="tbb pcb-undo" onclick="undoPasteClean()">Undo</button><button class="tbb pcb-close" onclick="document.getElementById(\'paste-clean-banner\').remove()">' + ic('x','ic-sm') + '</button>';
   clearTimeout(b._t);
-  b._t = setTimeout(() => { if (b.parentElement) b.remove(); }, 8000);
+  b._t = setTimeout(pasteCleanForget, 20000);
 }
 function undoPasteClean() {
   if (!_pasteCleanSnap) return;
+  if (_pasteCleanFor !== (curId || ('t:' + curTmplId))) { pasteCleanForget(); return; }
   if (jpLiveNotHere('Undoing a paste')) return;
   document.getElementById('editor').innerHTML = _pasteCleanSnap;
   const b = document.getElementById('paste-clean-banner');
@@ -5589,6 +5609,8 @@ function undoPasteClean() {
 }
 
 function installPasteHandler() {
+  // Typing after a tidy makes its snapshot stale (see pasteCleanForget).
+  document.getElementById('editor').addEventListener('input', () => { if (_pasteCleanSnap) pasteCleanForget(); });
   document.getElementById('editor').addEventListener('paste', e => {
     e.preventDefault();
     const html = e.clipboardData.getData('text/html');
@@ -9891,6 +9913,12 @@ document.addEventListener('keydown',e=>{
     if(e.key==='b'){e.preventDefault();if(!acad)ec('bold');}
     if(e.key==='i'){e.preventDefault();if(!acad)ec('italic');}
     if(e.key==='k'){e.preventDefault();doLink();}
+    // A tidy removes blocks directly, which the browser's own undo history
+    // never sees -- so Ctrl+Z would undo the typing BEFORE it instead. While
+    // the tidy can still be undone, Ctrl+Z means that.
+    if(e.key==='z'&&_pasteCleanSnap&&document.getElementById('paste-clean-banner')){
+      e.preventDefault(); undoPasteClean(); return;
+    }
     // Intercept Ctrl+Z when there are pending indent undo entries
     if(e.key==='z'&&_indentUndo.length){
       const entry = _indentUndo.pop();
@@ -10644,13 +10672,13 @@ function charPicSrc(c) {
   return /^data:image\//i.test(v) || /^https?:\/\//i.test(v) ? v : '';
 }
 
-function setCharPic(src, how) {
+function setCharPic(src, how, ms) {
   if (!_curCharId || !S.characters) return;
   const c = S.characters[_curCharId]; if (!c) return;
   c.pictureDataUrl = src;
   c.updatedAt = Date.now();
   persist(); schedSync(); renderManifestList(); renderCharProfile(_curCharId);
-  if (how) showToast(how, 4200);
+  if (how) showToast(how, ms || 4200);
 }
 
 function loadImage(url, cors) {
@@ -10696,7 +10724,7 @@ async function loadCharPicFromUrl() {
   try {
     await loadImage(url, false);
     setCharPic(url, 'That site would not let LCARS keep a copy, so the picture is linked from where it lives. ' +
-                    'If it ever moves, the picture will disappear — upload a saved copy to keep it for good.');
+                    'If it ever moves, the picture will disappear — upload a saved copy to keep it for good.', 12000);
     return;
   } catch (e) { /* not even displayable */ }
   const page = !/\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?|#|$)/i.test(url);

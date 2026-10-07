@@ -35,7 +35,9 @@ const { chromium } = require('playwright');
       .map(d => (d.textContent || '').trim() || '_').join('|'));
     const paste = html => p.evaluate(h => {
       const ed = document.getElementById('editor');
-      ed.focus();
+      const ec = document.getElementById('ec'), top = ec.scrollTop;
+      ed.focus({ preventScroll: true });
+      ec.scrollTop = top;
       const r = document.createRange(); r.selectNodeContents(ed.lastElementChild); r.collapse(false);
       const s = getSelection(); s.removeAllRanges(); s.addRange(r);
       const dt = new DataTransfer();
@@ -79,6 +81,60 @@ const { chromium } = require('playwright');
     await p.waitForTimeout(200);
     ok(/No extra blank lines/.test(await p.evaluate(() => (document.getElementById('lcars-toast') || {}).textContent || '')),
        'pressing it again says there is nothing to tidy');
+
+    // --- in a long sim, scrolled down: the banner must still be SEEN ---------
+    // The bug a real test found: the banner lived inside the scrolling area,
+    // so pasting far down a sim put it above the visible part.
+    await p.evaluate(() => {
+      const ed = document.getElementById('editor');
+      ed.innerHTML = Array.from({ length: 120 }, (_, i) => '<div>Line ' + i + ' of a long sim.</div>').join('');
+      const ec = document.getElementById('ec'); ec.scrollTop = ec.scrollHeight;
+    });
+    await paste('<p>Foxtrot.</p><p></p><p></p><p></p><p>Golf.</p>');
+    await p.waitForTimeout(250);
+    const seen = await p.evaluate(() => {
+      const b = document.getElementById('paste-clean-banner'); if (!b) return 'no banner';
+      const r = b.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + 10, r.top + r.height / 2);
+      return (r.top >= 0 && r.bottom <= innerHeight && r.height > 0 && b.contains(hit)) ? 'visible' : 'off-screen ' + Math.round(r.top);
+    });
+    ok(seen === 'visible', 'scrolled to the bottom of a long sim, the offer is on screen and clickable: ' + seen);
+    ok(await p.evaluate(() => document.getElementById('ec').scrollTop > 500), 'and the sim is still scrolled where the writer was');
+    if (process.env.SHOT_DIR) await p.screenshot({ path: process.env.SHOT_DIR + '/tidy-long.png' });
+
+    // --- Ctrl+Z undoes a tidy -------------------------------------------------
+    await p.click('#tbb-tidy');
+    await p.waitForTimeout(200);
+    const tidiedLong = await lines();
+    ok(!/Foxtrot\.\|_\|_/.test(tidiedLong), 'Tidy collapses the pasted run');
+    await p.evaluate(() => document.getElementById('editor').focus());
+    await p.keyboard.press('Control+z');
+    await p.waitForTimeout(200);
+    ok(/Foxtrot\.\|_\|_\|_\|Golf\./.test(await lines()), 'and Ctrl+Z brings the blank lines back');
+
+    // --- a stale undo can never restore old text ------------------------------
+    await p.click('#tbb-tidy');
+    await p.waitForTimeout(200);
+    await p.evaluate(() => {
+      const ed = document.getElementById('editor');
+      const r = document.createRange(); r.selectNodeContents(ed.lastElementChild); r.collapse(false);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    });
+    await p.keyboard.type(' typed after');
+    await p.waitForTimeout(150);
+    ok(await p.evaluate(() => !document.getElementById('paste-clean-banner') && !_pasteCleanSnap),
+       'typing after a tidy drops its undo, so it cannot throw the typing away');
+    await p.keyboard.press('Control+z');
+    await p.waitForTimeout(200);
+    ok(!/Foxtrot\.\|_\|_\|_/.test(await lines()), 'and Ctrl+Z then goes back to being the ordinary undo');
+    const otherId = await p.evaluate(() => {
+      document.getElementById('editor').innerHTML = '<div>a</div><div><br></div><div><br></div><div>b</div>';
+      tidyBlankLines(); const first = curId; mkDoc('Other sim', null, null); return first;
+    });
+    await p.waitForTimeout(300);
+    await p.evaluate(() => undoPasteClean());
+    ok(await p.evaluate(id => !/<div>a<\/div>/.test(document.getElementById('editor').innerHTML) && curId !== id, otherId),
+       'and an undo left over from another sim is never applied to this one');
 
     // --- on a phone, it lives in the Format panel ----------------------------
     await p.setViewportSize({ width: 390, height: 700 });
