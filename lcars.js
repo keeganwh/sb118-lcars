@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-15',
     changes: [
+      'Changed: marking a sim posted, complete, active or archived now saves to your account straight away and says so, instead of waiting for your next keystroke. A new indicator in the status bar at the bottom shows whether your work has synced: Syncing, Saved to account, or Not synced. Joint sims are not covered yet.',
       'Admin: the App Feedback queue can now be exported as one Markdown document, by Copy for Claude or Download .md. It exports exactly what is in view, so the tabs and the search filter it, and it opens with a short note asking for the reports to be reviewed and discussed before any work starts.',
       'Changed: a bug report or a feature request now starts with a short headline, and reports are numbered \u2014 so you can point at one by its number in a conversation instead of describing it again. The headline is the first box on the form and is limited to 100 characters',
       'Changed: the first screen has been rebuilt. It says what LCARS is, notes that it is a work in progress and not an HQ project, and splits the choices into four labelled sections \u2014 signing in, creating an account, Google and Discord, and using LCARS offline \u2014 each with a line saying what it actually means. It has its own calmer colours now rather than borrowing Command Red from the duty palette, and scrolling down reveals a What is LCARS section, with screenshots, explaining what the app is for',
@@ -1125,6 +1126,41 @@ function setSyncStatus(state, msg) {
     el.textContent = msg || '';
     el.style.color = state === 'error' ? 'var(--red,#c66)' : state === 'ok' ? 'var(--dim)' : 'var(--dim)';
   }
+  paintSyncBadge();
+}
+
+// The status bar's sync indicator. It answers "did that save?" for every
+// action, at a glance, without opening Settings. Hidden when offline-only,
+// where there is no account to sync to.
+function paintSyncBadge() {
+  const el = document.getElementById('s-sync');
+  if (!el) return;
+  const st = syncStatus || {};
+  el.classList.toggle('hidden', !isCloud() || !st.state);
+  el.dataset.state = st.state || '';
+  const short = st.state === 'syncing' ? 'Syncing…'
+              : st.state === 'error'   ? 'Not synced'
+              : 'Saved to account';
+  const icn = st.state === 'syncing' ? 'refresh-cw' : st.state === 'error' ? 'alert' : 'check';
+  el.innerHTML = ic(icn, 'ic-sm') + ' ' + esc(short);
+  el.title = st.msg || '';
+}
+
+// A status change is a deliberate act -- marking a sim posted, completing a
+// scene -- so it is synced at once rather than on the typing debounce, and the
+// writer is told when the account has actually accepted it. The toast waits for
+// the server: saying "saved" before it is true is worse than saying nothing.
+async function syncNowAndSay(what) {
+  persist();
+  if (!isCloud()) { showToast(what + ' · saved on this device'); return; }
+  if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
+  await saveToCloud();
+  if ((syncStatus || {}).state === 'error') showToast(what + ' — ' + (syncStatus.msg || 'not synced.'), 5200);
+  else showToast(what + ' · saved to your account');
+}
+
+function statusWord(s) {
+  return s === 'complete' ? 'Marked complete' : s === 'archived' ? 'Archived' : 'Marked active';
 }
 
 function supaErr(j, fallback) {
@@ -6466,7 +6502,12 @@ function onPostedDateChange() {
   updatePostedMeta(doc);
   updateTitleColor(doc);
   updateStatusStyle(doc);
-  schedSave();
+  if (isJointDoc(doc)) { schedSave(); return; }
+  // Through flushSave first so content and status are saved together, then
+  // straight to the account rather than after the typing debounce.
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  flushSave();
+  syncNowAndSay(val ? 'Marked posted' : 'Posted date cleared');
 }
 
 // ================================================================
@@ -8319,7 +8360,11 @@ function setStatus(type,id,status){
     stampDoc(S.docs[id]);
   }
   if (type==='doc'&&id===curId) document.getElementById('doc-status').value=status;
-  persist(); renderNav(); schedSync(5000);
+  persist(); renderNav();
+  // A joint sim's status travels with its own row, not this blob, so it keeps
+  // its existing path until the Joint Posts work picks this up.
+  if (type==='doc' && isJointDoc(S.docs[id])) { schedSync(5000); return; }
+  syncNowAndSay(statusWord(status));
 }
 
 function renameItem(type,id){
@@ -8599,9 +8644,14 @@ function onStatusChange(){
     document.getElementById('doc-posted-input').value = '';
     updatePostedMeta(doc);
   }
-  persist(); renderNav();
   updateTitleColor(doc);
   updateStatusStyle(doc);
+  // This used to stop at persist(), so the account only heard about the change
+  // on the writer's next keystroke. A joint sim keeps its own save path.
+  if (isJointDoc(doc)) { persist(); renderNav(); return; }
+  doc.updatedAt = Date.now();
+  renderNav();
+  syncNowAndSay(statusWord(newStatus));
 }
 
 // ================================================================
