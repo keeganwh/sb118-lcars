@@ -493,6 +493,25 @@ Not development, not batched, and **user-triggered** — they run when the user 
 > Batch 3. Alongside it, a **separate session handles user-reported feedback and
 > bug fixes**. They overlap in TIME and must not overlap in SCOPE.
 >
+> ### Live co-authoring is DEPLOYED BUT NOT YET TESTED BY A HUMAN (2026-10-07)
+>
+> It is on `main` and in production, and **every check passes** — but no two real
+> people have written a sim with it. The user is testing it with a friend in a few
+> days; until they report back, treat it as unproven, not finished.
+>
+> **This is the exact state the Joint Posts session warned about.** That feature
+> shipped with 61 passing checks and three rounds of real use broke seven things,
+> every one of them outside where the tests were looking. Expect the same here and
+> leave room for it.
+>
+> **So until the user says live writing has been exercised:** do not build on it,
+> do not refactor it, and do not merge `claude/jp-open-everyone`. If a reported bug
+> touches live writing, the editor's rewrite passes, or any `jp*` code, **write it
+> down and hand it over** rather than fixing it in passing — a tidy one-line change
+> in `transformNow()` is precisely what breaks a CRDT binding invisibly, and it
+> would break it during the one window where somebody is trying to find out whether
+> the feature works at all.
+>
 > **The live-writing session owns:** the editor's rewrite passes (`transformNow()`,
 > `applyMarkers()`, `boldNames()`, `applyCharColors()`, `normalizeEditorContent()`,
 > `stripFormattingHtml()`), everything `jp*` in `lcars.js`, the `jp_*` tables and
