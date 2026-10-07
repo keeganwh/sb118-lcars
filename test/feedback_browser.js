@@ -41,7 +41,28 @@ function rpc(fn, a, me) {
     }
     case 'admin_list_feedback':
       if (who.role !== 'super_admin') throw new Error('Only a super admin can read the feedback queue.');
-      return DB.reports.filter(r => a.p_include_archived || !r.archived_at);
+      return DB.reports.filter(r => a.p_include_archived || !r.archived_at).map(r => ({
+        ...r, parent_ticket: r.parent_id ? (DB.reports.find(x => x.id === r.parent_id) || {}).ticket_no || null : null }));
+    case 'admin_feedback_split': {
+      if (who.role !== 'super_admin') throw new Error('Only a super admin can split feedback.');
+      const par = DB.reports.find(x => x.id === a.p_id);
+      if (!par || par.archived_at) throw new Error('That report is archived. Only an open report can be split.');
+      if (!Array.isArray(a.p_parts) || a.p_parts.length < 2) throw new Error('A split needs at least two pieces.');
+      const out = a.p_parts.map((pt, i) => {
+        DB.ticket += 1;
+        const r = { ...par, id: 'split-' + DB.ticket, kind: pt.kind, title: pt.title, body: pt.body,
+                    ticket_no: DB.ticket, parent_id: par.id, status: 'new', admin_note: null,
+                    status_at: null, status_by: null, writer_seen_at: null,
+                    capture_shot: i === 0 ? par.capture_shot : null };
+        DB.reports.push(r);
+        return { id: r.id, ticket_no: r.ticket_no };
+      });
+      par.archived_at = new Date().toISOString(); par.capture_shot = null;
+      par.admin_note = (a.p_note || 'Split into tickets that can each be tracked on their own:') + ' ' +
+                       out.map(o => '#' + o.ticket_no).join(', ') + '.';
+      par.writer_seen_at = null; par.status_at = new Date().toISOString(); par.status_by = who.wid;
+      return out;
+    }
     case 'admin_feedback_status': {
       if (who.role !== 'super_admin') throw new Error('Only a super admin can action feedback.');
       if (!['new','implementing','will_revisit','rejected'].includes(a.p_status))
@@ -370,6 +391,77 @@ async function ctxFor(browser, who, errors) {
   ok(await w.p.evaluate(() => /already looked at this one/.test(document.getElementById('mo-body').textContent)),
      'and warned when the team has already acted on it');
   await w.p.evaluate(() => closeModal());
+
+  // --- splitting one report into several tickets --------------------------
+  await w.p.evaluate(() => { fbOpen(); fbTab('new'); });
+  await w.p.waitForTimeout(250);
+  await w.p.evaluate(() => {
+    document.getElementById('fb-title').value = 'Three ideas';
+    document.getElementById('fb-text').value = 'Links should be clickable. Paragraph spacing should be a setting. Pull in the previous post.';
+    fbSend();
+  });
+  await w.p.waitForTimeout(600);
+  const big = DB.reports.find(r => r.title === 'Three ideas');
+  if (!big) throw new Error('the report to split never arrived');
+  await w.p.evaluate(() => fbClose());
+
+  await s.p.evaluate(() => { fbAdminTab(false); });
+  await s.p.waitForTimeout(500);
+  await s.p.evaluate(id => { fbToggle(id); }, big.id);
+  await s.p.click(`#fbrow-${big.id} button[onclick^="fbSplitStart"]`);
+  await s.p.waitForTimeout(200);
+  // A real selection, made the way a mouse would leave one, then the real
+  // button: its mousedown must not throw the selection away before the click.
+  const selectPhrase = phrase => s.p.evaluate(([id, ph]) => {
+    const t = document.getElementById('fb-text-' + id).firstChild;
+    const at = t.textContent.indexOf(ph);
+    const r = document.createRange(); r.setStart(t, at); r.setEnd(t, at + ph.length);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }, [big.id, phrase]);
+  await s.p.click(`#fb-split-${big.id} button[onclick="fbSplitAddSelection()"]`);
+  ok(await s.p.evaluate(() => _fbSplit.parts.length === 0), 'Add selection with nothing selected adds nothing');
+  await selectPhrase('Links should be clickable.');
+  await s.p.click(`#fb-split-${big.id} button[onclick="fbSplitAddSelection()"]`);
+  await s.p.fill('#fbsp-t-0', 'Clickable links');
+  await selectPhrase('Paragraph spacing should be a setting.');
+  await s.p.click(`#fb-split-${big.id} button[onclick="fbSplitAddSelection()"]`);
+  await s.p.fill('#fbsp-t-1', 'Paragraph spacing');
+  ok(await s.p.evaluate(() => _fbSplit.parts.length === 2 && _fbSplit.parts[0].title === 'Clickable links'
+                              && _fbSplit.parts[1].body === 'Paragraph spacing should be a setting.'),
+     'two selections become pieces A and B, and a headline typed into A survives adding B');
+  ok(await s.p.evaluate(() => !window.CSS || !CSS.highlights || (CSS.highlights.has('fbsp-0') && CSS.highlights.has('fbsp-1'))),
+     'each piece’s passage is tinted in the report');
+  if (process.env.SHOT_DIR) {
+    await s.p.evaluate(id => document.getElementById('fb-text-' + id).scrollIntoView({ block: 'start' }), big.id);
+    await s.p.evaluate(() => scrollBy(0, -90));
+    await s.p.screenshot({ path: process.env.SHOT_DIR + '/split.png' });
+  }
+  await s.p.click(`#fb-split-${big.id} .btn-p`);
+  await s.p.waitForTimeout(200);
+  ok(await s.p.evaluate(() => /2 new tickets/.test(document.getElementById('mo-body').textContent)),
+     'splitting asks first, and says what will happen');
+  await s.p.evaluate(() => doModal());
+  await s.p.waitForTimeout(700);
+  const kids = DB.reports.filter(r => r.parent_id === big.id);
+  ok(kids.length === 2 && kids.every(k => k.writer_uid === W.uid && k.status === 'new')
+     && kids.map(k => k.title).join('|') === 'Clickable links|Paragraph spacing',
+     'two new tickets exist, filed under the original writer');
+  ok(!!big.archived_at && /#\d+, #\d+/.test(big.admin_note || ''), 'the original is archived with a note naming the new numbers');
+  ok(await s.p.evaluate(no => new RegExp('from #' + no).test(document.getElementById('adm-fb').textContent), big.ticket_no)
+     && await s.p.evaluate(() => !_fbSplit), 'the queue shows where each piece came from, and the split pane is gone');
+  const mdSplit = await s.p.evaluate(() => fbExportMarkdown());
+  ok(new RegExp('Split from:\\*\\* #' + big.ticket_no).test(mdSplit), 'and so does the export');
+  await w.p.evaluate(() => fbRefreshBadge());
+  await w.p.waitForTimeout(300);
+  ok(await w.p.evaluate(() => !document.getElementById('fb-badge').classList.contains('hidden')),
+     'the writer is badged about the split');
+  await w.p.evaluate(() => { fbOpen(); fbTab('mine'); });
+  await w.p.waitForTimeout(500);
+  ok(await w.p.evaluate(no => {
+       const t = document.getElementById('fb-body').textContent;
+       return /Clickable links/.test(t) && new RegExp('Split from #' + no).test(t) && /split into/i.test(t);
+     }, big.ticket_no), 'and sees the pieces in their own reports, each saying where it came from');
+  await w.p.evaluate(() => fbClose());
 
   // --- archiving destroys the capture -------------------------------------
   const shotPath = rep.capture_shot;

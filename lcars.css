@@ -1175,6 +1175,26 @@ body.academy #editor .om{font-style:normal}
    edit in rather than a line to type once. */
 .adm-fb-note{flex:1 1 220px;font-size:0.8rem;resize:vertical;line-height:1.5}
 .adm-fb-btns{display:flex;gap:8px;flex-wrap:wrap;flex:1 1 100%}
+/* Splitting a report. Each piece has a colour, and the same colour tints its
+   passage in the report through ::highlight(), so it is clear which words went
+   where without rewriting the report's text. */
+.adm-fb-split{flex:1 1 100%}
+.adm-fb-split-in{margin-top:10px;padding:10px;border:1px dashed var(--border);border-radius:10px}
+.adm-fb-piece{border-left:4px solid var(--sp);padding:6px 0 6px 10px;margin:0 0 10px;display:flex;flex-direction:column;gap:6px}
+.adm-fb-piece-hd{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.adm-fb-piece-hd input{flex:1 1 200px}
+.adm-fb-piece-hd select{flex:0 0 auto;width:auto}
+.adm-fb-piece-l{font-weight:700;min-width:1.4em;text-align:center;color:var(--sp)}
+.fbsp-c0{--sp:#c9822b}.fbsp-c1{--sp:#3d7fc4}.fbsp-c2{--sp:#4f9a5a}
+.fbsp-c3{--sp:#a35bb5}.fbsp-c4{--sp:#c24d5e}.fbsp-c5{--sp:#2f9c9a}
+::highlight(fbsp-0){background:rgba(201,130,43,.32)}
+::highlight(fbsp-1){background:rgba(61,127,196,.30)}
+::highlight(fbsp-2){background:rgba(79,154,90,.30)}
+::highlight(fbsp-3){background:rgba(163,91,181,.28)}
+::highlight(fbsp-4){background:rgba(194,77,94,.28)}
+::highlight(fbsp-5){background:rgba(47,156,154,.30)}
+.adm-fb-from{font-weight:400;font-size:0.72rem;color:var(--dim);margin-left:4px}
+.fb-item-from{font-size:0.76rem;color:var(--dim);margin:2px 0 4px}
 .adm-fb-reply{margin-top:10px;font-size:0.8rem;line-height:1.6;padding:8px 10px;
   border-left:3px solid var(--amber);overflow-wrap:anywhere}
 .adm-fb-reply .adm-req-foot{display:block}

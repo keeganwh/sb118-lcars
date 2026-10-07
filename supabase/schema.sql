@@ -1788,6 +1788,11 @@ create table if not exists public.feedback_reports (
 -- Added after the fact, so the table above may already exist without them.
 alter table public.feedback_reports add column if not exists title text;
 alter table public.feedback_reports add column if not exists ticket_no bigint;
+-- A ticket split out of a bigger one points back at it (2026-10-07). Set null
+-- rather than cascading: a writer withdrawing the original must not take the
+-- pieces an admin has since been working on with it.
+alter table public.feedback_reports add column if not exists parent_id uuid
+  references public.feedback_reports(id) on delete set null;
 do $$ begin
   alter table public.feedback_reports
     add constraint feedback_title_len check (title is null or length(title) <= 100);
@@ -2017,7 +2022,9 @@ returns table (
   status_by         text,
   archived_at       timestamptz,
   capture_purged_at timestamptz,
-  created_at        timestamptz
+  created_at        timestamptz,
+  parent_id         uuid,
+  parent_ticket     bigint
 )
 language plpgsql
 stable
@@ -2034,9 +2041,11 @@ begin
            f.kind, f.title, f.body, f.app_version, f.context,
            f.capture_page, f.capture_shot,
            f.status, f.admin_note, f.status_at, f.status_by,
-           f.archived_at, f.capture_purged_at, f.created_at
+           f.archived_at, f.capture_purged_at, f.created_at,
+           f.parent_id, par.ticket_no
       from public.feedback_reports f
       left join public.writers w on w.id = f.writer_uid
+      left join public.feedback_reports par on par.id = f.parent_id
      where p_include_archived or f.archived_at is null
      order by f.created_at desc;
 end $$;
@@ -2446,3 +2455,114 @@ comment on column public.feedback_reports.capture_page is
   'Retired 2026-09-09. The app no longer writes this. Kept nullable so old rows
    keep their path and the purge still clears it; dropping it would need a
    deploy window it does not deserve.';
+
+-- ---------------------------------------------------------------------------
+-- admin_feedback_split() : one report becomes several tickets  (2026-10-07)
+-- ---------------------------------------------------------------------------
+-- A writer often sends three ideas in one report. Split, each piece gets its
+-- own number, status and reply, so it can be finished without waiting on the
+-- slowest of the others.
+--
+-- THE PIECES ARE THE WRITER'S REPORTS, not the admin's. They are filed under
+-- the original writer, so they appear in that writer's My reports and the reply
+-- to each lands where the reply to the original would have. That is why this is
+-- a security definer function: nobody else can file a report as somebody else.
+--
+-- THE ORIGINAL IS ARCHIVED WITH A NOTE naming the new numbers, and the note is
+-- unread, so the writer's badge tells them what happened. Its words are kept
+-- verbatim -- the pieces are excerpts, and the original is the record of what
+-- was actually said.
+--
+-- THE SCREENSHOT MOVES TO THE FIRST PIECE. Archiving promises the capture is
+-- destroyed, and destroying it here would lose the one picture the report had.
+-- Handing it on keeps both promises: the archived original no longer holds it,
+-- and exactly one live ticket does, which purges it in the usual way later.
+--
+-- p_parts is a JSON array of {kind, title, body}. Between two and twenty.
+select public.jp_drop_overloads('admin_feedback_split');
+create or replace function public.admin_feedback_split(
+  p_id    uuid,
+  p_parts jsonb,
+  p_note  text default null
+)
+returns table (id uuid, ticket_no bigint)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  par   public.feedback_reports;
+  me    text;
+  part  jsonb;
+  n     int := 0;
+  nid   uuid;
+  nno   bigint;
+  nums  text[] := '{}';
+  ttl   text;
+  bod   text;
+  knd   text;
+begin
+  if public.my_role() <> 'super_admin' then
+    raise exception 'Only a super admin can split feedback.';
+  end if;
+  select * into par from public.feedback_reports f where f.id = p_id for update;
+  if not found then
+    raise exception 'That report no longer exists.';
+  end if;
+  if par.archived_at is not null then
+    raise exception 'That report is archived. Only an open report can be split.';
+  end if;
+  if jsonb_typeof(p_parts) <> 'array' or jsonb_array_length(p_parts) < 2 then
+    raise exception 'A split needs at least two pieces.';
+  end if;
+  if jsonb_array_length(p_parts) > 20 then
+    raise exception 'That is more than twenty pieces.';
+  end if;
+  if p_note is not null and length(p_note) > 2000 then
+    raise exception 'That note is too long (2000 characters maximum).';
+  end if;
+  select w.writer_id into me from public.writers w where w.id = auth.uid();
+
+  for part in select * from jsonb_array_elements(p_parts) loop
+    n   := n + 1;
+    ttl := nullif(btrim(coalesce(part ->> 'title', '')), '');
+    bod := nullif(btrim(coalesce(part ->> 'body',  '')), '');
+    knd := coalesce(part ->> 'kind', par.kind);
+    if ttl is null then raise exception 'Piece % needs a headline.', n; end if;
+    if length(ttl) > 100 then raise exception 'Piece %''s headline is over 100 characters.', n; end if;
+    if bod is null then raise exception 'Piece % has no text.', n; end if;
+    if knd not in ('bug', 'feature') then raise exception 'Piece % has an unknown kind: %', n, knd; end if;
+
+    nid := gen_random_uuid();
+    nno := nextval('public.feedback_ticket_seq');
+    insert into public.feedback_reports
+      (id, writer_uid, kind, title, body, ticket_no, app_version, context,
+       capture_shot, parent_id, created_at)
+    values
+      (nid, par.writer_uid, knd, ttl, bod, nno, par.app_version, par.context,
+       case when n = 1 then par.capture_shot end, par.id, par.created_at);
+    nums := nums || ('#' || nno);
+    id := nid; ticket_no := nno;
+    return next;
+  end loop;
+
+  update public.feedback_reports f
+     set archived_at    = now(),
+         capture_shot   = null,
+         -- A page copy from before 2026-09-09 is purged by the client first,
+         -- as with any archive; the row just records that it is gone.
+         capture_page   = null,
+         capture_purged_at = case when par.capture_page is not null then now()
+                                  else f.capture_purged_at end,
+         admin_note     = coalesce(nullif(btrim(coalesce(p_note, '')), ''),
+                            'Thank you. This held several separate things, so it has been split into '
+                            || 'tickets that can each be tracked and finished on their own:')
+                          || ' ' || array_to_string(nums, ', ') || '.',
+         status_at      = now(),
+         status_by      = me,
+         writer_seen_at = null
+   where f.id = par.id;
+end $$;
+
+revoke all on function public.admin_feedback_split(uuid, jsonb, text) from public, anon;
+grant execute on function public.admin_feedback_split(uuid, jsonb, text) to authenticated;

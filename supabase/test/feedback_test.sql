@@ -359,5 +359,91 @@ select pg_temp.ok((select status from public.feedback_reports
                     where id = '33333333-3333-3333-3333-333333333333') = 'will_revisit',
                   'while a plain null still leaves the note alone');
 
+-- --- splitting a report into several tickets --------------------------------
+select pg_temp.be('a');
+select public.feedback_submit('5555aaaa-5555-4555-8555-555555555555', 'feature',
+       'Links should click. Also line spacing. Also pull the previous post.',
+       '4.3', '{"skin":"prime"}'::jsonb, null,
+       '00000000-0000-0000-0000-00000000000a/5555aaaa-5555-4555-8555-555555555555/shot.png',
+       'Three things at once');
+
+do $$ begin
+  perform public.admin_feedback_split('5555aaaa-5555-4555-8555-555555555555',
+    '[{"title":"a","body":"a"},{"title":"b","body":"b"}]'::jsonb);
+  raise exception 'FAIL: a writer split a report';
+exception when others then
+  if position('FAIL:' in sqlerrm) = 1 then raise; end if;
+end $$;
+select pg_temp.ok(true, 'a writer cannot split a report, even their own');
+
+select pg_temp.be('c');
+do $$ begin
+  perform public.admin_feedback_split('5555aaaa-5555-4555-8555-555555555555',
+    '[{"title":"only one","body":"x"}]'::jsonb);
+  raise exception 'FAIL: a one-piece split was accepted';
+exception when others then
+  if position('FAIL:' in sqlerrm) = 1 then raise; end if;
+end $$;
+select pg_temp.ok(true, 'a split needs at least two pieces');
+do $$ begin
+  perform public.admin_feedback_split('5555aaaa-5555-4555-8555-555555555555',
+    '[{"title":"","body":"x"},{"title":"b","body":"y"}]'::jsonb);
+  raise exception 'FAIL: a piece with no headline was accepted';
+exception when others then
+  if position('FAIL:' in sqlerrm) = 1 then raise; end if;
+end $$;
+select pg_temp.ok((select archived_at is null from public.feedback_reports
+                    where id = '5555aaaa-5555-4555-8555-555555555555'),
+                  'a piece with no headline is refused, and the refusal changes nothing');
+
+create temp table split_out as
+  select * from public.admin_feedback_split('5555aaaa-5555-4555-8555-555555555555',
+    '[{"kind":"feature","title":"Clickable links","body":"Links should click."},
+      {"kind":"feature","title":"Paragraph spacing","body":"Also line spacing."},
+      {"kind":"bug","title":"Previous post","body":"Also pull the previous post."}]'::jsonb);
+
+select pg_temp.ok((select count(*) from split_out) = 3, 'a super admin splits a report into three tickets');
+select pg_temp.ok((select count(distinct ticket_no) from split_out) = 3
+                  and (select min(ticket_no) from split_out) >
+                      (select ticket_no from public.feedback_reports where id = '5555aaaa-5555-4555-8555-555555555555'),
+                  'each gets its own new number');
+select pg_temp.ok((select bool_and(f.writer_uid = '00000000-0000-0000-0000-00000000000a'
+                                   and f.parent_id = '5555aaaa-5555-4555-8555-555555555555'
+                                   and f.status = 'new' and f.archived_at is null)
+                     from public.feedback_reports f join split_out o on o.id = f.id),
+                  'filed under the original writer, pointing back at the original, open and new');
+select pg_temp.ok((select kind from public.feedback_reports f join split_out o on o.id = f.id
+                    where f.title = 'Previous post') = 'bug', 'each piece keeps the kind it was given');
+select pg_temp.ok((select capture_shot from public.feedback_reports f join split_out o on o.id = f.id
+                    where f.title = 'Clickable links') like '%/shot.png'
+                  and (select count(*) from public.feedback_reports f join split_out o on o.id = f.id
+                        where f.capture_shot is not null) = 1,
+                  'the screenshot moves to the first piece, and only to it');
+select pg_temp.ok((select archived_at is not null and capture_shot is null and writer_seen_at is null
+                          and admin_note like '%split%#%' and body like 'Links should click.%'
+                     from public.feedback_reports where id = '5555aaaa-5555-4555-8555-555555555555'),
+                  'the original is archived, keeps its words, and carries an unread note naming the new numbers');
+select pg_temp.ok((select parent_ticket from public.admin_list_feedback(true) l
+                    where l.title = 'Paragraph spacing')
+                  = (select ticket_no from public.feedback_reports where id = '5555aaaa-5555-4555-8555-555555555555'),
+                  'the queue reports which ticket a piece came from');
+
+do $$ begin
+  perform public.admin_feedback_split('5555aaaa-5555-4555-8555-555555555555',
+    '[{"title":"a","body":"a"},{"title":"b","body":"b"}]'::jsonb);
+  raise exception 'FAIL: an archived report was split again';
+exception when others then
+  if position('FAIL:' in sqlerrm) = 1 then raise; end if;
+end $$;
+select pg_temp.ok(true, 'an archived report cannot be split again');
+
+select pg_temp.be('a');
+select pg_temp.ok((select count(*) from public.feedback_reports
+                    where parent_id = '5555aaaa-5555-4555-8555-555555555555') = 3,
+                  'the writer can read the pieces as their own reports');
+select public.feedback_withdraw('5555aaaa-5555-4555-8555-555555555555');
+select pg_temp.ok((select count(*) from public.feedback_reports f join split_out o on o.id = f.id) = 3,
+                  'withdrawing the original leaves the pieces alone');
+
 reset role;
 \echo '--- all feedback database checks passed ---'

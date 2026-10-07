@@ -10,6 +10,8 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-15',
     changes: [
+      'Fixed: in the App Feedback panel, switching from My reports to a new report straight away could wipe the new report form a moment later, as the list finished loading over it.',
+      'Admin: a feedback report that holds several separate ideas can now be split into tickets of their own. Select passages of the report, give each a headline, and each becomes a new numbered ticket under the same writer, so it can be answered and finished on its own. The original is archived with a note telling the writer the new numbers, and their reports list shows where each piece came from.',
       'Fixed: adding a character picture from a web address works with far more sites, including the SB118 wiki. When a site will not let LCARS keep a copy, the picture is linked from where it lives instead. And when a picture cannot be shown at all, LCARS now says why (for instance, that the address is a web page rather than an image) and what to do instead.',
       'Changed: marking a sim posted, complete, active or archived now saves to your account straight away and says so, instead of waiting for your next keystroke. A new indicator in the status bar at the bottom shows whether your work has synced: Syncing, Saved to account, or Not synced. Joint sims are not covered yet.',
       'Admin: the App Feedback queue can now be exported as one Markdown document, by Copy for Claude or Download .md. It exports exactly what is in view, so the tabs and the search filter it, and it opens with a short note asking for the reports to be reviewed and discussed before any work starts.',
@@ -2194,6 +2196,7 @@ function fbExportMarkdown() {
       '## ' + fbTicket(f) + ' · ' + (f.kind === 'bug' ? 'Bug' : 'Feature request') + ' · ' + fbHeadline(f).replace(/\s+/g, ' '), '',
       '- **Status:** ' + fbStatusLabel(f.status) + (f.archived_at ? ' (archived ' + fbExportUtc(f.archived_at) + ')' : ''),
       '- **Filed by:** ' + (f.writer_id || 'unknown') + (f.display_name ? ' (' + f.display_name + ')' : '') + ' on ' + fbExportUtc(f.created_at),
+      ...(f.parent_ticket ? ['- **Split from:** #' + f.parent_ticket] : []),
       '- **App version:** ' + (f.app_version || 'not recorded'),
       '- **Context:** ' + (ctx || 'none recorded') + (c.platform ? ' · ' + c.platform : ''),
       '- **Screenshot:** ' + (f.capture_shot ? 'yes — attached in the Admin panel (not included in this file)'
@@ -2271,6 +2274,7 @@ function paintFeedback() {
     el.innerHTML = '<span class="set-note">Nothing matches that.</span>';
     return;
   }
+  fbSplitClearMarks();
   el.innerHTML = '<div class="adm-fb-list">' + rows.map(f => {
     const errs = fbCleanErrors(f.context && f.context.errors);
     const ctx = fbContextLine(f.context);
@@ -2281,7 +2285,7 @@ function paintFeedback() {
       <button class="adm-fb-sum" onclick="fbToggle('${f.id}')" aria-expanded="${open ? 'true' : 'false'}">
         <span class="adm-fb-no">${esc(fbTicket(f))}</span>
         <span class="adm-req-tag adm-fb-${f.kind}">${f.kind === 'bug' ? 'Bug' : 'Feature'}</span>
-        <span class="adm-fb-ttl">${esc(fbHeadline(f))}</span>
+        <span class="adm-fb-ttl">${esc(fbHeadline(f))}${f.parent_ticket ? ` <span class="adm-fb-from">from #${esc(String(f.parent_ticket))}</span>` : ''}</span>
         <span class="adm-fb-who">${esc(f.writer_id || 'unknown')}</span>
         <span class="adm-req-when">${esc(fmtWhen(f.created_at))}</span>
         <span class="fb-st fb-st-${esc(f.status)}">${esc(fbStatusLabel(f.status))}</span>
@@ -2289,7 +2293,7 @@ function paintFeedback() {
         <span class="adm-fb-chev">${ic('chevron-down')}</span>
       </button>
       <div class="adm-fb-det">
-        <div class="adm-req-note">${esc(f.body)}</div>
+        <div class="adm-req-note" id="fb-text-${f.id}">${esc(f.body)}</div>
         ${(ctx || errs.length || ua) ? `
         <details class="adm-fb-tech">
           <summary>Technical details</summary>
@@ -2313,14 +2317,210 @@ function paintFeedback() {
             placeholder="A note back to the writer (optional)…">${esc(f.admin_note || '')}</textarea>
           <div class="adm-fb-btns">
             <button class="btn btn-p" onclick="fbSaveStatus('${f.id}')">${ic('check')} Save</button>
+            <button class="btn btn-s" onclick="fbSplitStart('${f.id}')" title="Turn parts of this report into tickets of their own">${ic('layers')} Split…</button>
             <button class="btn btn-s" onclick="fbConfirmArchive('${f.id}')">${ic('archive')} Archive</button>
             <button class="btn btn-s" onclick="fbConfirmDelete('${f.id}')">${ic('trash')} Delete</button>
           </div>
+          <div class="adm-fb-split" id="fb-split-${f.id}">${_fbSplit && _fbSplit.id === f.id ? fbSplitHtml() : ''}</div>
           ${f.status_at ? `<span class="adm-req-foot">Last actioned by ${esc(f.status_by || 'someone')} · ${esc(fmtWhen(f.status_at))}${f.admin_note ? ' · the note above is what the writer sees, and editing it sends the new one' : ''}</span>` : ''}
         </div>`}
       </div>
     </div>`;
   }).join('') + '</div>';
+}
+
+// ── Splitting a report into several tickets ──────────────────────────────
+// One report often carries several ideas, and one ticket cannot be finished
+// until the slowest of them is. An admin selects passages of the report, each
+// becomes a PIECE (A, B, C…), and the split files every piece as a ticket of
+// its own under the original writer. admin_feedback_split() does the filing,
+// archives the original with an unread note naming the new numbers, and hands
+// the screenshot to piece A.
+//
+// The pieces are kept in _fbSplit rather than read off the page, so a repaint
+// of the queue (a search, a reload) does not lose the work. The highlights are
+// the one thing a repaint does lose: they hang off DOM ranges.
+let _fbSplit = null;     // { id, parts: [{ kind, title, body }], note }
+const FB_SPLIT_MAX = 20;
+
+function fbSplitLetter(i) { return String.fromCharCode(65 + i); }
+
+function fbSplitStart(id) {
+  const f = _fbReports.find(x => x.id === id);
+  if (!f) return;
+  if (!_fbSplit || _fbSplit.id !== id) _fbSplit = { id, parts: [], note: '', kind: f.kind };
+  fbSplitPaint();
+  showToast('Select a passage of the report, then press Add selection.', 3600);
+}
+
+function fbSplitCancel() {
+  _fbSplit = null;
+  fbSplitClearMarks();
+  document.querySelectorAll('.adm-fb-split').forEach(el => { el.innerHTML = ''; });
+}
+
+// Inputs are read back into state before every repaint of the pane, so adding
+// a piece never throws away a headline typed into another.
+function fbSplitSync() {
+  if (!_fbSplit) return;
+  _fbSplit.parts.forEach((pt, i) => {
+    const k = document.getElementById('fbsp-k-' + i), t = document.getElementById('fbsp-t-' + i),
+          b = document.getElementById('fbsp-b-' + i);
+    if (k) pt.kind = k.value;
+    if (t) pt.title = t.value;
+    if (b) pt.body = b.value;
+  });
+  const n = document.getElementById('fbsp-note');
+  if (n) _fbSplit.note = n.value;
+}
+
+function fbSplitPaint() {
+  if (!_fbSplit) return;
+  const el = document.getElementById('fb-split-' + _fbSplit.id);
+  if (el) el.innerHTML = fbSplitHtml();
+  fbSplitMarks();
+}
+
+function fbSplitHtml() {
+  const sp = _fbSplit;
+  const f = _fbReports.find(x => x.id === sp.id) || {};
+  const n = sp.parts.length;
+  return `
+    <div class="adm-fb-split-in">
+      <div class="msec" style="margin:0 0 6px">SPLIT ${esc(fbTicket(f))} INTO SEPARATE TICKETS</div>
+      <span class="set-note" style="margin:0 0 8px;display:block">Select a passage of the report above and press
+        <strong>Add selection</strong>. Each piece becomes a ticket of its own, filed under the same writer, who sees
+        it in their own reports. The original is archived with a note naming the new numbers.
+        ${f.capture_shot ? 'The screenshot goes with piece A.' : ''}</span>
+      <div class="adm-fb-btns" style="margin-bottom:8px">
+        <button class="btn btn-s" onmousedown="event.preventDefault()" onclick="fbSplitAddSelection()">${ic('copy-plus')} Add selection</button>
+        <button class="btn btn-s" onclick="fbSplitAddBlank()">${ic('pencil')} Add a piece to type</button>
+      </div>
+      ${sp.parts.map((pt, i) => `
+      <div class="adm-fb-piece fbsp-c${i % 6}">
+        <div class="adm-fb-piece-hd">
+          <span class="adm-fb-piece-l">${fbSplitLetter(i)}</span>
+          <select class="mi" id="fbsp-k-${i}" aria-label="Kind">
+            <option value="bug"${pt.kind === 'bug' ? ' selected' : ''}>Bug</option>
+            <option value="feature"${pt.kind === 'feature' ? ' selected' : ''}>Feature request</option>
+          </select>
+          <input class="mi" id="fbsp-t-${i}" maxlength="100" autocomplete="off" placeholder="Headline for this piece"
+            value="${esc(pt.title || '')}">
+          <button class="fb-x" onclick="fbSplitRemove(${i})" title="Remove piece ${fbSplitLetter(i)}" aria-label="Remove piece ${fbSplitLetter(i)}">&times;</button>
+        </div>
+        <textarea class="mi" id="fbsp-b-${i}" rows="3" maxlength="4000" placeholder="What this piece is about">${esc(pt.body || '')}</textarea>
+      </div>`).join('')}
+      <textarea class="mi adm-fb-note" id="fbsp-note" rows="2" maxlength="1900"
+        placeholder="Note to the writer on the original (optional). The new ticket numbers are added to the end.">${esc(sp.note || '')}</textarea>
+      <div class="adm-fb-btns">
+        <button class="btn btn-p" onclick="fbSplitConfirm()"${n < 2 ? ' disabled' : ''}>${ic('layers')} ${n < 2 ? 'Add at least two pieces' : 'Split into ' + n + ' tickets'}</button>
+        <button class="btn btn-s" onclick="fbSplitCancel()">Cancel</button>
+      </div>
+    </div>`;
+}
+
+function fbSplitAddSelection() {
+  if (!_fbSplit) return;
+  const box = document.getElementById('fb-text-' + _fbSplit.id);
+  const sel = window.getSelection();
+  const txt = sel ? String(sel).trim() : '';
+  if (!box || !txt || !sel.rangeCount || !box.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+    showToast('Select some of the report’s own text first, then press Add selection.', 3600);
+    return;
+  }
+  if (_fbSplit.parts.length >= FB_SPLIT_MAX) { showToast('That is the most pieces one split can make.', 3200); return; }
+  fbSplitSync();
+  _fbSplit.parts.push({ kind: _fbSplit.kind, title: '', body: txt, range: sel.getRangeAt(0).cloneRange() });
+  sel.removeAllRanges();
+  fbSplitPaint();
+  const t = document.getElementById('fbsp-t-' + (_fbSplit.parts.length - 1));
+  if (t) t.focus();
+}
+
+function fbSplitAddBlank() {
+  if (!_fbSplit || _fbSplit.parts.length >= FB_SPLIT_MAX) return;
+  fbSplitSync();
+  _fbSplit.parts.push({ kind: _fbSplit.kind, title: '', body: '' });
+  fbSplitPaint();
+}
+
+function fbSplitRemove(i) {
+  if (!_fbSplit) return;
+  fbSplitSync();
+  _fbSplit.parts.splice(i, 1);
+  fbSplitPaint();
+}
+
+// Each piece's passage is tinted in the report, in its piece's colour, through
+// the CSS Custom Highlight API: it paints over a range without touching the
+// DOM, so the report text is never rewritten. A browser without it simply
+// shows no tint -- the pieces list below is the record either way.
+function fbSplitMarks() {
+  fbSplitClearMarks();
+  if (!_fbSplit || !(window.CSS && CSS.highlights && window.Highlight)) return;
+  _fbSplit.parts.forEach((pt, i) => {
+    if (pt.range && !pt.range.collapsed) {
+      const key = 'fbsp-' + (i % 6);
+      const h = CSS.highlights.get(key) || new Highlight();
+      h.add(pt.range);
+      CSS.highlights.set(key, h);
+    }
+  });
+}
+
+function fbSplitClearMarks() {
+  if (!(window.CSS && CSS.highlights)) return;
+  for (let i = 0; i < 6; i++) CSS.highlights.delete('fbsp-' + i);
+  // A repaint replaces the text the ranges pointed into; drop them so they
+  // are not re-applied to nodes that no longer exist.
+  if (_fbSplit) _fbSplit.parts.forEach(pt => { if (pt.range && !document.contains(pt.range.startContainer)) pt.range = null; });
+}
+
+function fbSplitConfirm() {
+  if (!_fbSplit) return;
+  fbSplitSync();
+  const sp = _fbSplit;
+  const f = _fbReports.find(x => x.id === sp.id);
+  if (!f) return;
+  const bad = sp.parts.findIndex(pt => !String(pt.title || '').trim() || !String(pt.body || '').trim());
+  if (sp.parts.length < 2) { showToast('A split needs at least two pieces.', 3200); return; }
+  if (bad >= 0) {
+    showToast('Piece ' + fbSplitLetter(bad) + ' needs a headline and some text.', 3600);
+    const t = document.getElementById(String(sp.parts[bad].title || '').trim() ? 'fbsp-b-' + bad : 'fbsp-t-' + bad);
+    if (t) t.focus();
+    return;
+  }
+  openModal('Split ' + fbTicket(f), `
+    <div style="font-size:0.87rem;line-height:1.65">
+      <p style="margin:0 0 10px">${esc(fbTicket(f))} becomes <strong>${sp.parts.length} new tickets</strong>,
+        each filed under ${esc(f.writer_id || 'the writer')} with its own number and status:</p>
+      <ul style="margin:0 0 10px;padding-left:18px">${sp.parts.map((pt, i) =>
+        `<li><strong>${fbSplitLetter(i)}</strong> · ${pt.kind === 'bug' ? 'Bug' : 'Feature'} · ${esc(pt.title.trim())}</li>`).join('')}</ul>
+      <p style="margin:0;color:var(--dim);font-size:0.8rem">The original is archived, with its words kept as they
+        were, and the writer is told by a note naming the new numbers.${f.capture_shot ? ' The screenshot moves to piece A.' : ''}</p>
+    </div>`, () => { fbSplitDo(); }, { ok: 'Split it' });
+}
+
+async function fbSplitDo() {
+  const sp = _fbSplit;
+  const f = sp && _fbReports.find(x => x.id === sp.id);
+  if (!f) return;
+  try {
+    // Archiving promises the capture is destroyed. A page copy from before
+    // 2026-09-09 has no live ticket to move to, so it goes first, as in fbPurge.
+    if (f.capture_page) await fbDeleteObjects([f.capture_page]);
+    const out = await supaRpc('admin_feedback_split', {
+      p_id: f.id,
+      p_parts: sp.parts.map(pt => ({ kind: pt.kind, title: pt.title.trim(), body: pt.body.trim() })),
+      p_note: (sp.note || '').trim() || null,
+    });
+    const nums = (out || []).map(r => '#' + r.ticket_no).join(', ');
+    fbSplitCancel();
+    showToast('Split into ' + (nums || 'new tickets') + '. The writer has been told.', 4200);
+    loadFeedback();
+  } catch (e) {
+    showToast(e.message || 'That could not be split.', 5200);
+  }
 }
 
 // ── Looking at a screenshot ───────────────────────────────────────────────
@@ -2958,12 +3158,22 @@ function fbLoadMine() {
     .then(r => r.ok ? r.json() : Promise.reject(new Error('Your reports could not be read.')))
     .then(rows => {
       _fbMine = rows || [];
+      // The writer may have switched to the form while this was in flight;
+      // painting the list now would wipe out whatever they had started typing.
+      if (_fbTab !== 'mine') return;
       fbPaintMine();
       if (_fbMine.some(f => f.admin_note && !f.writer_seen_at)) {
         supaRpc('feedback_mark_seen').then(fbRefreshBadge).catch(() => {});
       }
     })
     .catch(e => { if (el) el.innerHTML = '<span class="set-note" style="color:var(--red,#c66)">' + esc(e.message) + '</span>'; });
+}
+
+// The original of a split is the writer's own report too, so its number is in
+// the list they already have. It may have been withdrawn since, and says so.
+function fbMineTicket(id) {
+  const p = _fbMine.find(x => x.id === id);
+  return p && p.ticket_no ? '#' + p.ticket_no : 'an earlier report';
 }
 
 function fbPaintMine() {
@@ -2982,6 +3192,7 @@ function fbPaintMine() {
         <span class="fb-st fb-st-${esc(f.status)}">${esc(fbStatusLabel(f.status))}</span>
       </div>
       ${f.title ? `<div class="fb-item-ttl">${esc(f.title)}</div>` : ''}
+      ${f.parent_id ? `<div class="fb-item-from">Split from ${esc(fbMineTicket(f.parent_id))} so it can be tracked on its own.</div>` : ''}
       <div class="adm-req-note">${esc(f.body)}</div>
       ${f.admin_note ? `<div class="fb-reply">${ic('message-square-warning')} ${esc(f.admin_note)}
         <span class="adm-req-foot">${esc(fmtWhen(f.status_at))}</span></div>` : ''}
