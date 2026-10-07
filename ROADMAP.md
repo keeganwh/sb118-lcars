@@ -4,6 +4,23 @@ _Outstanding work only. Current version: **4.3**, released 2026-09-13. Everythin
 
 Live at **https://sb118-lcars.vercel.app/**. GitHub Pages still serves the same `main` with a moving notice.
 
+> **NEXT SESSION — the solo editor on ProseMirror (agreed 2026-10-07).** After the
+> feedback-fixes branch (`claude/awesome-faraday-o722pg`) reaches `main`, the user
+> wants to move the **solo** editor onto the ProseMirror engine live writing already
+> uses (`live-editor.js`: schema, marker and colour decorations, HTML round trip),
+> rather than keep patching the `contenteditable` rewrite passes or stress-testing
+> them. Agreed shape: its **own branch** (`claude/solo-prosemirror`), behind an
+> **"Experimental editor" switch in Settings** so both editors run on the same sims
+> for comparison. First cut: typing, markers/colours/name bolding as decorations,
+> bold/italic/indent, paste, copy-out, saving; the rest (source view, Academy,
+> templates, snapshots, Shift+right-click colours, the phone toolbar, the link
+> bubble) after the user has judged whether it feels better. **Questions to put to
+> the user at the start of that session:** (1) the recurring editor irritations, as
+> concretely as possible -- what you did, what happened -- which become the
+> acceptance checks; (2) confirm the branch-plus-switch approach; (3) whether live
+> writing has been tested with a real person yet, since this touches files the
+> live-writing session owns -- see "TWO SESSIONS ARE RUNNING AT ONCE" below.
+
 > **Context.** The platform shift shipped 2026-08-14 and Joint Posts shipped in 4.24. What shipped, why, and the landmines are in `memory/` — **read `memory/MEMORY.md` first, then the files it flags for the batch you are starting.**
 
 ---
