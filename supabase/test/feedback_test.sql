@@ -445,5 +445,26 @@ select public.feedback_withdraw('5555aaaa-5555-4555-8555-555555555555');
 select pg_temp.ok((select count(*) from public.feedback_reports f join split_out o on o.id = f.id) = 3,
                   'withdrawing the original leaves the pieces alone');
 
+-- --- the Done status ----------------------------------------------------------
+-- Filed by B: A has used up the hourly rate limit earlier in this file.
+select pg_temp.be('b');
+select public.feedback_submit('6666bbbb-6666-4666-8666-666666666666', 'bug',
+       'The toolbar vanished again.', '4.3', '{}'::jsonb, null, null, 'Toolbar gone');
+select public.feedback_mark_seen();
+select pg_temp.be('c');
+select public.admin_feedback_status('6666bbbb-6666-4666-8666-666666666666', 'done',
+       'Fixed. Thank you for reporting it.');
+select pg_temp.ok((select status = 'done' and admin_note = 'Fixed. Thank you for reporting it.'
+                          and writer_seen_at is null
+                     from public.feedback_reports where id = '6666bbbb-6666-4666-8666-666666666666'),
+                  'a report can be marked Done, and the note reaches the writer as unread');
+do $$ begin
+  perform public.admin_feedback_status('6666bbbb-6666-4666-8666-666666666666', 'finished', null);
+  raise exception 'FAIL: an unknown status was accepted';
+exception when others then
+  if position('FAIL:' in sqlerrm) = 1 then raise; end if;
+end $$;
+select pg_temp.ok(true, 'an unknown status is still refused');
+
 reset role;
 \echo '--- all feedback database checks passed ---'

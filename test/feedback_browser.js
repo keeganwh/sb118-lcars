@@ -65,7 +65,7 @@ function rpc(fn, a, me) {
     }
     case 'admin_feedback_status': {
       if (who.role !== 'super_admin') throw new Error('Only a super admin can action feedback.');
-      if (!['new','implementing','will_revisit','rejected'].includes(a.p_status))
+      if (!['new','implementing','will_revisit','rejected','done'].includes(a.p_status))
         throw new Error('Unknown status: ' + a.p_status);
       const r = DB.reports.find(x => x.id === a.p_id);
       r.status = a.p_status;
@@ -351,8 +351,23 @@ async function ctxFor(browser, who, errors) {
     fbSaveStatus(id);
   }, rep.id);
   await s.p.waitForTimeout(500);
-  ok(rep.status === 'implementing' && rep.admin_note === 'Fixed in the next release.',
+  ok(rep.admin_note === 'Fixed in the next release.',
      'the admin sets a status and writes a note back');
+
+  // --- Done ---------------------------------------------------------------
+  // Picking Done fills a thank-you into the note box only if the admin has not
+  // written something new; saving it is what tells the writer.
+  await s.p.evaluate(id => { loadFeedback(); }, rep.id);
+  await s.p.waitForTimeout(500);
+  await s.p.evaluate(id => { fbToggle(id); }, rep.id);
+  await s.p.selectOption('#fb-st-' + rep.id, 'done');
+  ok(await s.p.evaluate(id => /Fixed! .*Thank you for reporting it/.test(document.getElementById('fb-nt-' + id).value), rep.id),
+     'choosing Done on a bug fills in a thank-you the admin can edit');
+  await s.p.evaluate(id => { document.getElementById('fb-nt-' + id).value = 'Fixed in the next release.'; fbSaveStatus(id); }, rep.id);
+  await s.p.waitForTimeout(500);
+  ok(rep.status === 'done', 'and saving it marks the report Done');
+  ok(await s.p.evaluate(id => /Done/.test(document.getElementById('fbrow-' + id).textContent), rep.id),
+     'the queue shows it as Done');
 
   // --- the reply reaches the writer ---------------------------------------
   await w.p.evaluate(() => fbRefreshBadge());

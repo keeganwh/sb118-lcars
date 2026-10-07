@@ -1311,6 +1311,7 @@ body.academy #editor .om{font-style:normal}
   margin-left:auto}
 .fb-st-implementing,.fb-st-in_development{color:var(--amber)}
 .fb-st-rejected,.fb-st-ignored{color:var(--dim)}
+.fb-st-done{color:var(--green,#4f9a5a);font-weight:700}
 .fb-item-act{display:flex;justify-content:flex-end;margin-top:8px}
 /* A reply is the one thing in this panel the writer did not write. It gets the
    accent rule so it reads as an answer rather than as more of their own text. */

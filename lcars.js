@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-15',
     changes: [
+      'Admin: feedback reports can now be marked Done. Choosing it fills in a thank-you note you can edit, and saving it tells the writer through the reply badge on their reports, so they know their bug was fixed or their idea was built.',
       'Fixed: after tidying blank lines, the Undo could vanish almost at once, because spellcheck and writing extensions were mistaken for your own typing. Only your own edits cancel it now. Ctrl+Z also undoes a tidy now even when you have just clicked the banner and the cursor is not in the editor.',
       'Fixed: Tidy them on the paste banner did nothing if you took more than a moment to press it. The banner is also now a bar of its own near the bottom of the editor, in your accent colour, so it is hard to miss. Pop-up messages use the right text colour for your accent too, so they are easier to read, and longer messages wrap instead of running off the screen.',
       'Fixed: the blank-line banner sat inside the scrolling sim, so in a long sim it appeared out of sight above where you were working, and the offer to tidy a paste, or to undo a tidy, went unseen. It now sits at the top of the editor, always visible, and stays for 20 seconds. Ctrl+Z undoes a tidy while the banner is showing, and the undo is dropped once you type again or open another sim, so it can never bring back old text. The message after linking a character picture also stays up longer.',
@@ -2018,6 +2019,10 @@ const FB_STATUS = [
   { v: 'implementing', l: 'Implementing' },
   { v: 'will_revisit', l: 'Will revisit' },
   { v: 'rejected',     l: 'Rejected' },
+  // The outcome a writer most wants to hear. Choosing it fills the note box
+  // with a thank-you (see fbStatusPick), because the writer is only told by a
+  // note -- a status change on its own raises no badge.
+  { v: 'done',         l: 'Done' },
 ];
 // The old names are still readable, because a row written before this change
 // can still be sitting in the queue when the app updates ahead of the database.
@@ -2329,7 +2334,7 @@ function paintFeedback() {
               <span class="adm-req-foot">${esc(f.status_by || '')} ${esc(fmtWhen(f.status_at))}</span></div>`
           : '') : `
         <div class="adm-fb-act">
-          <select class="mi adm-fb-status" id="fb-st-${f.id}">
+          <select class="mi adm-fb-status" id="fb-st-${f.id}" onchange="fbStatusPick('${f.id}')">
             ${FB_STATUS.map(st => `<option value="${st.v}"${fbStatusLabel(f.status) === st.l ? ' selected' : ''}>${st.l}</option>`).join('')}
           </select>
           <textarea class="mi adm-fb-note" id="fb-nt-${f.id}" rows="2" maxlength="2000"
@@ -2610,6 +2615,22 @@ function fbOpenCapture(path) {
 // it is an EDIT rather than a fresh line. That changes what an empty box means:
 // it used to mean "leave the old note alone", and now it means the admin has
 // deleted it, which p_clear_note says out loud rather than leaving to a guess.
+// Done is only news to the writer if it arrives as a note, so picking it puts
+// a thank-you in the box -- worded for a bug or a feature -- unless the admin
+// has already written something new there. They can edit it before saving.
+function fbStatusPick(id) {
+  const st = document.getElementById('fb-st-' + id);
+  const nt = document.getElementById('fb-nt-' + id);
+  const f = _fbReports.find(x => x.id === id);
+  if (!st || !nt || !f || st.value !== 'done') return;
+  const typed = nt.value.trim();
+  if (typed && typed !== String(f.admin_note || '').trim()) return;
+  nt.value = f.kind === 'bug'
+    ? 'Fixed! This is sorted in LCARS now. Thank you for reporting it.'
+    : 'Done! This is in LCARS now. Thank you for suggesting it.';
+  nt.focus();
+}
+
 function fbSaveStatus(id) {
   const st = document.getElementById('fb-st-' + id);
   const nt = document.getElementById('fb-nt-' + id);
@@ -2618,7 +2639,12 @@ function fbSaveStatus(id) {
   supaRpcSoft('admin_feedback_status', {
     p_id: id, p_status: st.value, p_note: note || null, p_clear_note: !note
   }, ['p_clear_note'])
-    .then(() => { showToast('Report updated'); loadFeedback(); })
+    .then(() => {
+      showToast(st.value === 'done'
+        ? 'Marked Done. The writer has been told. Archive it whenever you are ready.'
+        : 'Report updated', st.value === 'done' ? 4600 : 2200);
+      loadFeedback();
+    })
     .catch(e => showToast(e.message, 5200));
 }
 
