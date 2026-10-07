@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-15',
     changes: [
+      'Fixed: adding a character picture from a web address works with far more sites, including the SB118 wiki. When a site will not let LCARS keep a copy, the picture is linked from where it lives instead. And when a picture cannot be shown at all, LCARS now says why (for instance, that the address is a web page rather than an image) and what to do instead.',
       'Changed: marking a sim posted, complete, active or archived now saves to your account straight away and says so, instead of waiting for your next keystroke. A new indicator in the status bar at the bottom shows whether your work has synced: Syncing, Saved to account, or Not synced. Joint sims are not covered yet.',
       'Admin: the App Feedback queue can now be exported as one Markdown document, by Copy for Claude or Download .md. It exports exactly what is in view, so the tabs and the search filter it, and it opens with a short note asking for the reports to be reviewed and discussed before any work starts.',
       'Changed: a bug report or a feature request now starts with a short headline, and reports are numbered \u2014 so you can point at one by its number in a conversation instead of describing it again. The headline is the first box on the form and is limited to 100 characters',
@@ -9671,7 +9672,7 @@ function renderManifestList() {
     const clr = getDivColor(c);
     const initials = getCharInitials(c.name);
     const avatarContent = c.pictureDataUrl
-      ? `<img src="${c.pictureDataUrl}" alt="${esc(c.name)}">`
+      ? `<img src="${esc(charPicSrc(c))}" alt="${esc(c.name)}" referrerpolicy="no-referrer">`
       : initials;
     const avatarBg = c.pictureDataUrl ? '' : `background:${clr}`;
     const pips = renderPips(c.rank);
@@ -9781,7 +9782,7 @@ function renderEditMode(c, clr, initials) {
     .map(t=>`<option value="${t}" ${(c.charType||'')===t?'selected':''}>${t||'— Type —'}</option>`).join('');
 
   const avatarHtml = c.pictureDataUrl
-    ? `<img src="${c.pictureDataUrl}" alt="${esc(c.name)}">`
+    ? `<img src="${esc(charPicSrc(c))}" alt="${esc(c.name)}" referrerpolicy="no-referrer">`
     : `<span>${initials}</span>`;
 
   // The handlers take the element, not a row number. The old baked-in indices
@@ -9869,7 +9870,7 @@ function renderBioCol(c, clr, initials, myDocs, allDocCount, avgW, lastDoc, type
   const aliasStr = (c.aliases||[]).filter(Boolean).join(', ');
   const wikiDisplay = c.wikiUrl ? c.name + ' (118 Wiki)' : '';
   const avatarHtml = c.pictureDataUrl
-    ? `<img src="${c.pictureDataUrl}" alt="${esc(c.name)}">`
+    ? `<img src="${esc(charPicSrc(c))}" alt="${esc(c.name)}" referrerpolicy="no-referrer">`
     : `<span>${initials}</span>`;
   const col = detectAliasCollisions()[c.id];
   const collisionHtml = (col&&col.length)
@@ -10167,27 +10168,76 @@ function removeCharPic() {
   persist(); renderManifestList(); renderCharProfile(_curCharId);
 }
 
-function loadCharPicFromUrl() {
+// A character's picture. Usually a resized copy stored as a data: URL, but a
+// picture that could not be copied is kept as a LINK to where it lives (see
+// loadCharPicFromUrl), so the field holds either. Anything else -- a
+// javascript: URL in imported data, say -- is refused rather than rendered.
+function charPicSrc(c) {
+  const v = String((c && c.pictureDataUrl) || '');
+  return /^data:image\//i.test(v) || /^https?:\/\//i.test(v) ? v : '';
+}
+
+function setCharPic(src, how) {
+  if (!_curCharId || !S.characters) return;
+  const c = S.characters[_curCharId]; if (!c) return;
+  c.pictureDataUrl = src;
+  c.updatedAt = Date.now();
+  persist(); schedSync(); renderManifestList(); renderCharProfile(_curCharId);
+  if (how) showToast(how, 4200);
+}
+
+function loadImage(url, cors) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    if (cors) img.crossOrigin = 'anonymous';
+    img.referrerPolicy = 'no-referrer';
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error('load failed'));
+    img.src = url;
+  });
+}
+
+// Three tries, best first:
+//   1. COPY it. Resizing means reading the pixels, which a browser only allows
+//      when the image's host says so (CORS). Best result: stored with the
+//      character, works offline, never breaks.
+//   2. LINK to it. Most hosts that refuse step 1 -- the SB118 wiki among them --
+//      will still DISPLAY the image anywhere, and displaying needs no
+//      permission. It is fitted with CSS instead of resized. Sent with no
+//      referrer, which is what most hotlink protection keys on.
+//   3. Explain. If it will not even display, say which of the likely causes it
+//      is and what to do instead, rather than a bare "could not load".
+async function loadCharPicFromUrl() {
   const urlInput = document.getElementById('cm-pic-url');
   const url = urlInput ? urlInput.value.trim() : '';
   if (!url) return;
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  img.onload = () => {
+  if (!/^https?:\/\//i.test(url)) {
+    alert('That does not look like a web address.\nIt should start with https:// — right-click the picture and choose "Copy image address".');
+    return;
+  }
+  try {
+    const img = await loadImage(url, true);
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 200;
     const ctx = canvas.getContext('2d');
     const min = Math.min(img.width, img.height);
     const sx = (img.width-min)/2, sy = (img.height-min)/2;
     ctx.drawImage(img, sx, sy, min, min, 0, 0, 200, 200);
-    if (!_curCharId || !S.characters) return;
-    const c = S.characters[_curCharId]; if (!c) return;
-    c.pictureDataUrl = canvas.toDataURL('image/jpeg', 0.82);
-    c.updatedAt = Date.now();
-    persist(); renderManifestList(); renderCharProfile(_curCharId);
-  };
-  img.onerror = () => alert('Could not load image from that URL.\nSome sites block cross-origin image requests.');
-  img.src = url;
+    setCharPic(canvas.toDataURL('image/jpeg', 0.82));
+    return;
+  } catch (e) { /* the host would not let it be copied -- try linking */ }
+  try {
+    await loadImage(url, false);
+    setCharPic(url, 'That site would not let LCARS keep a copy, so the picture is linked from where it lives. ' +
+                    'If it ever moves, the picture will disappear — upload a saved copy to keep it for good.');
+    return;
+  } catch (e) { /* not even displayable */ }
+  const page = !/\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?|#|$)/i.test(url);
+  alert(page
+    ? 'That address is a web page, not a picture.\n\nOpen the page, right-click the picture itself and choose "Copy image address", then paste that here. ' +
+      'Or save the picture and use Upload instead.'
+    : 'That picture could not be loaded. The site may block other sites from showing its images, ' +
+      'or the address may be wrong or need a sign-in.\n\nSave the picture to your device and use Upload instead.');
 }
 
 function resizePicture(file, cb) {
