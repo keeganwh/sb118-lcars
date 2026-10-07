@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-15',
     changes: [
+      'Changed: links in a sim work like they do in Google Docs. Click a link, or move the cursor into one, and a small bubble shows where it goes: click the address to open it in a new tab, or copy, edit or remove it. Ctrl+K and the Link button open the same bubble beside your text rather than a box over the sim, and Ctrl+click opens a link straight away. Typing a bare address such as starbase118.net now makes a working link.',
       'Fixed: in the App Feedback panel, switching from My reports to a new report straight away could wipe the new report form a moment later, as the list finished loading over it.',
       'Admin: a feedback report that holds several separate ideas can now be split into tickets of their own. Select passages of the report, give each a headline, and each becomes a new numbered ticket under the same writer, so it can be answered and finished on its own. The original is archived with a note telling the writer the new numbers, and their reports list shows where each piece came from.',
       'Fixed: adding a character picture from a web address works with far more sites, including the SB118 wiki. When a site will not let LCARS keep a copy, the picture is linked from where it lives instead. And when a picture cannot be shown at all, LCARS now says why (for instance, that the address is a web page rather than an image) and what to do instead.',
@@ -7042,70 +7043,208 @@ function ec(cmd) {
   document.getElementById('editor').focus(); document.execCommand(cmd,false,null);
 }
 
+// ── Links: a bubble, not a dialog ────────────────────────────────────────
+// Modelled on Google Docs. Put the caret in a link -- by clicking it or by
+// arrowing into it -- and a small bubble opens under it with the address
+// (which opens in a new tab), Copy, Edit and Remove. Ctrl+K and the Link button
+// open the same bubble as a two-field form, at the selection, so making a link
+// and changing one are the same few keystrokes and neither covers the sim.
+// Ctrl/Cmd+click on a link opens it outright.
+//
+// The bubble lives outside the editor, so nothing here adds to or rewrites the
+// sim's markup except the link itself.
+let _linkBub = null;   // { mode: 'view'|'form', link, range, selText }
+
+function linkFromNode(node) {
+  const ed = document.getElementById('editor');
+  if (!ed || !node) return null;
+  if (node.nodeType === 3) node = node.parentNode;
+  while (node && node !== ed) {
+    if (node.nodeName === 'A') return node;
+    node = node.parentNode;
+  }
+  return null;
+}
+
+// What a writer types is not always a full address. "starbase118.net" is meant
+// as a website and an address with an @ as an email; anything with a scheme is
+// left as typed.
+function linkNormalise(u) {
+  u = String(u || '').trim();
+  if (!u) return '';
+  if (/^[a-z][a-z0-9+.-]*:/i.test(u)) return u;
+  if (/^[^\s@\/]+@[^\s@\/]+\.[^\s@\/]+$/.test(u)) return 'mailto:' + u;
+  return 'https://' + u.replace(/^\/+/, '');
+}
+
+// Only these are ever opened. A javascript: link pasted in from somewhere is
+// shown as text in the bubble and never followed.
+function linkSafe(u) { return /^(https?:|mailto:)/i.test(String(u || '').trim()); }
+
+function linkOpen(a) {
+  const u = a && a.getAttribute('href');
+  if (!linkSafe(u)) { showToast('That link is not a web address, so LCARS will not open it.', 3600); return; }
+  window.open(u, '_blank', 'noopener,noreferrer');
+}
+
+function linkBubEl() {
+  let el = document.getElementById('link-bub');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'link-bub';
+    el.className = 'hidden';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', 'Link');
+    // Clicks inside must not reach the document handlers that close menus, or
+    // the editor's own caret logic.
+    el.addEventListener('mousedown', e => e.stopPropagation());
+    el.addEventListener('click', e => e.stopPropagation());
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function linkBubPlace(rect) {
+  const el = linkBubEl();
+  el.style.left = '0px'; el.style.top = '0px';
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let left = Math.min(Math.max(8, rect.left), vw - w - 8);
+  let top = rect.bottom + 6;
+  if (top + h > vh - 8) top = Math.max(8, rect.top - h - 6);   // no room below: go above
+  el.style.left = Math.max(8, left) + 'px';
+  el.style.top = top + 'px';
+}
+
+function linkBubHide() {
+  const el = document.getElementById('link-bub');
+  if (el) { el.classList.add('hidden'); el.innerHTML = ''; }
+  _linkBub = null;
+  _editingLink = null;
+}
+
+function linkBubView(a) {
+  if (_linkBub && _linkBub.mode === 'form') return;
+  if (_linkBub && _linkBub.mode === 'view' && _linkBub.link === a) return;
+  const u = a.getAttribute('href') || '';
+  _linkBub = { mode: 'view', link: a };
+  const el = linkBubEl();
+  el.innerHTML = `
+    <span class="lb-url" title="${esc(u)}">${ic('link', 'ic-sm')} ${linkSafe(u)
+      ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(u.replace(/^mailto:/i, ''))}</a>`
+      : `<span>${esc(u || '(no address)')}</span>`}</span>
+    <span class="lb-acts">
+      <button class="lb-b" onclick="linkBubCopy()" title="Copy the address" aria-label="Copy the address">${ic('copy', 'ic-sm')}</button>
+      <button class="lb-b" onclick="linkBubEdit()" title="Edit link (Ctrl+K)" aria-label="Edit link">${ic('pencil', 'ic-sm')}</button>
+      <button class="lb-b" onclick="doUnlinkCurrent()" title="Remove link" aria-label="Remove link">${ic('x', 'ic-sm')}</button>
+    </span>`;
+  el.classList.remove('hidden');
+  linkBubPlace(a.getBoundingClientRect());
+}
+
+function linkBubCopy() {
+  const a = _linkBub && _linkBub.link;
+  const u = a ? (a.getAttribute('href') || '').replace(/^mailto:/i, '') : '';
+  if (!u) return;
+  const done = () => showToast('Link copied');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(done, () => showToast('Could not copy it.', 3000));
+}
+
+function linkBubEdit() {
+  const a = _linkBub && _linkBub.link;
+  if (!a) return;
+  const r = document.createRange();
+  r.selectNodeContents(a);
+  linkBubForm(a, r, '');
+}
+
+// The form, for a new link or an existing one. The selection is saved now,
+// because focusing the address field takes it away from the editor.
+function linkBubForm(a, range, selText) {
+  _linkBub = { mode: 'form', link: a || null, range: range ? range.cloneRange() : null, selText: selText || '' };
+  _editingLink = a || null;
+  const u = a ? (a.getAttribute('href') || '') : '';
+  const t = a ? a.textContent : (selText || '');
+  const el = linkBubEl();
+  el.innerHTML = `
+    <div class="lb-form">
+      <input class="mi" id="lb-text" placeholder="Text" value="${esc(t)}" aria-label="Text to show"${selText && !a ? ' disabled title="The text you selected"' : ''}>
+      <input class="mi" id="lb-url" placeholder="Paste or type a link" value="${esc(u)}" aria-label="Link address" autocomplete="off">
+      <div class="lb-row">
+        ${a ? `<button class="btn btn-s" onclick="doUnlinkCurrent()">${ic('x', 'ic-sm')} Remove</button>` : ''}
+        <button class="btn btn-s" onclick="linkBubCancel()">Cancel</button>
+        <button class="btn btn-p" onclick="linkBubApply()">Apply</button>
+      </div>
+    </div>`;
+  el.classList.remove('hidden');
+  const rect = a ? a.getBoundingClientRect()
+             : (range && range.getBoundingClientRect().height ? range.getBoundingClientRect()
+             : document.getElementById('editor').getBoundingClientRect());
+  linkBubPlace(rect);
+  el.querySelectorAll('input').forEach(i => i.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); linkBubApply(); }
+    if (e.key === 'Escape') { e.preventDefault(); linkBubCancel(); }
+  }));
+  const f = document.getElementById('lb-url');
+  f.focus(); f.select();
+}
+
+function linkRestore(range) {
+  const ed = document.getElementById('editor');
+  ed.focus({ preventScroll: true });
+  if (range) { const rs = window.getSelection(); rs.removeAllRanges(); rs.addRange(range); }
+}
+
+function linkBubCancel() {
+  const b = _linkBub;
+  linkBubHide();
+  if (b && b.range) linkRestore(b.range);
+}
+
+function linkBubApply() {
+  const b = _linkBub;
+  if (!b || b.mode !== 'form') return;
+  const url = linkNormalise((document.getElementById('lb-url') || {}).value);
+  const lt = ((document.getElementById('lb-text') || {}).value || '').trim();
+  if (!url) { const f = document.getElementById('lb-url'); if (f) f.focus(); return; }
+  const a = b.link;
+  linkBubHide();
+  linkRestore(b.range);
+  if (a) {
+    a.setAttribute('href', url);
+    a.setAttribute('target', '_blank');
+    if (lt && lt !== a.textContent) a.textContent = lt;
+  } else if (!b.selText) {
+    document.execCommand('insertHTML', false, `<a href="${esc(url)}" target="_blank">${esc(lt || url.replace(/^mailto:/i, ''))}</a>`);
+  } else {
+    document.execCommand('createLink', false, url);
+    const ns = window.getSelection();
+    const n = ns && ns.rangeCount ? linkFromNode(ns.getRangeAt(0).commonAncestorContainer) : null;
+    if (n) n.setAttribute('target', '_blank');
+  }
+  schedSave();
+}
+
+// Ctrl+K and the Link button. Inside a link it edits that link; otherwise it
+// links the selection, or with nothing selected asks for text and address.
 function doLink() {
   const sel = window.getSelection();
-  const selText = sel ? sel.toString() : '';
-
-  // Save the selection range now — focusing the modal input will destroy it
-  let savedRange = (sel && sel.rangeCount > 0) ? sel.getRangeAt(0).cloneRange() : null;
-
-  // Detect if cursor is inside an existing link
-  _editingLink = null;
-  if (savedRange) {
-    const ed = document.getElementById('editor');
-    let node = savedRange.commonAncestorContainer;
-    if (node.nodeType === 3) node = node.parentNode;
-    while (node && node !== ed) {
-      if (node.nodeName === 'A') { _editingLink = node; break; }
-      node = node.parentNode;
-    }
+  const ed = document.getElementById('editor');
+  let range = (sel && sel.rangeCount > 0) ? sel.getRangeAt(0).cloneRange() : null;
+  if (range && !ed.contains(range.commonAncestorContainer)) range = null;
+  if (!range) {
+    // The button was pressed with the caret somewhere else: put it at the end.
+    range = document.createRange(); range.selectNodeContents(ed); range.collapse(false);
   }
-
-  const existingUrl = _editingLink ? (_editingLink.getAttribute('href') || '') : '';
-  const existingText = _editingLink ? _editingLink.textContent : '';
-  const isEdit = !!_editingLink;
-
-  openModal(isEdit ? 'EDIT LINK' : 'INSERT LINK', `
-    <div class="mf"><label class="ml">URL</label><input class="mi" id="m-url" placeholder="https://…" value="${esc(existingUrl)}"></div>
-    <div class="mf"><label class="ml">DISPLAY TEXT</label><input class="mi" id="m-lt" value="${esc(selText || existingText)}" placeholder="Link text (optional if text is selected)"></div>
-  `, () => {
-    const url = document.getElementById('m-url').value.trim();
-    const lt = document.getElementById('m-lt').value.trim();
-    if (!url) return false;
-    const ed = document.getElementById('editor');
-    ed.focus({ preventScroll: true });
-    // Restore the selection that was lost when the modal took focus
-    if (savedRange) {
-      const rs = window.getSelection();
-      rs.removeAllRanges();
-      rs.addRange(savedRange);
-    }
-    if (_editingLink) {
-      _editingLink.setAttribute('href', url);
-      _editingLink.setAttribute('target', '_blank');
-      if (lt) _editingLink.textContent = lt;
-    } else if (lt && !selText) {
-      document.execCommand('insertHTML', false, `<a href="${esc(url)}" target="_blank">${esc(lt)}</a>`);
-    } else {
-      document.execCommand('createLink', false, url);
-      // Apply target="_blank" to newly created link
-      const newSel = window.getSelection();
-      if (newSel && newSel.rangeCount > 0) {
-        let n = newSel.getRangeAt(0).commonAncestorContainer;
-        if (n.nodeType === 3) n = n.parentNode;
-        if (n.nodeName === 'A') n.setAttribute('target', '_blank');
-      }
-    }
-    _editingLink = null;
-    schedSave();
-  }, isEdit ? { extra: [{ cls: 'btn-s', label: 'Remove Link', fn: 'doUnlinkCurrent()' }] } : {});
+  const a = linkFromNode(range.commonAncestorContainer);
+  if (a) { const r = document.createRange(); r.selectNodeContents(a); return linkBubForm(a, r, ''); }
+  linkBubForm(null, range, range.collapsed ? '' : String(range));
 }
 
 function doUnlinkCurrent() {
-  const link = _editingLink;
-  _editingLink = null;
-  closeModal();
-  if (!link) return;
+  const link = (_linkBub && _linkBub.link) || _editingLink;
+  linkBubHide();
+  if (!link || !link.isConnected) return;
   const ed = document.getElementById('editor');
   ed.focus({ preventScroll: true });
   const sel = window.getSelection();
@@ -7116,6 +7255,32 @@ function doUnlinkCurrent() {
   document.execCommand('unlink');
   schedSave();
 }
+
+// The caret's position decides the bubble, so arrowing into a link opens it
+// the same as clicking does, and moving out closes it.
+document.addEventListener('selectionchange', () => {
+  if (_linkBub && _linkBub.mode === 'form') return;
+  const sel = window.getSelection();
+  const ed = document.getElementById('editor');
+  if (!sel || !sel.rangeCount || !ed || !ed.contains(sel.anchorNode)) {
+    if (_linkBub && !(document.activeElement && document.activeElement.closest && document.activeElement.closest('#link-bub'))) linkBubHide();
+    return;
+  }
+  const a = sel.isCollapsed ? linkFromNode(sel.anchorNode) : null;
+  if (a) linkBubView(a); else if (_linkBub) linkBubHide();
+});
+document.addEventListener('mousedown', e => {
+  if (_linkBub && !e.target.closest('#link-bub') && !e.target.closest('#editor')) {
+    if (_linkBub.mode === 'form') linkBubCancel(); else linkBubHide();
+  }
+});
+window.addEventListener('resize', () => { if (_linkBub && _linkBub.mode === 'view') linkBubHide(); });
+document.addEventListener('scroll', e => {
+  if (_linkBub && _linkBub.mode === 'view' && !(e.target.closest && e.target.closest('#link-bub'))) linkBubHide();
+}, true);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && _linkBub && _linkBub.mode === 'view') linkBubHide();
+});
 
 function togglePilcrows() {
   const ed = document.getElementById('editor');
@@ -10848,6 +11013,15 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   const ed=document.getElementById('editor');
   ed.addEventListener('input',onEditorInput);
+  ed.addEventListener('click', e => {
+    const a = linkFromNode(e.target);
+    if (!a) return;
+    if (e.ctrlKey || e.metaKey) { e.preventDefault(); linkOpen(a); return; }
+    // A click where the caret already was fires no selectionchange, so the
+    // bubble is opened from here as well -- after Escape, say, or a resize.
+    const sel = window.getSelection();
+    if (sel && sel.isCollapsed) linkBubView(a);
+  });
   ed.addEventListener('keyup',updateTBState);
   ed.addEventListener('mouseup',updateTBState);
   document.getElementById('doc-title').addEventListener('input',schedSave);

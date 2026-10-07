@@ -268,6 +268,19 @@ body.academy #editor .om{font-style:normal}
 /* ── STATUS BAR ── */
 .s-sync{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
 .s-sync[data-state="error"]{color:var(--red,#c66)}
+/* The link bubble. Fixed to the viewport and placed by linkBubPlace(), so it
+   is the same on every skin and never inherits an editor rule. */
+#link-bub{position:fixed;z-index:400;display:flex;align-items:center;gap:8px;max-width:min(440px,calc(100vw - 16px));
+  background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:10px;
+  box-shadow:0 6px 24px rgba(0,0,0,.22);padding:6px 8px;font-size:0.8rem}
+#link-bub.hidden{display:none}
+#link-bub .lb-url{display:flex;align-items:center;gap:6px;min-width:0;flex:1 1 auto;overflow:hidden}
+#link-bub .lb-url a,#link-bub .lb-url span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--blue2);text-decoration:underline}
+#link-bub .lb-acts{display:flex;gap:2px;flex:0 0 auto;border-left:1px solid var(--border);padding-left:6px}
+#link-bub .lb-b{background:none;border:0;color:var(--text);cursor:pointer;padding:5px;border-radius:6px;display:flex}
+#link-bub .lb-b:hover{background:var(--border)}
+#link-bub .lb-form{display:flex;flex-direction:column;gap:6px;width:min(340px,calc(100vw - 40px))}
+#link-bub .lb-row{display:flex;gap:6px;justify-content:flex-end}
 #sb{height:28px;background:var(--panel);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:14px;font-size:0.73rem;color:var(--dim);flex-shrink:0}
 .zc{margin-left:auto;display:flex;align-items:center;gap:5px}
 .zb{background:transparent;border:1px solid var(--border);color:var(--dim);width:22px;height:18px;border-radius:3px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;padding:0;line-height:1}
