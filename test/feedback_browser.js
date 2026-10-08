@@ -92,6 +92,12 @@ function rpc(fn, a, me) {
       DB.reports = DB.reports.filter(x => x.id !== a.p_id);
       return null;
     }
+    case 'feedback_dismiss': {
+      const r = DB.reports.find(x => x.id === a.p_id);
+      if (!r || r.writer_uid !== me || r.status !== 'done') throw new Error('Only a report marked Done can be dismissed.');
+      r.writer_dismissed_at = new Date().toISOString();
+      return null;
+    }
     case 'feedback_mark_seen':
       DB.reports.forEach(r => { if (r.writer_uid === me) r.writer_seen_at = new Date().toISOString(); });
       return null;
@@ -381,6 +387,26 @@ async function ctxFor(browser, who, errors) {
   await w.p.waitForTimeout(400);
   ok(await w.p.evaluate(() => document.getElementById('fb-badge').classList.contains('hidden')),
      'reading it clears the badge');
+
+  // --- dismissing a Done report -------------------------------------------
+  // Withdraw deletes; a Done report is a record the team keeps, so the writer
+  // dismisses it instead and it stays in the database.
+  await w.p.evaluate(() => { if (document.getElementById('tour') && typeof tourEnd === 'function') tourEnd(true); fbOpen(); fbTab('mine'); });
+  await w.p.waitForTimeout(500);
+  const doneCard = () => w.p.evaluate(id => {
+    const c = [...document.querySelectorAll('#fb-body .fb-item')].find(x => /Fixed in the next release/.test(x.textContent));
+    return c ? c.textContent.replace(/\s+/g, ' ') : '';
+  }, rep.id);
+  ok(/Dismiss/.test(await doneCard()) && !/Withdraw/.test(await doneCard()),
+     'a Done report offers Dismiss rather than Withdraw');
+  await w.p.click('#fb-body button[onclick^="fbDismiss"]');
+  await w.p.waitForTimeout(400);
+  ok(!(await doneCard()) && DB.reports.some(r => r.id === rep.id && r.writer_dismissed_at),
+     'dismissing clears it from the list and keeps it in the database');
+  await w.p.click('#fb-body .fb-more');
+  await w.p.waitForTimeout(150);
+  ok(/Dismissed/.test(await doneCard()), 'and Show dismissed brings it back into view');
+  await w.p.evaluate(() => { _fbShowDismissed = false; fbClose(); });
 
   // --- withdrawing ---------------------------------------------------------
   // The writer takes back the second report -- the one that arrived with no

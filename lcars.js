@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-15',
     changes: [
+      'Changed: once the team marks one of your reports Done, you can dismiss it from My reports instead of withdrawing it. It is cleared from your list but kept on record, and a Show dismissed link brings it back. A new reply from the team brings it back too.',
       'Admin: feedback reports can now be marked Done. Choosing it fills in a thank-you note you can edit, and saving it tells the writer through the reply badge on their reports, so they know their bug was fixed or their idea was built.',
       'Changed: pasting no longer removes blank lines by itself. It used to tidy the whole sim on every paste, so pasting a single line wiped out every double blank line you had typed on purpose anywhere in it. Now, if what you paste has extra blank lines, a bar near the bottom of the editor offers to tidy them, in the pasted part only. A new Tidy button in the toolbar (under Format on a phone) does the whole sim when you ask. Either can be undone from the bar or with Ctrl+Z.',
       'Changed: pop-up messages use the right text colour for your accent, so they are easier to read, and longer ones wrap onto a second line and stay up long enough to finish reading.',
@@ -3226,8 +3227,19 @@ function fbPaintMine() {
     el.innerHTML = '<span class="set-note">You have not sent anything yet. Replies from the team appear here.</span>';
     return;
   }
-  el.innerHTML = _fbMine.map(f => `
-    <div class="fb-item">
+  // A report the writer dismissed after it was Done is still theirs and still
+  // on record; it is only folded away, behind a link that shows them again.
+  const shown = _fbShowDismissed ? _fbMine : _fbMine.filter(f => !f.writer_dismissed_at);
+  const hidden = _fbMine.length - shown.length;
+  const more = hidden || _fbShowDismissed && _fbMine.some(f => f.writer_dismissed_at)
+    ? `<button class="fb-more" onclick="_fbShowDismissed=!_fbShowDismissed;fbPaintMine()">${_fbShowDismissed
+        ? 'Hide dismissed reports' : 'Show ' + hidden + ' dismissed report' + (hidden === 1 ? '' : 's')}</button>` : '';
+  if (!shown.length) {
+    el.innerHTML = '<span class="set-note">Nothing open. Replies from the team appear here.</span>' + more;
+    return;
+  }
+  el.innerHTML = shown.map(f => `
+    <div class="fb-item${f.writer_dismissed_at ? ' fb-item-dismissed' : ''}">
       <div class="fb-item-hd">
         ${f.ticket_no ? `<span class="adm-fb-no">#${esc(String(f.ticket_no))}</span>` : ''}
         <span class="adm-req-tag adm-fb-${f.kind}">${f.kind === 'bug' ? 'Bug' : 'Feature request'}</span>
@@ -3240,9 +3252,26 @@ function fbPaintMine() {
       ${f.admin_note ? `<div class="fb-reply">${ic('message-square-warning')} ${esc(f.admin_note)}
         <span class="adm-req-foot">${esc(fmtWhen(f.status_at))}</span></div>` : ''}
       <div class="fb-item-act">
-        <button class="btn btn-s" onclick="fbConfirmWithdraw('${f.id}')">${ic('trash')} Withdraw</button>
+        ${f.status === 'done'
+          ? (f.writer_dismissed_at ? '<span class="set-note" style="margin:0">Dismissed</span>'
+            : `<button class="btn btn-s" onclick="fbDismiss('${f.id}')" title="Clear it from this list. The team keeps it on record.">${ic('check')} Dismiss</button>`)
+          : `<button class="btn btn-s" onclick="fbConfirmWithdraw('${f.id}')">${ic('trash')} Withdraw</button>`}
       </div>
-    </div>`).join('');
+    </div>`).join('') + more;
+}
+
+let _fbShowDismissed = false;
+
+// Clearing a finished report from the list. Nothing is deleted -- that is what
+// Withdraw is for, and a Done report is a record the team keeps.
+function fbDismiss(id) {
+  supaRpc('feedback_dismiss', { p_id: id })
+    .then(() => {
+      const f = _fbMine.find(x => x.id === id);
+      if (f) f.writer_dismissed_at = new Date().toISOString();
+      fbPaintMine(); fbRefreshBadge();
+    })
+    .catch(e => showToast(e.message || 'That could not be dismissed.', 4600));
 }
 
 // Taking it back. Allowed at any status: it is their writing, and on a joint

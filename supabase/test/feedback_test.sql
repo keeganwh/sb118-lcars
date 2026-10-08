@@ -466,5 +466,40 @@ exception when others then
 end $$;
 select pg_temp.ok(true, 'an unknown status is still refused');
 
+-- --- dismissing a Done report ------------------------------------------------
+select pg_temp.be('b');
+do $$ begin
+  perform public.feedback_dismiss('6666bbbb-6666-4666-8666-666666666666');
+exception when others then raise exception 'FAIL: the writer could not dismiss a Done report: %', sqlerrm;
+end $$;
+select pg_temp.ok((select writer_dismissed_at is not null and writer_seen_at is not null
+                     from public.feedback_reports where id = '6666bbbb-6666-4666-8666-666666666666'),
+                  'a writer can dismiss their report once it is Done, and it counts as read');
+select pg_temp.be('c');
+select pg_temp.ok((select count(*) from public.admin_list_feedback(true)
+                    where id = '6666bbbb-6666-4666-8666-666666666666') = 1,
+                  'a dismissed report is still in the admin queue');
+select public.admin_feedback_status('6666bbbb-6666-4666-8666-666666666666', 'done', 'One more thing.');
+select pg_temp.ok((select writer_dismissed_at is null and writer_seen_at is null
+                     from public.feedback_reports where id = '6666bbbb-6666-4666-8666-666666666666'),
+                  'a new reply brings a dismissed report back, unread');
+select public.admin_feedback_status('6666bbbb-6666-4666-8666-666666666666', 'implementing', null);
+select pg_temp.be('b');
+do $$ begin
+  perform public.feedback_dismiss('6666bbbb-6666-4666-8666-666666666666');
+  raise exception 'FAIL: a report that is not Done was dismissed';
+exception when others then
+  if position('FAIL:' in sqlerrm) = 1 then raise; end if;
+end $$;
+select pg_temp.ok(true, 'a report that is not Done cannot be dismissed');
+select pg_temp.be('a');
+do $$ begin
+  perform public.feedback_dismiss('6666bbbb-6666-4666-8666-666666666666');
+  raise exception 'FAIL: another writer dismissed the report';
+exception when others then
+  if position('FAIL:' in sqlerrm) = 1 then raise; end if;
+end $$;
+select pg_temp.ok(true, 'nobody else can dismiss it');
+
 reset role;
 \echo '--- all feedback database checks passed ---'
