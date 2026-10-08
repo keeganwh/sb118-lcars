@@ -194,9 +194,34 @@ select pg_temp.ok((select count(*) from public.feedback_reports
 
 select pg_temp.be('a');
 select public.feedback_withdraw('33333333-3333-3333-3333-333333333333');
+select pg_temp.ok((select body = '' and context = '{}'::jsonb and capture_page is null
+                          and capture_shot is null and withdrawn_at is not null and archived_at is not null
+                          and title is not distinct from title and ticket_no is not null
+                     from public.feedback_reports where id = '33333333-3333-3333-3333-333333333333'),
+                  'the writer can withdraw their own report: what they wrote goes, a tombstone stays');
+do $$ begin
+  perform public.feedback_withdraw('33333333-3333-3333-3333-333333333333');
+  raise exception 'FAIL: a tombstone was withdrawn twice';
+exception when others then
+  if position('FAIL:' in sqlerrm) = 1 then raise; end if;
+end $$;
+select pg_temp.ok(true, 'a tombstone cannot be withdrawn again');
+select pg_temp.be('c');
+select pg_temp.ok((select withdrawn_at is not null from public.admin_list_feedback(true)
+                    where id = '33333333-3333-3333-3333-333333333333'),
+                  'the admin queue shows the tombstone, marked withdrawn');
+do $$ begin
+  perform public.admin_feedback_status('33333333-3333-3333-3333-333333333333', 'done', 'Too late.');
+  raise exception 'FAIL: a withdrawn report was actioned';
+exception when others then
+  if position('FAIL:' in sqlerrm) = 1 then raise; end if;
+end $$;
+select pg_temp.ok(true, 'a withdrawn report cannot be actioned or replied to');
+select public.admin_feedback_delete('33333333-3333-3333-3333-333333333333');
 select pg_temp.ok((select count(*) from public.feedback_reports
                     where id = '33333333-3333-3333-3333-333333333333') = 0,
-                  'the writer can withdraw their own report, and the row goes entirely');
+                  'and a super admin can still delete the tombstone outright');
+select pg_temp.be('a');
 
 -- Withdrawing works whatever the team has done with it: it is their writing,
 -- and a status is not a claim on it.
@@ -207,9 +232,12 @@ select public.admin_feedback_status('44444444-4444-4444-4444-444444444444',
                                     'implementing', 'On it.');
 select pg_temp.be('a');
 select public.feedback_withdraw('44444444-4444-4444-4444-444444444444');
-select pg_temp.ok((select count(*) from public.feedback_reports
-                    where id = '44444444-4444-4444-4444-444444444444') = 0,
+select pg_temp.ok((select withdrawn_at is not null and body = ''
+                     from public.feedback_reports where id = '44444444-4444-4444-4444-444444444444'),
                   'and can withdraw one the team has already actioned');
+select pg_temp.be('c');
+select public.admin_feedback_delete('44444444-4444-4444-4444-444444444444');
+select pg_temp.be('a');
 
 -- --- archiving and deleting -------------------------------------------------
 select pg_temp.be('c');

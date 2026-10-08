@@ -10,6 +10,7 @@ const VERSIONS = [
     version: 'pending',
     date: '2026-09-15',
     changes: [
+      'Admin: withdrawn reports leave a short record in the feedback queue, marked Withdrawn, with the ticket number, headline and date. What the writer wrote and anything attached are still deleted. Reports a writer has dismissed are marked Dismissed.',
       'Changed: once the team marks one of your reports Done, you can dismiss it from My reports instead of withdrawing it. It is cleared from your list but kept on record, and a Show dismissed link brings it back. A new reply from the team brings it back too.',
       'Admin: feedback reports can now be marked Done. Choosing it fills in a thank-you note you can edit, and saving it tells the writer through the reply badge on their reports, so they know their bug was fixed or their idea was built.',
       'Changed: pasting no longer removes blank lines by itself. It used to tidy the whole sim on every paste, so pasting a single line wiped out every double blank line you had typed on purpose anywhere in it. Now, if what you paste has extra blank lines, a bar near the bottom of the editor offers to tidy them, in the pasted part only. A new Tidy button in the toolbar (under Format on a phone) does the whole sim when you ask. Either can be undone from the bar or with Ctrl+Z.',
@@ -2217,7 +2218,9 @@ function fbExportMarkdown() {
     const errs = fbCleanErrors(c.errors);
     out.push('---', '',
       '## ' + fbTicket(f) + ' · ' + (f.kind === 'bug' ? 'Bug' : 'Feature request') + ' · ' + fbHeadline(f).replace(/\s+/g, ' '), '',
-      '- **Status:** ' + fbStatusLabel(f.status) + (f.archived_at ? ' (archived ' + fbExportUtc(f.archived_at) + ')' : ''),
+      '- **Status:** ' + (f.withdrawn_at ? 'Withdrawn by the writer ' + fbExportUtc(f.withdrawn_at) + ' (what they wrote has been deleted)'
+          : fbStatusLabel(f.status) + (f.archived_at ? ' (archived ' + fbExportUtc(f.archived_at) + ')' : '')
+          + (f.writer_dismissed_at ? ', dismissed by the writer ' + fbExportUtc(f.writer_dismissed_at) : '')),
       '- **Filed by:** ' + (f.writer_id || 'unknown') + (f.display_name ? ' (' + f.display_name + ')' : '') + ' on ' + fbExportUtc(f.created_at),
       ...(f.parent_ticket ? ['- **Split from:** #' + f.parent_ticket] : []),
       '- **App version:** ' + (f.app_version || 'not recorded'),
@@ -2312,11 +2315,15 @@ function paintFeedback() {
         <span class="adm-fb-who">${esc(f.writer_id || 'unknown')}</span>
         <span class="adm-req-when">${esc(fmtWhen(f.created_at))}</span>
         <span class="fb-st fb-st-${esc(f.status)}">${esc(fbStatusLabel(f.status))}</span>
-        ${f.archived_at ? '<span class="adm-req-tag">Archived</span>' : ''}
+        ${f.withdrawn_at ? '<span class="adm-req-tag adm-fb-gone">Withdrawn</span>'
+          : f.archived_at ? '<span class="adm-req-tag">Archived</span>' : ''}
+        ${f.writer_dismissed_at && !f.withdrawn_at ? '<span class="adm-req-tag" title="Dismissed by the writer ' + esc(fmtWhen(f.writer_dismissed_at)) + '">Dismissed</span>' : ''}
         <span class="adm-fb-chev">${ic('chevron-down')}</span>
       </button>
       <div class="adm-fb-det">
-        <div class="adm-req-note" id="fb-text-${f.id}">${esc(f.body)}</div>
+        ${f.withdrawn_at ? `<div class="adm-req-note adm-fb-tomb">${'Withdrawn by ' + esc(f.writer_id || 'the writer') + ' on ' + esc(fmtWhen(f.withdrawn_at)) + '. What they wrote, and anything attached, has been deleted.'}</div>`
+          : `<div class="adm-req-note" id="fb-text-${f.id}">${esc(f.body)}</div>`}
+        ${f.writer_dismissed_at && !f.withdrawn_at ? `<span class="adm-req-foot">Dismissed by the writer ${esc(fmtWhen(f.writer_dismissed_at))}. They can still see it under Show dismissed, and a new note brings it back.</span>` : ''}
         ${(ctx || errs.length || ua) ? `
         <details class="adm-fb-tech">
           <summary>Technical details</summary>
@@ -2324,11 +2331,12 @@ function paintFeedback() {
           ${ua ? `<div class="adm-fb-ctx">${esc(ua)}</div>` : ''}
           ${errs.length ? `<div class="adm-fb-errs">${errs.map(e => esc(String(e))).join('<br>')}</div>` : ''}
         </details>` : ''}
-        <div class="adm-fb-caps">
+        ${f.withdrawn_at ? '' : `<div class="adm-fb-caps">
           ${f.capture_shot ? `<button class="btn btn-s" onclick="fbOpenCapture('${esc(f.capture_shot)}')">${ic('image')} Screenshot</button>`
             : `<span class="set-note" style="margin:0">${f.capture_purged_at ? 'Screenshot destroyed.' : 'No screenshot attached.'}</span>`}
-        </div>
-        ${f.archived_at ? (f.admin_note
+        </div>`}
+        ${f.withdrawn_at ? `<div class="adm-fb-btns"><button class="btn btn-s" onclick="fbConfirmDelete('${f.id}')">${ic('trash')} Delete the record</button></div>`
+          : f.archived_at ? (f.admin_note
           ? `<div class="adm-fb-reply"><strong>${esc(fbStatusLabel(f.status))}</strong> — ${esc(f.admin_note)}
               <span class="adm-req-foot">${esc(f.status_by || '')} ${esc(fmtWhen(f.status_at))}</span></div>`
           : '') : `
@@ -3201,7 +3209,9 @@ function fbLoadMine() {
   supaFetch('/rest/v1/feedback_reports?select=*&order=created_at.desc')
     .then(r => r.ok ? r.json() : Promise.reject(new Error('Your reports could not be read.')))
     .then(rows => {
-      _fbMine = rows || [];
+      // A withdrawn report survives only as a tombstone for the team; to the
+      // writer it is gone, which is what they asked for.
+      _fbMine = (rows || []).filter(f => !f.withdrawn_at);
       // The writer may have switched to the form while this was in flight;
       // painting the list now would wipe out whatever they had started typing.
       if (_fbTab !== 'mine') return;
@@ -3283,8 +3293,9 @@ function fbConfirmWithdraw(id) {
   const acted = f.status !== 'new';
   openModal('Withdraw this report', `
     <div style="font-size:0.87rem;line-height:1.65">
-      <p style="margin:0 0 10px">Your report, anything attached to it${f.admin_note ? ' and the reply you were sent' : ''}
-        will be deleted. Nothing is kept.</p>
+      <p style="margin:0 0 10px">What you wrote, anything attached to it${f.admin_note ? ' and the reply you were sent' : ''}
+        will be deleted. The team keeps only a note that ${esc(fbTicket(f))}${f.title ? ', ' + esc(f.title) + ',' : ''}
+        was filed and then withdrawn.</p>
       <p style="margin:0;color:var(--dim);font-size:0.8rem">${acted
         ? 'The team has already looked at this one — withdrawing it means they lose what you told them, so only do it if you meant to.'
         : 'Nobody has looked at it yet.'}</p>

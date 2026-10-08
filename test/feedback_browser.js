@@ -87,9 +87,14 @@ function rpc(fn, a, me) {
       return null;
     case 'feedback_withdraw': {
       const r = DB.reports.find(x => x.id === a.p_id);
-      if (!r || r.writer_uid !== me) throw new Error('That report is not yours, or is already gone.');
+      if (!r || r.writer_uid !== me || r.withdrawn_at) throw new Error('That report is not yours, or is already gone.');
       DB.order.push('withdraw:' + a.p_id);
-      DB.reports = DB.reports.filter(x => x.id !== a.p_id);
+      // A tombstone, as feedback_withdraw() leaves: the words go, a stub stays.
+      const now = new Date().toISOString();
+      Object.assign(r, { body: '', context: {}, capture_page: null, capture_shot: null,
+        capture_purged_at: r.capture_purged_at || now, withdrawn_at: now,
+        archived_at: r.archived_at || now, writer_seen_at: r.writer_seen_at || now,
+        writer_dismissed_at: r.writer_dismissed_at || now });
       return null;
     }
     case 'feedback_dismiss': {
@@ -407,6 +412,11 @@ async function ctxFor(browser, who, errors) {
   await w.p.waitForTimeout(150);
   ok(/Dismissed/.test(await doneCard()), 'and Show dismissed brings it back into view');
   await w.p.evaluate(() => { _fbShowDismissed = false; fbClose(); });
+  await s.p.evaluate(() => loadFeedback());
+  await s.p.waitForTimeout(500);
+  ok(await s.p.evaluate(id => { const r = document.getElementById('fbrow-' + id);
+       return !!r && /Dismissed/.test(r.querySelector('.adm-fb-sum').textContent); }, rep.id),
+     'the admin queue marks it Dismissed');
 
   // --- withdrawing ---------------------------------------------------------
   // The writer takes back the second report -- the one that arrived with no
@@ -422,7 +432,27 @@ async function ctxFor(browser, who, errors) {
      'and is told nobody has looked at an untouched one');
   await w.p.evaluate(() => doModal());
   await w.p.waitForTimeout(600);
-  ok(!DB.reports.some(r => r.id === second.id), 'withdrawing deletes the report outright');
+  const tomb = DB.reports.find(r => r.id === second.id);
+  ok(!!tomb && tomb.body === '' && !!tomb.withdrawn_at && tomb.title === 'Storage down',
+     'withdrawing deletes what the writer wrote and leaves a tombstone with the number and headline');
+  ok(await w.p.evaluate(() => !/Storage down/.test(document.getElementById('fb-body').textContent)),
+     'and the writer no longer sees it at all');
+  await s.p.evaluate(() => fbAdminTab(true));
+  await s.p.waitForTimeout(500);
+  ok(await s.p.evaluate(id => {
+       const row = document.getElementById('fbrow-' + id); if (!row) return false;
+       const t = row.textContent;
+       return /Withdrawn/.test(t) && /Storage down/.test(t) && !/storage broken/.test(t)
+         && !row.querySelector('.adm-fb-status') && /Delete the record/.test(t);
+     }, second.id),
+     'the admin queue shows it marked Withdrawn, headline kept, words gone, nothing left to action');
+  if (process.env.SHOT_DIR) {
+    await s.p.evaluate(id => { fbToggle(id); document.getElementById('fbrow-' + id).scrollIntoView({ block: 'center' }); }, second.id);
+    await s.p.waitForTimeout(200);
+    await s.p.screenshot({ path: process.env.SHOT_DIR + '/tomb.png' });
+  }
+  await s.p.evaluate(() => fbAdminTab(false));
+  await s.p.waitForTimeout(400);
 
   // The one the admin actioned warns before it goes, and still goes.
   await w.p.evaluate(() => fbLoadMine());
