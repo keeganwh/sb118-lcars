@@ -11,10 +11,8 @@ const VERSIONS = [
     date: '2026-09-15',
     changes: [
       'Admin: feedback reports can now be marked Done. Choosing it fills in a thank-you note you can edit, and saving it tells the writer through the reply badge on their reports, so they know their bug was fixed or their idea was built.',
-      'Fixed: after tidying blank lines, the Undo could vanish almost at once, because spellcheck and writing extensions were mistaken for your own typing. Only your own edits cancel it now. Ctrl+Z also undoes a tidy now even when you have just clicked the banner and the cursor is not in the editor.',
-      'Fixed: Tidy them on the paste banner did nothing if you took more than a moment to press it. The banner is also now a bar of its own near the bottom of the editor, in your accent colour, so it is hard to miss. Pop-up messages use the right text colour for your accent too, so they are easier to read, and longer messages wrap instead of running off the screen.',
-      'Fixed: the blank-line banner sat inside the scrolling sim, so in a long sim it appeared out of sight above where you were working, and the offer to tidy a paste, or to undo a tidy, went unseen. It now sits at the top of the editor, always visible, and stays for 20 seconds. Ctrl+Z undoes a tidy while the banner is showing, and the undo is dropped once you type again or open another sim, so it can never bring back old text. The message after linking a character picture also stays up longer.',
-      'Changed: pasting no longer removes blank lines by itself. It used to tidy the whole sim on every paste, so pasting a single line wiped out every double blank line you had typed on purpose anywhere in it. Now, if what you paste has extra blank lines, LCARS offers to tidy them, in the pasted part only. A new Tidy button in the toolbar (under Format on a phone) does the whole sim when you ask, and either one can be undone.',
+      'Changed: pasting no longer removes blank lines by itself. It used to tidy the whole sim on every paste, so pasting a single line wiped out every double blank line you had typed on purpose anywhere in it. Now, if what you paste has extra blank lines, a bar near the bottom of the editor offers to tidy them, in the pasted part only. A new Tidy button in the toolbar (under Format on a phone) does the whole sim when you ask. Either can be undone from the bar or with Ctrl+Z.',
+      'Changed: pop-up messages use the right text colour for your accent, so they are easier to read, and longer ones wrap onto a second line and stay up long enough to finish reading.',
       'Added: a Space between paragraphs setting under Settings, Text size, for writers who press Enter once between paragraphs rather than twice. Choose half a line or a full line and the editor spaces your paragraphs for you; when you copy the sim out, each gap becomes a real blank line, so it arrives in Gmail and Google Groups looking the same. If you also type blank lines yourself, you will not get two. The default is unchanged.',
       'Changed: links in a sim work like they do in Google Docs. Click a link, or move the cursor into one, and a small bubble shows where it goes: click the address to open it in a new tab, or copy, edit or remove it. Ctrl+K and the Link button open the same bubble beside your text rather than a box over the sim, and Ctrl+click opens a link straight away. Typing a bare address such as starbase118.net now makes a working link.',
       'Fixed: in the App Feedback panel, switching from My reports to a new report straight away could wipe the new report form a moment later, as the list finished loading over it.',
@@ -3747,6 +3745,38 @@ async function checkDeletionPending() {
 // what's-new mechanism keyed on its own version number. It had been stuck at
 // 4.22 for three releases, which is the argument against keeping two.
 const HIGHLIGHTS = [
+  {
+    date: '2026-10-08',
+    title: 'Links that work like Google Docs',
+    body: `Click a link in a sim and a small bubble shows where it goes: click the address to open it,
+      or copy, edit or remove it. <strong>Ctrl+K</strong> and the Link button open the same bubble
+      beside your text, and <strong>Ctrl+click</strong> opens a link straight away. Typing a bare
+      address such as <em>starbase118.net</em> makes a working link.`,
+  },
+  {
+    date: '2026-10-08',
+    title: 'Space between paragraphs, your way',
+    body: `If you press Enter once between paragraphs rather than twice, <strong>Settings &rarr; Text
+      size &rarr; Space between paragraphs</strong> spaces them for you, by half a line or a full one.
+      When you copy the sim out, each gap becomes a real blank line, so it arrives in Gmail and Google
+      Groups looking the same.`,
+  },
+  {
+    date: '2026-10-08',
+    title: 'Your blank lines stay where you put them',
+    body: `Pasting no longer tidies away blank lines on its own &mdash; it used to remove every double
+      blank line in the sim. If something you paste has extra blank lines, LCARS offers to tidy just
+      that part, and the new <strong>Tidy</strong> button in the toolbar does the whole sim when you
+      want it. Both can be undone.`,
+  },
+  {
+    date: '2026-10-08',
+    title: 'Know when your work is saved',
+    body: `The status bar at the bottom now shows whether your work has reached your account:
+      <em>Syncing</em>, <em>Saved to account</em> or <em>Not synced</em>. Marking a sim posted,
+      complete or archived saves straight away and tells you so. And a character picture can now come
+      from the SB118 wiki &mdash; paste the image address and LCARS links to it.`,
+  },
   {
     date: '2026-09-13',
     title: 'Seven duty colours, or one of your own',
