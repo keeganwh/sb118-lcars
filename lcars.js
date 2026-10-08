@@ -3747,35 +3747,23 @@ async function checkDeletionPending() {
 const HIGHLIGHTS = [
   {
     date: '2026-10-08',
-    title: 'Links that work like Google Docs',
-    body: `Click a link in a sim and a small bubble shows where it goes: click the address to open it,
-      or copy, edit or remove it. <strong>Ctrl+K</strong> and the Link button open the same bubble
-      beside your text, and <strong>Ctrl+click</strong> opens a link straight away. Typing a bare
-      address such as <em>starbase118.net</em> makes a working link.`,
-  },
-  {
-    date: '2026-10-08',
-    title: 'Space between paragraphs, your way',
-    body: `If you press Enter once between paragraphs rather than twice, <strong>Settings &rarr; Text
-      size &rarr; Space between paragraphs</strong> spaces them for you, by half a line or a full one.
-      When you copy the sim out, each gap becomes a real blank line, so it arrives in Gmail and Google
-      Groups looking the same.`,
-  },
-  {
-    date: '2026-10-08',
-    title: 'Your blank lines stay where you put them',
-    body: `Pasting no longer tidies away blank lines on its own &mdash; it used to remove every double
-      blank line in the sim. If something you paste has extra blank lines, LCARS offers to tidy just
-      that part, and the new <strong>Tidy</strong> button in the toolbar does the whole sim when you
-      want it. Both can be undone.`,
+    title: 'Links, spacing and blank lines',
+    body: `<strong>Links</strong> work like Google Docs: click one and a small bubble shows where it
+      goes, to open, copy, edit or remove it. <strong>Ctrl+K</strong> opens the same bubble beside your
+      text, and <strong>Ctrl+click</strong> opens a link straight away.
+      If you press Enter once between paragraphs, <strong>Settings &rarr; Text size &rarr; Space between
+      paragraphs</strong> spaces them for you, and they copy out to Gmail and Groups the same way.
+      And <strong>pasting no longer removes your blank lines</strong>: LCARS offers to tidy only what
+      you pasted, and the new <strong>Tidy</strong> button does the whole sim when you want it.`,
   },
   {
     date: '2026-10-08',
     title: 'Know when your work is saved',
-    body: `The status bar at the bottom now shows whether your work has reached your account:
+    body: `The status bar at the bottom shows whether your work has reached your account:
       <em>Syncing</em>, <em>Saved to account</em> or <em>Not synced</em>. Marking a sim posted,
-      complete or archived saves straight away and tells you so. And a character picture can now come
-      from the SB118 wiki &mdash; paste the image address and LCARS links to it.`,
+      complete or archived saves straight away and tells you so. Pop-up messages are easier to read
+      and stay up longer, and a character picture can now come from the SB118 wiki &mdash; paste the
+      image address and LCARS links to it.`,
   },
   {
     date: '2026-09-13',
